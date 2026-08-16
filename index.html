@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <title>Synups</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <h1>Synups</h1>
+        <div id="play-view-controls" class="level-controls">
+          <button id="btn-prev" aria-label="Niveau précédent">&larr;</button>
+          <span id="level-name">1</span>
+          <button id="btn-next" aria-label="Niveau suivant">&rarr;</button>
+          <button id="btn-undo" disabled>Annuler</button>
+          <button id="btn-reset">Réinitialiser</button>
+          <span id="move-count" class="move-count">0 coup</span>
+        </div>
+        <div id="volume-control" class="volume-control">
+          <label for="volume-slider">Volume</label>
+          <input id="volume-slider" type="range" min="0" max="100" value="80" step="1" />
+        </div>
+        <button id="btn-mode-toggle" class="mode-toggle">Éditeur</button>
+      </header>
+
+      <div id="play-view">
+        <main id="board-container">
+          <div id="board"></div>
+        </main>
+      </div>
+
+      <div id="editor-view" class="hidden">
+        <div class="editor-layout">
+          <aside class="editor-panel">
+            <div class="editor-section">
+              <label class="editor-field">Nom
+                <input id="ed-name" type="text" value="" placeholder="Nom du niveau (obligatoire)" />
+              </label>
+              <div class="editor-row editor-row--resize">
+                <label class="editor-field editor-field--compact">Lignes
+                  <input id="ed-rows" type="number" min="1" max="16" value="5" />
+                </label>
+                <label class="editor-field editor-field--compact">Colonnes
+                  <input id="ed-cols" type="number" min="1" max="16" value="5" />
+                </label>
+                <button id="ed-resize" class="editor-btn" title="Redimensionne en ajoutant/retirant de l'espace en bas et à droite">Redimensionner</button>
+              </div>
+            </div>
+
+            <!-- Boutons d'insertion/retrait de ligne/colonne disposés en croix
+                 autour de la grille qu'ils affectent: haut au-dessus, bas
+                 en-dessous, gauche/droite de part et d'autre au milieu — la
+                 disposition spatiale rend leur effet évident sans avoir à
+                 relire les libellés. -->
+            <div class="editor-section resize-frame">
+              <div class="resize-row-top">
+                <button id="ed-insert-row-top" class="editor-btn" title="Insérer une ligne en haut">+ ligne haut</button>
+                <button id="ed-remove-row-top" class="editor-btn" title="Retirer la ligne du haut">− ligne haut</button>
+              </div>
+              <div class="resize-row-middle">
+                <div class="resize-col-group">
+                  <button id="ed-insert-col-left" class="editor-btn editor-btn--col" title="Insérer une colonne à gauche">+ colonne gauche</button>
+                  <button id="ed-remove-col-left" class="editor-btn editor-btn--col" title="Retirer la colonne de gauche">− colonne gauche</button>
+                </div>
+                <div class="resize-col-group">
+                  <button id="ed-insert-col-right" class="editor-btn editor-btn--col" title="Insérer une colonne à droite">+ colonne droite</button>
+                  <button id="ed-remove-col-right" class="editor-btn editor-btn--col" title="Retirer la colonne de droite">− colonne droite</button>
+                </div>
+              </div>
+              <div class="resize-row-bottom">
+                <button id="ed-insert-row-bottom" class="editor-btn" title="Insérer une ligne en bas">+ ligne bas</button>
+                <button id="ed-remove-row-bottom" class="editor-btn" title="Retirer la ligne du bas">− ligne bas</button>
+              </div>
+            </div>
+
+            <div class="editor-section">
+              <div class="tool-palette" id="ed-tools">
+                <button data-tool="empty" class="tool-btn active" title="Normal">
+                  <svg class="tool-icon" viewBox="0 0 100 100"><rect x="18" y="18" width="64" height="64" rx="10" fill="none" stroke="#c9d3e6" stroke-width="7"/></svg>
+                  <span class="tool-label">Normal</span>
+                </button>
+                <button data-tool="void" class="tool-btn" title="Void">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <rect x="18" y="18" width="64" height="64" rx="10" fill="none" stroke="#5a6478" stroke-width="6" stroke-dasharray="9 7"/>
+                    <line x1="26" y1="26" x2="74" y2="74" stroke="#5a6478" stroke-width="5"/>
+                    <line x1="74" y1="26" x2="26" y2="74" stroke="#5a6478" stroke-width="5"/>
+                  </svg>
+                  <span class="tool-label">Void</span>
+                </button>
+                <button data-tool="wall" class="tool-btn" title="Mur">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <rect x="12" y="12" width="76" height="76" rx="8" fill="none" stroke="#7a86a0" stroke-width="6"/>
+                    <path d="M12,38 L38,12 M12,64 L64,12 M12,88 L88,12 M38,88 L88,38 M64,88 L88,64" stroke="#7a86a0" stroke-width="6"/>
+                  </svg>
+                  <span class="tool-label">Mur</span>
+                </button>
+                <button data-tool="forbidden" class="tool-btn" title="Synapse">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <circle cx="32" cy="32" r="15" fill="none" stroke="#8a97a3" stroke-width="6"/>
+                    <circle cx="68" cy="68" r="15" fill="none" stroke="#8a97a3" stroke-width="6"/>
+                    <line x1="42" y1="42" x2="58" y2="58" stroke="#8a97a3" stroke-width="5" stroke-dasharray="4 5"/>
+                  </svg>
+                  <span class="tool-label">Synapse</span>
+                </button>
+                <button data-tool="charge" class="tool-btn" title="Neurone">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="27" fill="none" stroke="#3a8fa0" stroke-width="7"/>
+                    <circle cx="50" cy="50" r="10" fill="#3a8fa0"/>
+                  </svg>
+                  <span class="tool-label">Neurone</span>
+                </button>
+                <button data-tool="target" class="tool-btn" title="ColorTarget">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <path d="M16,30 V16 H30 M70,16 H84 V30 M84,70 V84 H70 M30,84 H16 V70" fill="none" stroke="#c9d3e6" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <span class="tool-label">Cible couleur</span>
+                </button>
+                <button data-tool="mirror" class="tool-btn" title="Miroir">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <line x1="18" y1="18" x2="82" y2="82" stroke="#9fb4d8" stroke-width="7" stroke-linecap="round"/>
+                  </svg>
+                  <span class="tool-label">Miroir</span>
+                </button>
+              </div>
+
+              <p class="tool-experimental-label">Expérimental — pas encore recommandé dans un niveau destiné à être publié</p>
+              <div class="tool-palette tool-palette--experimental" id="ed-tools-experimental">
+                <button data-tool="filter" class="tool-btn" title="Filtre">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <path d="M15,25 85,25 60,50 60,80 40,80 40,50 Z" fill="none" stroke="#9aa6bc" stroke-width="6" stroke-linejoin="round"/>
+                  </svg>
+                  <span class="tool-label">Filtre</span>
+                </button>
+                <button data-tool="prism" class="tool-btn" title="Prisme">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <polygon points="50,50 50,10 90,50" fill="#ff5d6c"/>
+                    <polygon points="50,50 90,50 50,90" fill="#59e39d"/>
+                    <polygon points="50,50 50,90 10,50" fill="#5da9ff"/>
+                    <polygon points="50,50 10,50 50,10" fill="#eef1f8"/>
+                  </svg>
+                  <span class="tool-label">Prisme</span>
+                </button>
+                <button data-tool="mirror_neuron" class="tool-btn" title="Neurone miroir">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <line x1="50" y1="10" x2="50" y2="90" stroke="#b98fe0" stroke-width="5" stroke-dasharray="7 6" stroke-linecap="round"/>
+                    <circle cx="26" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
+                    <circle cx="74" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
+                  </svg>
+                  <span class="tool-label">Neurone miroir</span>
+                </button>
+              </div>
+
+              <div id="ed-charge-options" class="tool-options hidden">
+                <label class="editor-field">Nombre
+                  <select id="ed-charge-number">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                  </select>
+                </label>
+                <label class="editor-field">Couleur laser
+                  <select id="ed-charge-color">
+                    <option value="">aucune</option>
+                    <option value="r">rouge</option>
+                    <option value="g">vert</option>
+                    <option value="b">bleu</option>
+                  </select>
+                </label>
+              </div>
+
+              <div id="ed-target-options" class="tool-options hidden">
+                <label class="editor-field">Couleur requise
+                  <select id="ed-target-color">
+                    <option value="r">rouge</option>
+                    <option value="g">vert</option>
+                    <option value="b">bleu</option>
+                    <option value="y">jaune</option>
+                    <option value="c">cyan</option>
+                    <option value="m">magenta</option>
+                    <option value="w">blanc</option>
+                  </select>
+                </label>
+              </div>
+
+              <div id="ed-mirror-options" class="tool-options hidden">
+                <label class="editor-field">Orientation
+                  <select id="ed-mirror-orientation">
+                    <option value="/">/ (bas-gauche &harr; haut-droit)</option>
+                    <option value="\">\ (haut-gauche &harr; bas-droit)</option>
+                  </select>
+                </label>
+              </div>
+
+              <div id="ed-filter-options" class="tool-options hidden">
+                <label class="editor-field">Canal conservé
+                  <select id="ed-filter-color">
+                    <option value="r">rouge</option>
+                    <option value="g">vert</option>
+                    <option value="b">bleu</option>
+                  </select>
+                </label>
+              </div>
+
+              <div id="ed-prism-options" class="tool-options hidden">
+                <label class="editor-field">Première couleur (à gauche, dès la 1ère lumière adjacente)
+                  <select id="ed-prism-first-color">
+                    <option value="r">rouge</option>
+                    <option value="g">vert</option>
+                    <option value="b">bleu</option>
+                    <option value="w">blanc</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div class="editor-section editor-actions">
+              <button id="ed-test">Tester</button>
+              <button id="ed-solve" class="editor-btn" disabled title="Trouve et pose automatiquement une solution — utilisable seulement en mode Test">Résoudre</button>
+              <button id="ed-test-reset" class="editor-btn">Réinitialiser le test</button>
+              <button id="ed-new">Nouveau</button>
+              <button id="ed-save">Sauvegarder</button>
+              <button id="ed-delete">Supprimer</button>
+              <button id="ed-export">Exporter</button>
+            </div>
+
+            <div class="editor-section">
+              <label class="editor-field">Mes niveaux
+                <select id="ed-level-list"></select>
+              </label>
+              <label class="editor-field">Repartir d'un niveau du jeu
+                <select id="ed-template-list"></select>
+              </label>
+            </div>
+
+            <p id="ed-status" class="editor-status"></p>
+            <textarea id="ed-export-output" class="hidden" readonly rows="8"></textarea>
+          </aside>
+
+          <main class="editor-board-wrap">
+            <div id="editor-board"></div>
+          </main>
+        </div>
+      </div>
+    </div>
+
+    <div id="win-overlay" class="hidden">
+      <div class="win-card">
+        <p>Résolu</p>
+        <div id="win-stars" class="win-stars"></div>
+        <button id="btn-next-win">Niveau suivant</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

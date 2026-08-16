@@ -1,0 +1,19 @@
+{
+  "name": "synups",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "verify": "node scripts/verify.mjs",
+    "check-unique": "node scripts/check-unique.mjs"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  },
+  "dependencies": {
+    "tone": "^15.0.4"
+  }
+}

@@ -1,0 +1,795 @@
+:root {
+  --bg: #0b0d12;
+  --panel: #12151c;
+  --cell-empty: #262e46;
+  --cell-empty-illum: #7783ab;
+  --cell-border: rgba(160, 178, 230, 0.22);
+  --cell-light: #fbfcff;
+  --glow-light: 0 0 20px 6px rgba(255, 255, 255, 0.65);
+  --accent: #6ee7ff;
+  --success: #67e8a0;
+  --error: #ff6b6b;
+  --text: #e7ecf5;
+  --text-dim: #7b869c;
+  --cell-size: 56px;
+  --gap: 6px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at 50% 0%, #171c2a 0%, var(--bg) 60%);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#app {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 48px;
+}
+
+.topbar {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 32px;
+}
+
+.topbar h1 {
+  letter-spacing: 0.3em;
+  font-weight: 300;
+  font-size: 1.4rem;
+  margin: 0;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.level-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.level-controls button {
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.85rem;
+}
+
+.level-controls button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.level-controls button:disabled {
+  opacity: 0.35;
+  cursor: default;
+  border-color: #2a3040;
+  color: var(--text-dim);
+}
+
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.volume-control input[type="range"] {
+  width: 100px;
+  accent-color: var(--accent);
+}
+
+.level-controls button:disabled:hover {
+  border-color: #2a3040;
+  color: var(--text-dim);
+}
+
+.move-count {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+#level-name {
+  min-width: 1.5em;
+  text-align: center;
+}
+
+#board-container {
+  display: flex;
+  justify-content: center;
+}
+
+#board {
+  position: relative;
+  /* Établit son propre contexte d'empilement: sans ça, un z-index négatif
+     sur une case (voir .cell--target-glow) s'échappe jusqu'à la racine de
+     la page et peut y perturber l'ordre de superposition (et donc la
+     détection de clic) au lieu de rester local aux cases du plateau. */
+  isolation: isolate;
+  display: grid;
+  gap: var(--gap);
+  background: transparent;
+  padding: var(--gap);
+}
+
+.cell {
+  position: relative;
+  width: var(--cell-size);
+  height: var(--cell-size);
+  border-radius: 6px;
+  border: 1px solid var(--cell-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+  transition: background 0.25s, box-shadow 0.25s, color 0.25s, border-color 0.25s;
+  user-select: none;
+}
+
+.cell--void {
+  background: transparent;
+  border-color: transparent;
+}
+
+/* Les obstacles (hors-grille, charge, synapse) n'ont ni fond ni contour:
+   seules les cases avec lesquelles on peut interagir (vides, lumières) ont
+   un "corps" visuel. Ça rend la distinction cliquable/non-cliquable
+   immédiate. */
+
+.cell--empty {
+  background: var(--cell-empty);
+  cursor: pointer;
+}
+
+.cell--empty:hover {
+  background: #232838;
+}
+
+/* Fallback si colors.js ne fournit pas de valeur (ne devrait plus arriver:
+   illuminatedColor()/lightColor() couvrent maintenant toutes les couleurs,
+   y compris le blanc). Les deux partagent le même ratio de mélange — seule
+   l'icône de la case-source (voir neuronIcon) la distingue désormais. */
+.cell--illuminated {
+  background: var(--cell-empty-illum);
+}
+
+.cell--light {
+  background: var(--cell-empty-illum);
+  cursor: pointer;
+}
+
+/* Halo autour d'une case-cible une fois la bonne couleur atteinte, pour
+   plus de présence visuelle. z-index négatif (plutôt que de compter sur
+   l'ordre du DOM) pour garantir que le halo déborde TOUJOURS derrière les
+   cases voisines, quel que soit le sens du débordement. */
+.cell--target-glow {
+  z-index: -1;
+  box-shadow: 0 0 9px 1px var(--target-glow-color, rgba(255, 255, 255, 0.28));
+}
+
+/* Case traversée par au moins deux rayons distincts: couleur pleine (pas de
+   demi-transparence), avec un léger liseré pour marquer le croisement. */
+.cell--intersection {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.cell--clue {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* Case interdite ("synapse"): aucune lumière ne peut jamais lui être
+   adjacente. Son icône (voir cell-icon) part d'un état intact et se
+   "rompt" visuellement au contact d'une impulsion adjacente. */
+.cell--forbidden {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* Miroir: dévie un laser coloré de 90° (voir CellType.MIRROR). Même
+   traitement "sans corps" que les autres obstacles. */
+.cell--mirror {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* Mur: bloque lumière blanche ET lasers colorés (voir CellType.WALL) —
+   contrairement au void, qui lui est transparent aux lasers colorés. Même
+   traitement "sans corps", l'icône (hachures) suffit à le distinguer d'un
+   void qui n'affiche rien. */
+.cell--wall {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* Filtre: ne garde qu'un canal fixe d'un laser coloré qui le traverse (voir
+   CellType.FILTER). Couleur décidée au level-design, jamais cliquable. */
+.cell--filter {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* Prisme: colore ses 4 voisins directs selon une rotation dépendant du
+   nombre de lumières actuellement adjacentes (voir CellType.PRISM). */
+.cell--prism {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* [Expérimental] Neurone miroir: duplique en symétrie toute lumière qui
+   l'éclaire (voir CellType.MIRROR_NEURON). */
+.cell--mirror-neuron {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* Le groupe "rotor" de l'icône prisme (voir render.js: prismIcon +
+   renderPrismIcon) est mis à jour en place (son `transform`, pas son
+   innerHTML) pour que cette transition s'applique réellement — sans ça,
+   le noeud serait recréé à chaque rendu et ne pourrait jamais animer. */
+.prism-rotor {
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Conteneur de l'icône injectée par main.js (neurone, charge, synapse,
+   cible). Toujours en overlay plein cadre, jamais interactif lui-même. */
+.cell-icon {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+}
+
+.cell-icon-svg {
+  /* Plusieurs icônes (ex: neurone + cadre de case-cible) peuvent être
+     empilées dans le même .cell-icon: chacune doit couvrir exactement le
+     cadre de la case plutôt que s'enchaîner en flux, sinon la deuxième
+     déborde visuellement sur la case suivante. */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Respiration lente d'une case à charge satisfaite: elle "prend vie". */
+.cell-breathe {
+  animation: cell-breathe 2.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes cell-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.09); opacity: 1; }
+}
+
+/* Scintillement rapide d'un influx en surcharge (jamais de couleur rouge
+   ici: les couleurs sont réservées aux canaux des lasers). */
+.cell-flicker {
+  animation: cell-flicker 0.45s steps(2) infinite;
+}
+
+@keyframes cell-flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Case-cible atteinte: "respiration" avec quart de tour. L'icône (coins de
+   viseur) a une symétrie 4 (chaque bras est à 90° du suivant), donc une
+   rotation de 90° la ramène visuellement à son état de départ — la boucle
+   ne "saute" jamais, chaque cycle ajoute juste 90° de plus au cumul.
+   Rétrécissement volontairement léger (0.88): appliqué directement sur le
+   <svg> (pas sur une forme interne), donc transform-origin center d'un
+   bloc CSS normal, sans les soucis de fill-box vus sur le halo sonar. */
+.cell-target-breathe {
+  animation: cell-target-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes cell-target-breathe {
+  0% { transform: scale(1) rotate(0deg); }
+  15% { transform: scale(0.88) rotate(45deg); }
+  25% { transform: scale(0.88) rotate(90deg); }
+  40% { transform: scale(0.88) rotate(90deg); }
+  70% { transform: scale(1) rotate(90deg); }
+  100% { transform: scale(1) rotate(90deg); }
+}
+
+/* Halo "sonar" de la case-lumière: part du centre de l'anneau et s'étend
+   en s'effaçant, en boucle — signale "ceci est LA source" par le
+   mouvement plutôt que par une opacité de fond différente. */
+.cell-sonar-halo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44%;
+  height: 44%;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid;
+  pointer-events: none;
+  animation: cell-sonar 2s ease-out infinite;
+}
+
+/* Amplitude volontairement large (jusqu'à dépasser la case): avec une
+   amplitude trop faible, l'oeil ne perçoit pas une expansion continue mais
+   un "saut" entre deux tailles proches (rapporté par l'utilisateur). Un
+   seul segment 0% -> 100% (pas de palier intermédiaire) pour une
+   progression fluide plutôt qu'un temps mort avant la boucle suivante. */
+@keyframes cell-sonar {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 0.75; }
+  100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+}
+
+/* Impulsion (laser): contour sombre derrière un trait de couleur pour
+   rester lisible sur fond sombre, plus deux points qui voyagent le long
+   du trait pour indiquer le sens de propagation. */
+.laser {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Laser tiré par une charge satisfaite mais qui ne rencontre aucune
+   lumière avant un obstacle ou le bord de la grille: reste visible (le
+   joueur sait qu'un laser part d'ici) mais nettement plus discret, sans
+   points animés (rien à connecter). */
+.laser--unconnected {
+  opacity: 0.4;
+}
+
+.laser-outline--h,
+.laser-core--h {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 2px;
+}
+
+.laser-outline--v,
+.laser-core--v {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 2px;
+}
+
+.laser-outline--h { height: 6px; background: #0a0c10; }
+.laser-outline--v { width: 6px; background: #0a0c10; }
+.laser-core--h { height: 2.4px; }
+.laser-core--v { width: 2.4px; }
+
+.laser-dot {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.4px solid;
+}
+
+/* Le sens d'animation doit toujours suivre "de la charge vers sa cible",
+   jamais un sens d'écran fixe: selon que la cible est à droite/à gauche
+   (ou en bas/en haut) du départ sur ce segment, on choisit la variante
+   normale ou inversée (voir game/render.js). */
+.laser-dot--h {
+  top: 50%;
+  transform: translate(-50%, -50%);
+  animation: laser-travel-h 2.4s linear infinite;
+}
+
+.laser-dot--h-reverse {
+  top: 50%;
+  transform: translate(-50%, -50%);
+  animation: laser-travel-h-reverse 2.4s linear infinite;
+}
+
+.laser-dot--v {
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: laser-travel-v 2.4s linear infinite;
+}
+
+.laser-dot--v-reverse {
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: laser-travel-v-reverse 2.4s linear infinite;
+}
+
+@keyframes laser-travel-h {
+  0% { left: 0%; }
+  100% { left: 100%; }
+}
+
+@keyframes laser-travel-h-reverse {
+  0% { left: 100%; }
+  100% { left: 0%; }
+}
+
+@keyframes laser-travel-v {
+  0% { top: 0%; }
+  100% { top: 100%; }
+}
+
+@keyframes laser-travel-v-reverse {
+  0% { top: 100%; }
+  100% { top: 0%; }
+}
+
+#win-overlay {
+  position: fixed;
+  inset: 0;
+  /* Doit rester au-dessus de tout élément de jeu positionné (les lasers
+     ont z-index:2 et ne créent pas leur propre contexte d'empilement
+     isolé, donc sans valeur explicite ici l'overlay pouvait passer
+     dessous). */
+  z-index: 100;
+  background: rgba(5, 6, 10, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+}
+
+#win-overlay.hidden {
+  display: none;
+}
+
+.win-card {
+  background: var(--panel);
+  padding: 32px 40px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.win-card p {
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 16px;
+}
+
+.win-card button {
+  background: var(--accent);
+  color: #06121a;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.win-stars {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 0 18px;
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.win-star {
+  color: #2a3040;
+}
+
+.win-star--filled {
+  color: var(--accent);
+}
+
+/* ---------- Bascule Jeu / Éditeur ---------- */
+
+.mode-toggle {
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text-dim);
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  transition: all 0.2s;
+}
+
+.mode-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#play-view.hidden,
+#editor-view.hidden {
+  display: none;
+}
+
+/* ---------- Éditeur de niveaux ---------- */
+
+.editor-layout {
+  /* Pas de flex-wrap ici volontairement: contrairement au jeu, l'éditeur
+     n'a pas besoin d'être utilisable sur petit écran, et garder la grille
+     TOUJOURS à côté du panneau (même au-delà de ~7 colonnes, quitte à
+     dépasser #app et faire défiler la page horizontalement) rend l'édition
+     bien plus confortable qu'un empilement vertical. */
+  width: max-content;
+  min-width: 100%;
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.editor-panel {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--panel);
+  border: 1px solid #1c2130;
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #1c2130;
+}
+
+.editor-section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.editor-row {
+  display: flex;
+  gap: 10px;
+}
+
+.editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  flex: 1;
+}
+
+/* Lignes/Colonnes + Redimensionner sur une seule ligne: les champs
+   numériques restent étroits, le bouton prend le reste de la place. */
+.editor-row--resize {
+  align-items: flex-end;
+}
+
+.editor-field--compact {
+  flex: 0 0 52px;
+}
+
+.editor-row--resize .editor-btn {
+  flex: 1;
+}
+
+/* Boutons d'insertion/retrait de ligne/colonne, disposés en croix autour
+   de la grille qu'ils affectent (haut au-dessus, bas en-dessous,
+   gauche/droite de part et d'autre au milieu) — voir index.html. */
+.resize-row-top,
+.resize-row-bottom {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.resize-row-middle {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.resize-col-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+/* Plus hauts que les boutons normaux pour évoquer visuellement une
+   "colonne" verticale plutôt qu'une simple rangée de boutons. */
+.editor-btn--col {
+  padding: 16px 6px;
+}
+
+.editor-field input,
+.editor-field select,
+#ed-level-list,
+#ed-template-list {
+  background: #0e1119;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+}
+
+.tool-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Icône + petit libellé plutôt que du texte seul: reconnaissable d'un
+   coup d'oeil une fois qu'on connaît les outils, sans perdre le nom pour
+   les débutants (voir index.html: chaque bouton a un <svg class="tool-icon">
+   + <span class="tool-label">). */
+.tool-btn {
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text-dim);
+  padding: 6px 4px 5px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 62px;
+}
+
+.tool-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.tool-label {
+  font-size: 0.6rem;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.tool-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tool-btn.active {
+  background: var(--accent);
+  color: #06121a;
+  border-color: var(--accent);
+}
+
+/* Filtre/Prisme/Neurone miroir: fonctionnels mais encore en rodage —
+   regroupés à part avec un liseré pointillé et un avertissement, pour ne
+   pas laisser croire qu'ils sont au même niveau de fiabilité que le
+   reste avant d'être pleinement validés en jeu. */
+.tool-experimental-label {
+  font-size: 0.65rem;
+  color: #b98fe0;
+  margin: 2px 0 0;
+}
+
+.tool-palette--experimental {
+  border: 1px dashed #4a3f6a;
+  border-radius: 8px;
+  padding: 6px;
+}
+
+.tool-options {
+  display: flex;
+  gap: 10px;
+}
+
+.tool-options.hidden {
+  display: none;
+}
+
+.editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.editor-actions button,
+.editor-btn {
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  padding: 7px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: all 0.15s;
+  flex: 1;
+}
+
+.editor-actions button:hover,
+.editor-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#ed-delete:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.editor-status {
+  min-height: 2.4em;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+#ed-export-output {
+  width: 100%;
+  background: #0e1119;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 0.72rem;
+  font-family: monospace;
+  resize: vertical;
+}
+
+#ed-export-output.hidden {
+  display: none;
+}
+
+.editor-board-wrap {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+#editor-board {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  gap: var(--gap);
+  background: transparent;
+  padding: var(--gap);
+}
+
+/* Mode "peinture" de l'éditeur: toutes les cases sont cliquables (pour
+   changer d'outil dessus), donc toutes affichent un curseur pointeur,
+   contrairement au jeu où seules les cases vides le sont. */
+#editor-board.board--paint .cell {
+  cursor: pointer;
+}
