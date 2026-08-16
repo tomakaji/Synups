@@ -1,10 +1,10 @@
-name: Deploy to Cloudflare Pages
+name: Deploy to Cloudflare Workers
 
 # Se déclenche à chaque push sur main : build de prod (npm run build,
-# voir README.md) puis publication du contenu de dist/ sur le projet
-# Cloudflare Pages existant (mode "Direct Upload" conservé — ce workflow
-# remplace juste le glisser-déposer manuel du zip par un envoi via
-# Wrangler, sans changer de projet ni d'URL).
+# voir README.md) puis publication du contenu de dist/ sur le Worker
+# Cloudflare existant (wandering-bird-a58b.bayet-thomas.workers.dev),
+# via la fonctionnalité "Workers static assets". Ce workflow remplace
+# le glisser-déposer manuel du zip, sans changer de Worker ni d'URL.
 on:
   push:
     branches: [main]
@@ -30,11 +30,9 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy to Cloudflare Pages
+      - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # ⚠️ Remplacer par le nom EXACT du projet Pages existant
-          # (visible dans dash.cloudflare.com → Workers & Pages).
-          command: pages deploy dist --project-name=REMPLACE_PAR_TON_PROJET
+          command: deploy

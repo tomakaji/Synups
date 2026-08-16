@@ -28,22 +28,45 @@ pour l'audio synthétisé (aucun fichier son, tout est généré).
 
 ## Déploiement continu
 
-`.github/workflows/deploy.yml` : à chaque push sur `main`, build de
-prod (`npm ci && npm run build`) puis publication de `dist/` sur le
-projet Cloudflare Pages existant (mode "Direct Upload" conservé, via
-[Wrangler](https://developers.cloudflare.com/workers/wrangler/)) — ça
-remplace le glisser-déposer manuel du zip, sans changer de projet ni
-d'URL. Nécessite deux secrets dans les paramètres GitHub du repo
+Le jeu est hébergé sur un **Worker Cloudflare** avec assets statiques
+(pas Cloudflare Pages — l'URL en `*.workers.dev` en est la preuve),
+créé au départ via l'upload manuel d'un zip dans le dashboard
+Cloudflare. `.github/workflows/deploy.yml` automatise ça : à chaque
+push sur `main`, build de prod (`npm ci && npm run build`) puis
+`wrangler deploy` publie `dist/` sur ce Worker existant (même nom,
+même URL) via
+[cloudflare/wrangler-action](https://github.com/cloudflare/wrangler-action).
+
+La config Wrangler est dans `wrangler.toml` à la racine :
+
+```toml
+name = "wandering-bird-a58b"
+compatibility_date = "2026-08-16"
+
+[assets]
+directory = "./dist"
+```
+
+`name` doit correspondre **exactement** au nom du Worker existant
+(visible dans dash.cloudflare.com → Workers & Pages ; c'est le premier
+segment de l'URL, ex. `wandering-bird-a58b` dans
+`wandering-bird-a58b.bayet-thomas.workers.dev`). `[assets]` indique à
+Cloudflare de servir `dist/` comme un site statique — aucun code de
+Worker n'est nécessaire pour ça.
+
+Nécessite deux secrets dans les paramètres GitHub du repo
 (Settings → Secrets and variables → Actions) :
 
 - `CLOUDFLARE_API_TOKEN` : token créé sur
   [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
-  avec la permission "Cloudflare Pages: Edit".
+  avec la permission "Workers Scripts: Edit" (pas "Pages: Edit").
 - `CLOUDFLARE_ACCOUNT_ID` : visible dans le tableau de bord Cloudflare
   (barre latérale d'un domaine, ou URL du dashboard).
 
-Le nom du projet Pages cible est en dur dans le workflow
-(`--project-name=...`) — à adapter au nom réel du projet existant.
+**Si le Worker existant a des réglages qui ne sont pas dans
+`wrangler.toml`** (domaine personnalisé, routes, bindings…), un
+premier `wrangler deploy` peut les modifier. Pour un simple site
+statique déployé par upload de zip, ce n'est en principe pas le cas.
 
 **Piège classique** : `index.html` à la racine est le point d'entrée de
 **dev** (`<script type="module" src="/src/main.js">`). Ne jamais le
