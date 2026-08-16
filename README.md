@@ -114,6 +114,7 @@ caractère (`"2r . . Fb . P"`).
 | `Fr`,`Fg`,`Fb` | `FILTER` ⚠️ expérimental | Ne garde que ce canal d'un laser coloré qui la traverse |
 | `P`,`Pr`,`Pg`,`Pb`,`Pw` | `PRISM` ⚠️ expérimental | Colore ses 4 voisins directs (voir plus bas), défaut `r` |
 | `M` | `MIRROR_NEURON` ⚠️ expérimental | Duplique en symétrie toute lumière qui l'éclaire (voir plus bas) |
+| `Y` | `PYRA` ⚠️ expérimental | Neurone pyramidal : activé par 1 à 3 lumières adjacentes, surcharge à 4 (voir plus bas) |
 
 Aucune de ces cases n'est cliquable/interactive en jeu : seules les
 lumières le sont. Tout ce qui n'est pas `EMPTY` bloque la lumière blanche
@@ -157,9 +158,33 @@ en tenant compte de cette mécanique — il fonctionne dans les cas simples
 testés mais son comportement sur des niveaux complexes utilisant cette
 case n'est pas garanti.
 
-### Pourquoi trois cases sont "expérimentales"
+### Pyra / neurone pyramidal (expérimental)
 
-Filtre, Prisme et Neurone miroir sont fonctionnels et testés
+Contrairement à une case à charge (`CLUE`) qui exige un nombre EXACT de
+lumières adjacentes, Pyra n'a pas de quantité fixe : il est "activé" dès
+qu'il a entre 1 et 3 lumières adjacentes (n'importe lequel de ces
+comptes suffit pour qu'il compte comme satisfait dans la condition de
+victoire), et surchargé à 4 (comme n'importe quelle charge en
+surcharge). Son identité est une instabilité tricolore : une fois
+activé, il tire un laser (même mécanique qu'une charge colorée
+satisfaite) dont la couleur dépend du nombre de lumières adjacentes —
+1 = rouge, 2 = vert, 3 = bleu — recalculée à chaque passe plutôt que
+fixée au level-design. Icône (variante "triangle aux pointes RGB",
+validée en mockup) : 3 repères de couleur scintillent en boucle sur les
+sommets du triangle en permanence (identité instable, actif ou non), le
+corps se remplit de la couleur active une fois activé, et le motif
+"étoile" des charges en surcharge apparaît à 4.
+
+Limitation connue : le solveur (`solver.js`) a une propagation de
+contraintes spécialement conçue pour la sémantique "nombre exact" de
+`CLUE` (déductions forcées, détection d'erreur anticipée via
+`anyClueError`) ; Pyra n'en bénéficie pas — il reste traité comme une
+case candidate normale par le backtracking générique, donc le solveur
+reste correct mais moins efficace sur les niveaux qui en contiennent.
+
+### Pourquoi quatre cases sont "expérimentales"
+
+Filtre, Prisme, Neurone miroir et Pyra sont fonctionnels et testés
 unitairement, mais pas encore éprouvés en conditions réelles de puzzle
 (équilibrage, clarté pour le joueur, interaction avec le solveur). Dans
 l'éditeur, ils sont regroupés à part avec un liseré pointillé et un
@@ -275,12 +300,9 @@ la lumière, il n'interagit avec aucun bloc directement :
   niveau, forçant à en retirer pour continuer.
 - **Rotation de phase globale** : un minuteur ou un compteur d'actions
   fait pivoter TOUS les miroirs de la grille simultanément.
-- **Pyra (neurone pyramidal)** : surcharge à 4, pas de quantité définie
-  (juste "actif" ou non), identité tricolore instable qui change la
-  couleur de son laser selon le nombre de lumières adjacentes (1=rouge,
-  2=vert, 3=bleu, 4=surcharge). Mockups visuels proposés (triangle aux
-  pointes RGB / triskèle tricolore) mais pas encore implémenté — design à
-  valider avant d'écrire le code.
+
+(Pyra, qui figurait ici, est désormais implémenté — voir la section
+"Pyra / neurone pyramidal" plus haut.)
 
 ## Licence
 

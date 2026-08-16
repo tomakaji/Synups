@@ -189,6 +189,8 @@ export function initEditor({ levels }) {
         return `P${prismFirstColorSel.value}`;
       case "mirror_neuron":
         return "M";
+      case "pyra":
+        return "Y";
       default:
         return ".";
     }

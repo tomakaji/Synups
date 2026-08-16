@@ -57,6 +57,16 @@
 // dans recompute()). Les lumières déjà posées, elles, ne changent
 // jamais rétroactivement de couleur.
 //
+// Pyra (PYRA, token "Y"): neurone pyramidal. Contrairement à une charge
+// (CLUE) qui exige un nombre EXACT de lumières adjacentes, Pyra n'a pas
+// de quantité fixe: il est "activé" dès qu'il a entre 1 et 3 lumières
+// adjacentes (n'importe lequel de ces comptes suffit), et surchargé à 4
+// (comme n'importe quelle charge en surcharge). Son identité est une
+// instabilité tricolore: une fois activé, il tire un laser dont la
+// couleur dépend du nombre de lumières adjacentes — 1=rouge, 2=vert,
+// 3=bleu — exactement comme une charge colorée satisfaite, sauf que la
+// couleur n'est pas fixée au level-design mais recalculée à chaque passe.
+//
 // [Expérimental] Neurone miroir (MIRROR_NEURON, token "M"): obstacle fixe
 // du niveau (non posable par le joueur). Dès qu'une lumière l'illumine
 // (elle est sur sa ligne/colonne, avec ligne de vue directe — même
@@ -85,6 +95,7 @@ export const CellType = {
   FILTER: "filter", // ne garde qu'un canal fixe d'un laser coloré qui le traverse
   PRISM: "prism", // colore ses 4 voisins directs, rotation selon lumières adjacentes
   MIRROR_NEURON: "mirror_neuron", // [expérimental] duplique en symétrie toute lumière qui l'éclaire
+  PYRA: "pyra", // neurone pyramidal: activé dès 1 lumière adjacente (jusqu'à 3), surcharge à 4
 };
 
 // Ordre fixe des directions pour le prisme (gauche, bas, droite, haut) et
@@ -133,6 +144,7 @@ function parseCellToken(token) {
   if (p) return { type: CellType.PRISM, firstColor: p[1] || "r" };
 
   if (token === "M") return { type: CellType.MIRROR_NEURON };
+  if (token === "Y") return { type: CellType.PYRA };
 
   const m = /^([1-4])([rgb])?$/.exec(token);
   if (m) {
@@ -394,6 +406,29 @@ export class LightUpGrid {
           continue;
         }
 
+        if (cell.type === CellType.PYRA) {
+          // Pyra n'a pas de quantité fixe à atteindre (contrairement à
+          // CLUE) : "activé" dès 1 lumière adjacente, jusqu'à 3 — au-delà
+          // c'est la surcharge (4, comme n'importe quelle charge). La
+          // couleur du laser qu'il tire dépend du nombre de lumières
+          // adjacentes: 1=rouge, 2=vert, 3=bleu (identité tricolore
+          // instable qui se "stabilise" sur un canal selon combien de
+          // lumières le touchent).
+          const adjacentLights = this._adjacentLightCount(r, c);
+          cell._adjacentLights = adjacentLights;
+          if (adjacentLights === 0) {
+            cell._state = "neutral";
+            cell._activeColor = null;
+          } else if (adjacentLights <= 3) {
+            cell._state = "success";
+            cell._activeColor = adjacentLights === 1 ? "r" : adjacentLights === 2 ? "g" : "b";
+          } else {
+            cell._state = "error"; // surcharge à 4
+            cell._activeColor = null;
+          }
+          continue;
+        }
+
         if (cell.type !== CellType.CLUE) continue;
 
         let adjacentLights = 0;
@@ -449,7 +484,13 @@ export class LightUpGrid {
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
         const cell = this.cells[r][c];
-        if (cell.type !== CellType.CLUE || !cell.color || cell._state !== "success") continue;
+        const clueReady = cell.type === CellType.CLUE && cell.color && cell._state === "success";
+        const pyraReady = cell.type === CellType.PYRA && cell._state === "success";
+        if (!clueReady && !pyraReady) continue;
+        // Une charge colorée classique a une couleur fixe ; Pyra la
+        // recalcule à chaque passe selon son nombre de lumières
+        // adjacentes (voir _activeColor ci-dessus).
+        const baseColor = pyraReady ? cell._activeColor : cell.color;
 
         for (const [dr, dc] of DIRECTIONS) {
           const neighbor = this.cellAt(r + dr, c + dc);
@@ -489,7 +530,7 @@ export class LightUpGrid {
               if (bounces > maxBounces) break; // cycle de miroirs: on abandonne ce tracé
               // "/" renvoie (dr,dc) -> (-dc,-dr) ; "" renvoie (dr,dc) -> (dc,dr).
               [curDr, curDc] = nCell.orientation === "/" ? [-curDc, -curDr] : [curDc, curDr];
-              nCell._mirrorColor[cell.color] = true; // union des couleurs qui traversent ce miroir
+              nCell._mirrorColor[baseColor] = true; // union des couleurs qui traversent ce miroir
               segmentEmpty = null;
               nr += curDr;
               nc += curDc;
@@ -520,7 +561,7 @@ export class LightUpGrid {
             // `points` garde toujours: départ, puis chaque miroir/filtre
             // traversé (dans l'ordre), puis l'arrivée (lumière ou dernière
             // case vide) — jamais de miroir/filtre en dernière position.
-            rawRays.push({ points, baseColor: cell.color, hitLight });
+            rawRays.push({ points, baseColor, hitLight });
           }
         }
       }
@@ -706,6 +747,7 @@ export class LightUpGrid {
         }
         if (cell.type === CellType.CLUE && cell._state !== "success") return false;
         if (cell.type === CellType.FORBIDDEN && cell._state !== "success") return false;
+        if (cell.type === CellType.PYRA && cell._state !== "success") return false;
       }
     }
     return true;

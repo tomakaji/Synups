@@ -197,6 +197,44 @@ function wallIcon() {
   </svg>`;
 }
 
+/** Icône de Pyra (neurone pyramidal) — variante A validée en mockup:
+ * triangle dont les 3 pointes portent un repère rouge/vert/bleu qui
+ * scintille en boucle (identité tricolore instable, toujours visible,
+ * activé ou non — voir grid.js: CellType.PYRA). L'intérieur se remplit
+ * de la couleur active une fois activé (1 à 3 lumières adjacentes,
+ * cell._activeColor) ; à 4 (surcharge), on superpose le même motif
+ * "étoile" que chargeIcon en surcharge, pour rester cohérent avec le
+ * langage visuel des autres charges plutôt que d'inventer un nouveau
+ * signe d'erreur. */
+function pyraIcon(cell) {
+  const active = cell._activeColor;
+  const fillHex = (active && hexFor(channelColor(active))) || "#888";
+  const fillOpacity = cell._state === "success" && active ? 0.75 : 0;
+  const overload =
+    cell._state === "error"
+      ? `<polygon points="66,50 58.2,58.2 50,64 41.8,58.2 34,50 41.8,41.8 50,36 58.2,41.8" fill="#1a1c22" stroke="#5a6470" stroke-width="1.4"/>`
+      : "";
+  const triangle = "50,15 85,80 15,80";
+  return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
+    <polygon points="${triangle}" fill="none" stroke="#05060a" stroke-width="9" stroke-linejoin="round"/>
+    <polygon points="${triangle}" fill="none" stroke="#4a5468" stroke-width="4" stroke-linejoin="round"/>
+    <polygon points="${triangle}" fill="${fillHex}" fill-opacity="${fillOpacity}"/>
+    <circle cx="50" cy="15" r="5" fill="#ff5d6c">
+      <animate attributeName="r" values="5;7;5" dur="1.8s" begin="0s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.4;0.95;0.4" dur="1.8s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="85" cy="80" r="5" fill="#59e39d">
+      <animate attributeName="r" values="5;7;5" dur="1.8s" begin="0.6s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.4;0.95;0.4" dur="1.8s" begin="0.6s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="15" cy="80" r="5" fill="#5da9ff">
+      <animate attributeName="r" values="5;7;5" dur="1.8s" begin="1.2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.4;0.95;0.4" dur="1.8s" begin="1.2s" repeatCount="indefinite"/>
+    </circle>
+    ${overload}
+  </svg>`;
+}
+
 /** [Expérimental] Icône d'un neurone miroir: un axe de symétrie
  * pointillé (comme un plan de miroir) avec deux repères identiques de
  * part et d'autre, pour évoquer "ce qui touche un côté se reproduit de
@@ -496,6 +534,24 @@ export function createBoardRenderer(boardEl) {
               if (chargeState === "overloaded" && prevCharge !== "overloaded") sounds.chargeOverload?.();
             }
             prevChargeState.set(key, chargeState);
+            break;
+          }
+          case CellType.PYRA: {
+            el.classList.add("cell--pyra");
+            if (icon) icon.innerHTML = pyraIcon(cellData);
+            // Réutilise le même vocabulaire de sons que CLUE
+            // (satisfied/overloaded/building) et la même map de suivi:
+            // une case donnée est CLUE ou PYRA, jamais les deux, pas de
+            // collision de clé possible.
+            const pyraState =
+              cellData._state === "error" ? "overloaded" : cellData._state === "success" ? "satisfied" : "building";
+            const prevPyra = prevChargeState.get(key);
+            if (prevPyra !== undefined) {
+              if (pyraState === "satisfied" && prevPyra !== "satisfied") sounds.chargeFull?.();
+              if (prevPyra === "satisfied" && pyraState !== "satisfied") sounds.chargeEmptied?.();
+              if (pyraState === "overloaded" && prevPyra !== "overloaded") sounds.chargeOverload?.();
+            }
+            prevChargeState.set(key, pyraState);
             break;
           }
           case CellType.EMPTY: {

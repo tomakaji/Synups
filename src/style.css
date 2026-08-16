@@ -202,6 +202,14 @@ body {
   cursor: default;
 }
 
+/* Pyra (neurone pyramidal): activé dès 1 lumière adjacente (jusqu'à 3),
+   surcharge à 4 — voir CellType.PYRA et pyraIcon(). */
+.cell--pyra {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
 /* Case interdite ("synapse"): aucune lumière ne peut jamais lui être
    adjacente. Son icône (voir cell-icon) part d'un état intact et se
    "rompt" visuellement au contact d'une impulsion adjacente. */
