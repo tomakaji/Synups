@@ -415,8 +415,12 @@ export function enumerateSolutions(level, cap = 5, maxNodes = 3_000_000, options
   const found = [];
   let nodes = 0;
 
+  // Exclut les duplicatas de neurone miroir [expérimental]: ils
+  // apparaissent automatiquement dès qu'on pose leur origine (voir
+  // grid.js: toggleLight), une solution ne doit donc lister que les coups
+  // réellement joués par le joueur — cohérent avec getPlacedLightCount().
   function currentLights() {
-    return Array.from(grid.lights).map((k) => k.split(",").map(Number));
+    return grid.getPlacedLights();
   }
 
   function search() {
@@ -469,8 +473,12 @@ export function findSolution(level, maxNodes = 2_000_000) {
   let nodes = 0;
   let solution = null;
 
+  // Exclut les duplicatas de neurone miroir [expérimental]: ils
+  // apparaissent automatiquement dès qu'on pose leur origine (voir
+  // grid.js: toggleLight), une solution ne doit donc lister que les coups
+  // réellement joués par le joueur — cohérent avec getPlacedLightCount().
   function currentLights() {
-    return Array.from(grid.lights).map((k) => k.split(",").map(Number));
+    return grid.getPlacedLights();
   }
 
   function search() {

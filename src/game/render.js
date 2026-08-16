@@ -52,6 +52,25 @@ function neuronIcon(lit) {
   </svg>`;
 }
 
+/**
+ * [Expérimental] Icône d'un duplicata de neurone miroir: reprend le même
+ * anneau que neuronIcon (fidèle au design de la lampe, même couleur — voir
+ * grid.js: le duplicata imite toujours la couleur de son origine) mais
+ * remplace le halo "sonar" animé (réservé à LA source, voir neuronIcon) par
+ * un anneau pointillé violet qui reprend le langage visuel du neurone
+ * miroir lui-même (même trait, même couleur que mirrorNeuronIcon) — pour
+ * signaler d'un coup d'oeil "ceci est une copie, pas la source", sans
+ * inventer un nouveau vocabulaire de couleur.
+ */
+function neuronDuplicateIcon(lit) {
+  const hex = hexFor(lit) || "#fbfcff";
+  return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
+    <circle cx="50" cy="50" r="34" fill="none" stroke="#b98fe0" stroke-width="4" stroke-dasharray="7 6" stroke-linecap="round" opacity="0.8"/>
+    <circle cx="50" cy="50" r="22" fill="none" stroke="#0a0c10" stroke-width="14"/>
+    <circle cx="50" cy="50" r="22" fill="none" stroke="${hex}" stroke-width="8"/>
+  </svg>`;
+}
+
 function chargeIcon(cell) {
   const n = cell.number;
   const count = cell._adjacentLights || 0;
@@ -560,7 +579,15 @@ export function createBoardRenderer(boardEl) {
             if (grid.hasLight(r, c)) {
               el.classList.add("cell--light");
               el.style.backgroundColor = lightColor(cellData._lit) || "";
-              iconHtml += neuronIcon(cellData._lit);
+              if (grid.isMirrorDuplicate(r, c)) {
+                // [Expérimental] Duplicata de neurone miroir: pas
+                // interactif (voir grid.js: toggleLight le refuse), design
+                // dérivé de la lampe mais visuellement distinct.
+                el.classList.add("cell--light-duplicate");
+                iconHtml += neuronDuplicateIcon(cellData._lit);
+              } else {
+                iconHtml += neuronIcon(cellData._lit);
+              }
             } else if (cellData._illuminated) {
               el.classList.add("cell--illuminated");
               if (cellData._hits >= 2) el.classList.add("cell--intersection");

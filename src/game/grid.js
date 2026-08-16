@@ -84,6 +84,21 @@
 // duplicata qui illuminerait à son tour un AUTRE neurone miroir ne
 // déclenche pas de réaction en chaîne — seule la lumière posée par le
 // joueur déclenche une recherche de duplication, pas une deuxième fois.
+//
+// Le duplicata N'EST PAS une lumière indépendante à part entière:
+// - Il copie TOUJOURS la couleur effective de la lumière d'origine (voir
+//   `_mirrorDuplicateOf`), même si aucun laser de charge ne touche
+//   directement sa propre case — recalculé à chaque `recompute()`, donc
+//   tout changement de couleur de l'origine (nouvelle charge satisfaite,
+//   miroir/filtre traversé...) se répercute immédiatement sur le
+//   duplicata, pas seulement au moment où il apparaît.
+// - Il ne compte pas dans le nombre de coups affiché (voir
+//   `getPlacedLightCount()`/`getPlacedLights()`, qui excluent les clés
+//   présentes dans `_mirrorDuplicateOf`).
+// - Il n'est pas interactif: cliquer directement sur sa case ne fait rien
+//   (voir `toggleLight`, qui refuse la suppression directe d'un
+//   duplicata) — seul le retrait de la lumière d'origine le fait
+//   disparaître, en cascade via `_mirrorLinks`.
 
 export const CellType = {
   VOID: "void", // hors-grille: bloque la lumière blanche, transparent aux lasers colorés
@@ -204,6 +219,12 @@ export class LightUpGrid {
     // toggleLight). Persiste tant que les lumières existent, indépendant
     // de recompute().
     this._mirrorLinks = new Map();
+    // Neurone miroir [expérimental]: clé de duplicata -> clé de la lumière
+    // d'origine qu'il copie. Permet (a) de savoir qu'une case donnée est un
+    // duplicata (non interactif, exclu du décompte de coups) et (b) de
+    // toujours lire la couleur EFFECTIVE de l'origine plutôt que celle
+    // (souvent absente) du duplicata lui-même — voir recompute() étape 3.
+    this._mirrorDuplicateOf = new Map();
     // Dernier ensemble de cellules affectées par le tout dernier appel à
     // toggleLight/setLightRaw ([{r, c, action}]) — permet à l'appelant
     // (main.js, editor.js) de savoir qu'UN clic a pu poser/retirer
@@ -235,11 +256,51 @@ export class LightUpGrid {
     return this.lights.has(this.key(r, c));
   }
 
+  /** Neurone miroir [expérimental]: vrai si (r,c) porte actuellement un
+   * duplicata (pas la lumière d'origine) — voir `_mirrorDuplicateOf`. */
+  isMirrorDuplicate(r, c) {
+    return this._mirrorDuplicateOf.has(this.key(r, c));
+  }
+
+  /** Lumières "réelles" (posées par le joueur), en excluant les duplicatas
+   * de neurone miroir [expérimental] — ce sont eux qui comptent dans le
+   * nombre de coups et dans une solution retournée par le solveur. */
+  getPlacedLights() {
+    return Array.from(this.lights)
+      .filter((k) => !this._mirrorDuplicateOf.has(k))
+      .map((k) => k.split(",").map(Number));
+  }
+
+  getPlacedLightCount() {
+    return this.lights.size - this._mirrorDuplicateOf.size;
+  }
+
+  /** Relie symétriquement deux clés dans `_mirrorLinks` (graphe en étoile
+   * centré sur l'origine: seule `_collectLinkedGroup` depuis l'origine a
+   * besoin d'être fiable, les duplicatas n'étant plus interactifs). */
+  _link(a, b) {
+    const linksA = this._mirrorLinks.get(a) || new Set();
+    linksA.add(b);
+    this._mirrorLinks.set(a, linksA);
+    const linksB = this._mirrorLinks.get(b) || new Set();
+    linksB.add(a);
+    this._mirrorLinks.set(b, linksB);
+  }
+
+  /** Retire `k` de `_mirrorLinks` (clé et toute référence dans les Sets
+   * des autres clés). */
+  _unlinkAll(k) {
+    const links = this._mirrorLinks.get(k);
+    if (links) for (const other of links) this._mirrorLinks.get(other)?.delete(k);
+    this._mirrorLinks.delete(k);
+  }
+
   /**
    * Essaie de poser ou retirer une lumière sur la case (r,c).
    * Retourne "placed", "removed", ou false si l'action est invalide
-   * (case non vide, déjà illuminée par une autre lumière, ou — neurone
-   * miroir [expérimental] — si une duplication requise est impossible).
+   * (case non vide, déjà illuminée par une autre lumière, case portant un
+   * duplicata de neurone miroir [expérimental] non retirable directement,
+   * ou si une duplication requise est impossible).
    * Voir `getLastAffectedCells()` pour la liste complète des cases
    * effectivement modifiées (peut être plus d'une, voir neurone miroir).
    */
@@ -249,16 +310,19 @@ export class LightUpGrid {
 
     const k = this.key(r, c);
     if (this.lights.has(k)) {
+      // Un duplicata n'est pas interactif: on ne peut le retirer qu'en
+      // retirant la lumière d'origine qu'il copie (voir en tête de fichier).
+      if (this._mirrorDuplicateOf.has(k)) return false;
+
       const group = this._collectLinkedGroup(k);
       this._lastAffected = [];
       for (const gk of group) {
         this.lights.delete(gk);
-        this._mirrorLinks.delete(gk);
+        const originKey = this._mirrorDuplicateOf.get(gk) || null;
+        this._mirrorDuplicateOf.delete(gk);
+        this._unlinkAll(gk);
         const [gr, gc] = gk.split(",").map(Number);
-        this._lastAffected.push({ r: gr, c: gc, action: "removed" });
-      }
-      for (const links of this._mirrorLinks.values()) {
-        for (const gk of group) links.delete(gk);
+        this._lastAffected.push({ r: gr, c: gc, action: "removed", isDuplicate: !!originKey, originKey });
       }
       this.recompute();
       return "removed";
@@ -275,19 +339,13 @@ export class LightUpGrid {
     if (duplicates === null) return false;
 
     this.lights.add(k);
-    this._lastAffected = [{ r, c, action: "placed" }];
-    if (duplicates.length > 0) {
-      const group = [k, ...duplicates];
-      for (const dk of duplicates) {
-        this.lights.add(dk);
-        const [dr, dc] = dk.split(",").map(Number);
-        this._lastAffected.push({ r: dr, c: dc, action: "placed" });
-      }
-      for (const gk of group) {
-        const existing = this._mirrorLinks.get(gk) || new Set();
-        for (const other of group) if (other !== gk) existing.add(other);
-        this._mirrorLinks.set(gk, existing);
-      }
+    this._lastAffected = [{ r, c, action: "placed", isDuplicate: false }];
+    for (const dk of duplicates) {
+      this.lights.add(dk);
+      this._mirrorDuplicateOf.set(dk, k);
+      this._link(k, dk);
+      const [dr, dc] = dk.split(",").map(Number);
+      this._lastAffected.push({ r: dr, c: dc, action: "placed", isDuplicate: true, originKey: k });
     }
     this.recompute();
     return "placed";
@@ -358,11 +416,27 @@ export class LightUpGrid {
    * partie d'un groupe déjà entièrement reproduit cellule par cellule par
    * l'appelant, donc on n'a pas à re-vérifier qu'il est atteignable —
    * seulement à le reproduire fidèlement.
+   *
+   * `meta` (optionnel, voir `_lastAffected`/`getLastAffectedCells`) permet
+   * de restaurer aussi fidèlement `_mirrorDuplicateOf`/`_mirrorLinks` pour
+   * une case qui était un duplicata de neurone miroir [expérimental]:
+   * sans ça, Annuler perdrait le lien après un retrait (le duplicata
+   * redeviendrait interactif) ou après une repose (sa couleur ne suivrait
+   * plus celle de son origine).
    */
-  setLightRaw(r, c, on) {
+  setLightRaw(r, c, on, meta = {}) {
     const k = this.key(r, c);
-    if (on) this.lights.add(k);
-    else this.lights.delete(k);
+    if (on) {
+      this.lights.add(k);
+      if (meta.isDuplicate && meta.originKey) {
+        this._mirrorDuplicateOf.set(k, meta.originKey);
+        this._link(meta.originKey, k);
+      }
+    } else {
+      this.lights.delete(k);
+      this._mirrorDuplicateOf.delete(k);
+      this._unlinkAll(k);
+    }
     this._lastAffected = [{ r, c, action: on ? "placed" : "removed" }];
     this.recompute();
   }
@@ -675,7 +749,12 @@ export class LightUpGrid {
     //    couleur par le blanc, puisque blanc = les trois canaux à vrai).
     for (const k of this.lights) {
       const [r, c] = k.split(",").map(Number);
-      const tint = tints.get(k);
+      // Neurone miroir [expérimental]: un duplicata n'a pas sa propre
+      // couleur — il imite TOUJOURS celle de la lumière qu'il copie, même
+      // si aucun laser n'atteint directement sa propre case (voir en tête
+      // de fichier). On lit donc la teinte de l'origine, pas la sienne.
+      const tintKey = this._mirrorDuplicateOf.get(k) || k;
+      const tint = tints.get(tintKey);
       const effective = tint && hasAnyChannel(tint) ? tint : WHITE;
       const colored = effective !== WHITE;
 

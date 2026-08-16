@@ -75,15 +75,17 @@ const sounds = {
 // quand on retire une lumière, pas monter: l'objectif est de résoudre le
 // puzzle avec le moins de lumières posées possible, pas juste d'y arriver
 // du premier coup. On utilise donc le nombre de lumières ACTUELLEMENT sur
-// la grille (grid.lights.size) plutôt que la longueur de l'historique —
-// chaque pose l'augmente de 1, chaque retrait (y compris via Annuler, qui
-// mute directement `lights`) le diminue de 1, sans variable à garder
-// synchronisée à la main. `moveHistory`, lui, reste un journal complet et
-// inchangé: c'est uniquement lui qui permet à Annuler/Ctrl+Z de retrouver
-// l'état précédent.
+// la grille (grid.getPlacedLightCount()) plutôt que la longueur de
+// l'historique — chaque pose l'augmente de 1, chaque retrait (y compris via
+// Annuler, qui mute directement `lights`) le diminue de 1, sans variable à
+// garder synchronisée à la main. `getPlacedLightCount()` exclut les
+// duplicatas de neurone miroir [expérimental]: ils n'ont pas été posés par
+// le joueur, ils ne comptent donc pas comme un coup. `moveHistory`, lui,
+// reste un journal complet et inchangé: c'est uniquement lui qui permet à
+// Annuler/Ctrl+Z de retrouver l'état précédent.
 function syncMoveUi() {
   btnUndo.disabled = moveHistory.length === 0;
-  const n = grid.lights.size;
+  const n = grid.getPlacedLightCount();
   moveCountEl.textContent = `${n} coup${n === 1 ? "" : "s"}`;
 }
 
@@ -127,7 +129,7 @@ function handleCellClick(r, c) {
 
   if (grid.isWon()) {
     playWin();
-    renderStars(computeStars(grid.lights.size, currentLevelIndex));
+    renderStars(computeStars(grid.getPlacedLightCount(), currentLevelIndex));
     winOverlay.classList.remove("hidden");
   }
 }
@@ -141,13 +143,13 @@ function undoLastMove() {
   // Un son "placé" prime sur "retiré" si le groupe mélange les deux (ne
   // devrait pas arriver en pratique, mais reste cohérent si jamais).
   let anyPlaced = false;
-  for (const { r, c, action } of last.cells) {
+  for (const { r, c, action, isDuplicate, originKey } of last.cells) {
     const restoringLight = action === "removed";
     if (restoringLight) anyPlaced = true;
-    grid.setLightRaw(r, c, restoringLight);
+    grid.setLightRaw(r, c, restoringLight, { isDuplicate, originKey });
   }
   // Après la mutation de `grid.lights`, pas avant: le compteur affiché lit
-  // `grid.lights.size` (voir syncMoveUi), donc l'ordre importe ici.
+  // `grid.getPlacedLightCount()` (voir syncMoveUi), donc l'ordre importe ici.
   syncMoveUi();
   if (anyPlaced) playPlace();
   else playRemove();

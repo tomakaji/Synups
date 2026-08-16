@@ -181,6 +181,13 @@ body {
   cursor: pointer;
 }
 
+/* [Expérimental] Duplicata de neurone miroir: pas interactif (voir
+   grid.js: toggleLight le refuse) — le curseur ne doit pas laisser croire
+   qu'un clic ici fait quoi que ce soit d'utile. */
+.cell--light-duplicate {
+  cursor: default;
+}
+
 /* Halo autour d'une case-cible une fois la bonne couleur atteinte, pour
    plus de présence visuelle. z-index négatif (plutôt que de compter sur
    l'ordre du DOM) pour garantir que le halo déborde TOUJOURS derrière les
