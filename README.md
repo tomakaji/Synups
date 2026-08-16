@@ -26,6 +26,25 @@ Aucune dépendance backend : tout tourne côté navigateur (Vite + JS
 vanilla). Le seul package externe est [Tone.js](https://tonejs.github.io/)
 pour l'audio synthétisé (aucun fichier son, tout est généré).
 
+## Déploiement continu
+
+`.github/workflows/deploy.yml` : à chaque push sur `main`, build de
+prod (`npm ci && npm run build`) puis publication de `dist/` sur le
+projet Cloudflare Pages existant (mode "Direct Upload" conservé, via
+[Wrangler](https://developers.cloudflare.com/workers/wrangler/)) — ça
+remplace le glisser-déposer manuel du zip, sans changer de projet ni
+d'URL. Nécessite deux secrets dans les paramètres GitHub du repo
+(Settings → Secrets and variables → Actions) :
+
+- `CLOUDFLARE_API_TOKEN` : token créé sur
+  [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
+  avec la permission "Cloudflare Pages: Edit".
+- `CLOUDFLARE_ACCOUNT_ID` : visible dans le tableau de bord Cloudflare
+  (barre latérale d'un domaine, ou URL du dashboard).
+
+Le nom du projet Pages cible est en dur dans le workflow
+(`--project-name=...`) — à adapter au nom réel du projet existant.
+
 **Piège classique** : `index.html` à la racine est le point d'entrée de
 **dev** (`<script type="module" src="/src/main.js">`). Ne jamais le
 remplacer par le `dist/index.html` généré par le build (qui référence
