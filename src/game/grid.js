@@ -246,12 +246,38 @@ export class LightUpGrid {
     // traiter ce groupe comme une seule action atomique (historique
     // d'annulation, persistance des lumières de test dans l'éditeur).
     this._lastAffected = [];
+    // Neurone miroir [expérimental], pour le rendu de l'animation "fil"
+    // (voir render.js: playMirrorSuccess/playMirrorFailure) — pas d'usage
+    // pour les règles du jeu elles-mêmes, uniquement des traces du DERNIER
+    // appel à _computeMirrorDuplicates (via toggleLight):
+    // - `_lastMirrorLinks`: un item par duplication réussie de ce
+    //   mouvement ({from, neuron, to}, un par saut de chaîne), vide si le
+    //   mouvement n'a touché aucun neurone miroir.
+    // - `_lastMirrorFailure`: {neuron, from, attempted} si le mouvement a
+    //   été refusé PARCE QU'une duplication précise était impossible,
+    //   sinon null (un `toggleLight` refusé pour une autre raison, ex.
+    //   case déjà illuminée, ne doit pas être confondu avec ça — voir le
+    //   reset en tête de toggleLight).
+    this._lastMirrorLinks = [];
+    this._lastMirrorFailure = null;
     this.recompute();
   }
 
   /** Voir `_lastAffected` ci-dessus. */
   getLastAffectedCells() {
     return this._lastAffected;
+  }
+
+  /** Voir `_lastMirrorLinks` ci-dessus. Valide seulement juste après un
+   * `toggleLight` qui a retourné "placed". */
+  getLastMirrorLinks() {
+    return this._lastMirrorLinks;
+  }
+
+  /** Voir `_lastMirrorFailure` ci-dessus. Valide seulement juste après un
+   * `toggleLight` qui a retourné `false`. */
+  getLastMirrorFailure() {
+    return this._lastMirrorFailure;
   }
 
   key(r, c) {
@@ -319,6 +345,12 @@ export class LightUpGrid {
    * effectivement modifiées (peut être plus d'une, voir neurone miroir).
    */
   toggleLight(r, c) {
+    // Réinitialisé avant tout `return false` possible: un échec pour une
+    // raison SANS RAPPORT avec un neurone miroir (case non vide, déjà
+    // illuminée...) ne doit jamais laisser croire à l'appelant qu'il peut
+    // lire un `getLastMirrorFailure()` pertinent pour CE refus précis.
+    this._lastMirrorFailure = null;
+
     const cell = this.cellAt(r, c);
     if (!cell || cell.type !== CellType.EMPTY) return false;
 
@@ -386,7 +418,9 @@ export class LightUpGrid {
     const originKey = this.key(r, c);
     const seen = new Set([originKey]);
     const duplicates = [];
+    const links = []; // { from:[r,c], neuron:[r,c], to:[r,c] }, un par saut de chaîne
     const queue = [[r, c]];
+    this._lastMirrorFailure = null;
 
     while (queue.length) {
       const [pr, pc] = queue.shift();
@@ -403,10 +437,16 @@ export class LightUpGrid {
               if (!seen.has(tk)) {
                 const target = this.cellAt(tr, tc);
                 if (!target || target.type !== CellType.EMPTY || this.hasLight(tr, tc) || target._illuminated) {
-                  return null; // case déjà éclairée/occupée, vide (void) ou mur: mouvement impossible
+                  // Case déjà éclairée/occupée, vide (void) ou mur: cette
+                  // duplication précise est impossible, donc tout le
+                  // mouvement l'est aussi. On garde de quoi animer l'échec
+                  // (voir render.js: playMirrorFailure) avant d'abandonner.
+                  this._lastMirrorFailure = { neuron: [nr, nc], from: [pr, pc], attempted: [tr, tc] };
+                  return null;
                 }
                 seen.add(tk);
                 duplicates.push(tk);
+                links.push({ from: [pr, pc], neuron: [nr, nc], to: [tr, tc] });
                 queue.push([tr, tc]);
               }
             }
@@ -417,6 +457,7 @@ export class LightUpGrid {
         }
       }
     }
+    this._lastMirrorLinks = links;
     return duplicates;
   }
 

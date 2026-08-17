@@ -53,21 +53,21 @@ function neuronIcon(lit) {
 }
 
 /**
- * [Expérimental] Icône d'un duplicata de neurone miroir: reprend le même
- * anneau que neuronIcon (fidèle au design de la lampe, même couleur — voir
- * grid.js: le duplicata imite toujours la couleur de son origine) mais
- * remplace le halo "sonar" animé (réservé à LA source, voir neuronIcon) par
- * un anneau pointillé violet qui reprend le langage visuel du neurone
- * miroir lui-même (même trait, même couleur que mirrorNeuronIcon) — pour
- * signaler d'un coup d'oeil "ceci est une copie, pas la source", sans
- * inventer un nouveau vocabulaire de couleur.
+ * [Expérimental] Icône d'un duplicata de neurone miroir — design "écho
+ * fantôme" (validé après mockups): deux anneaux pointillés violets
+ * concentriques (l'écho qui se propage) autour d'un cœur creux et discret
+ * (contrairement à neuronIcon, plein et opaque) dans la couleur héritée de
+ * l'origine — jamais de halo "sonar" animé, réservé à LA source. Se veut
+ * nettement plus affirmé que l'ancien simple anneau pointillé fin, sans
+ * pour autant changer le langage visuel de la lampe elle-même (même
+ * couleur, même position centrale).
  */
 function neuronDuplicateIcon(lit) {
   const hex = hexFor(lit) || "#fbfcff";
   return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
-    <circle cx="50" cy="50" r="34" fill="none" stroke="#b98fe0" stroke-width="4" stroke-dasharray="7 6" stroke-linecap="round" opacity="0.8"/>
-    <circle cx="50" cy="50" r="22" fill="none" stroke="#0a0c10" stroke-width="14"/>
-    <circle cx="50" cy="50" r="22" fill="none" stroke="${hex}" stroke-width="8"/>
+    <circle cx="50" cy="50" r="36" fill="none" stroke="#b98fe0" stroke-width="3" stroke-dasharray="5 5" opacity="0.55"/>
+    <circle cx="50" cy="50" r="27" fill="none" stroke="#b98fe0" stroke-width="3" stroke-dasharray="5 5" opacity="0.8"/>
+    <circle cx="50" cy="50" r="17" fill="none" stroke="${hex}" stroke-width="5" opacity="0.75"/>
   </svg>`;
 }
 
@@ -339,7 +339,13 @@ function prismIcon(cell) {
  * une case vide (jeu normal ou test en direct dans l'éditeur) ;
  * `options.sounds` est un objet de callbacks optionnels
  * (targetSuccess/targetLost/synapseBreak/synapseRestore/chargeFull/
- * chargeEmptied/chargeOverload).
+ * chargeEmptied/chargeOverload). `playMirrorSuccess(links)`/
+ * `playMirrorFailure(failure)` [expérimental] jouent une animation
+ * éphémère de neurone miroir (voir grid.js: getLastMirrorLinks/
+ * getLastMirrorFailure) — à appeler par l'appelant juste après un
+ * `toggleLight`, PAS depuis `render()` lui-même (ce sont des événements
+ * ponctuels liés à UN clic, pas un état dérivé qui se réaffiche à chaque
+ * frame).
  */
 export function createBoardRenderer(boardEl) {
   let grid = null;
@@ -411,6 +417,13 @@ export function createBoardRenderer(boardEl) {
       // différente, tout ce qui repart de ce miroir prend la couleur
       // mélangée du miroir plutôt que sa couleur d'origine (voir grid.js).
       const segmentCount = laser.points.length - 1;
+      // Neurone miroir [expérimental]: un laser qui atteint directement un
+      // duplicata n'a AUCUN effet sur sa couleur (voir grid.js:
+      // _mirrorLaserBlocked) — le dernier segment "grésille" au lieu de se
+      // connecter normalement, pour que le joueur comprenne que ce laser
+      // n'a servi à rien plutôt que de croire qu'il a fonctionné.
+      const [lastR, lastC] = laser.points[laser.points.length - 1];
+      const blocked = laser.connected && grid.isMirrorDuplicate(lastR, lastC);
 
       for (let i = 0; i < segmentCount; i++) {
         const hex = hexFor(laser.colors[i]);
@@ -420,6 +433,7 @@ export function createBoardRenderer(boardEl) {
         const p2 = cellCenter(r2, c2);
         const horizontal = r1 === r2;
         const isLastSegment = i === segmentCount - 1;
+        const segmentBlocked = blocked && isLastSegment;
         // `points` va toujours de la charge (départ) vers sa cible (voir
         // grid.js): le sens réel de ce segment précis, pas juste "gauche à
         // droite" à l'écran.
@@ -428,6 +442,7 @@ export function createBoardRenderer(boardEl) {
 
         const wrap = document.createElement("div");
         wrap.className = laser.connected ? "laser" : "laser laser--unconnected";
+        if (segmentBlocked) wrap.classList.add("laser--blocked");
         if (horizontal) {
           wrap.style.left = `${Math.min(p1.x, p2.x)}px`;
           wrap.style.top = `${p1.y - 3}px`;
@@ -446,13 +461,22 @@ export function createBoardRenderer(boardEl) {
 
         const core = document.createElement("div");
         core.className = horizontal ? "laser-core laser-core--h" : "laser-core laser-core--v";
-        core.style.backgroundColor = hex;
+        if (segmentBlocked) {
+          core.style.backgroundColor = "transparent";
+          core.style.backgroundImage = horizontal
+            ? `repeating-linear-gradient(to right, ${hex} 0 4px, transparent 4px 8px)`
+            : `repeating-linear-gradient(to bottom, ${hex} 0 4px, transparent 4px 8px)`;
+        } else {
+          core.style.backgroundColor = hex;
+        }
         wrap.appendChild(core);
 
         // Les points animés ne se dessinent que sur le dernier segment
         // (juste avant la lumière), pour bien montrer où le rayon "arrive"
-        // même s'il a rebondi plusieurs fois avant.
-        if (laser.connected && isLastSegment) {
+        // même s'il a rebondi plusieurs fois avant — sauf si ce laser
+        // grésille sur un duplicata: pas de points, il n'y a rien à
+        // "connecter" (voir plus haut).
+        if (laser.connected && isLastSegment && !segmentBlocked) {
           const dotDirClass = horizontal
             ? forwardH ? "laser-dot--h" : "laser-dot--h-reverse"
             : forwardV ? "laser-dot--v" : "laser-dot--v-reverse";
@@ -469,6 +493,91 @@ export function createBoardRenderer(boardEl) {
         laserEls.push(wrap);
       }
     }
+  }
+
+  /** Rejoue une classe d'animation CSS sur l'icône de (r,c), même si elle
+   * y est déjà (retrait + reflow forcé avant de la rajouter) — utilisé par
+   * playMirrorSuccess/playMirrorFailure ci-dessous pour que deux clics
+   * rapides sur le même neurone rejouent bien l'animation depuis le début
+   * plutôt que de ne rien faire (une classe déjà présente ne redéclenche
+   * pas une animation CSS). Se retire elle-même une fois terminée. */
+  function pulseCell([r, c], className, duration) {
+    const icon = cellEls[r]?.[c]?.querySelector(".cell-icon");
+    if (!icon) return;
+    icon.classList.remove(className);
+    void icon.offsetWidth;
+    icon.classList.add(className);
+    setTimeout(() => icon.classList.remove(className), duration);
+  }
+
+  /** [Expérimental] Trace un fil pointillé violet, éphémère (pas persistant
+   * — voir grid.js: MIRROR_NEURON), entre deux cases. `failMode` bascule
+   * sur l'animation "échoue à mi-chemin et se retire" au lieu de "se
+   * dessine jusqu'au bout" — utilisé par playMirrorFailure pour montrer
+   * QUEL neurone a refusé de dupliquer, et dans quelle direction. Un
+   * simple <svg><line></svg> positionné en overlay (même technique que les
+   * lasers), qui se retire lui-même une fois l'animation terminée. */
+  function spawnMirrorThread([r1, c1], [r2, c2], failMode) {
+    const p1 = cellCenter(r1, c1);
+    const p2 = cellCenter(r2, c2);
+    const left = Math.min(p1.x, p2.x);
+    const top = Math.min(p1.y, p2.y);
+    const width = Math.max(Math.abs(p2.x - p1.x), 1);
+    const height = Math.max(Math.abs(p2.y - p1.y), 1);
+    const len = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1;
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.classList.add("mirror-thread-overlay");
+    svg.style.left = `${left}px`;
+    svg.style.top = `${top}px`;
+    svg.style.width = `${width}px`;
+    svg.style.height = `${height}px`;
+
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", p1.x - left);
+    line.setAttribute("y1", p1.y - top);
+    line.setAttribute("x2", p2.x - left);
+    line.setAttribute("y2", p2.y - top);
+    line.setAttribute("stroke", "#b98fe0");
+    line.setAttribute("stroke-width", "2.5");
+    line.setAttribute("stroke-linecap", "round");
+    line.setAttribute("stroke-dasharray", String(len));
+    line.style.setProperty("--len", String(len));
+    line.classList.add(failMode ? "mirror-thread-line--fail" : "mirror-thread-line--ok");
+    svg.appendChild(line);
+    boardEl.appendChild(svg);
+
+    const cleanup = () => svg.remove();
+    svg.addEventListener("animationend", cleanup, { once: true });
+    setTimeout(cleanup, 900); // filet de sécurité si animationend ne se déclenche pas
+  }
+
+  /** [Expérimental] Anime une duplication de neurone miroir réussie: le(s)
+   * neurone(s) traversé(s) pulsent et un fil part de chacun vers ses deux
+   * voisins impliqués (celui qui l'a illuminé, et le duplicata qu'il vient
+   * de créer) — voir grid.js: getLastMirrorLinks(). Un item par saut de
+   * chaîne, tous joués en même temps (voulu très rapide, pas de mise en
+   * scène séquentielle même sur une longue chaîne). Purement cosmétique et
+   * éphémère: n'affecte jamais l'état du jeu. */
+  function playMirrorSuccess(links) {
+    for (const { from, neuron, to } of links) {
+      pulseCell(neuron, "mirror-neuron-pulse", 600);
+      spawnMirrorThread(from, neuron, false);
+      spawnMirrorThread(neuron, to, false);
+    }
+  }
+
+  /** [Expérimental] Anime une duplication de neurone miroir impossible:
+   * le neurone en cause tressaute (secousse, pas de pulsation "réussie") et
+   * son fil s'arrête à mi-chemin vers la case visée avant de se retirer —
+   * pour que le joueur comprenne QUEL neurone a bloqué le mouvement et
+   * DANS QUELLE DIRECTION, plutôt qu'un simple son d'erreur générique.
+   * Voir grid.js: getLastMirrorFailure(). */
+  function playMirrorFailure(failure) {
+    if (!failure) return;
+    pulseCell(failure.neuron, "mirror-neuron-fail", 500);
+    spawnMirrorThread(failure.neuron, failure.attempted, true);
   }
 
   // Le prisme est un cas particulier: contrairement à toutes les autres
@@ -620,6 +729,8 @@ export function createBoardRenderer(boardEl) {
   return {
     build,
     render,
+    playMirrorSuccess,
+    playMirrorFailure,
     get grid() {
       return grid;
     },

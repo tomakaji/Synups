@@ -311,6 +311,15 @@ export function initEditor({ levels }) {
       else if (result === "removed") playRemove();
       else playError();
       renderer.render();
+      // Voir main.js: même animation éphémère de neurone miroir
+      // [expérimental] en test qu'en jeu normal.
+      if (result === "placed") {
+        const links = testGrid.getLastMirrorLinks();
+        if (links.length) renderer.playMirrorSuccess(links);
+      } else if (result === false) {
+        const failure = testGrid.getLastMirrorFailure();
+        if (failure) renderer.playMirrorFailure(failure);
+      }
       if (testGrid.isWon()) {
         playWin();
         setStatus("Résolu ! Repasse en édition pour continuer à ajuster ce niveau.");

@@ -383,6 +383,78 @@ body {
   opacity: 0.4;
 }
 
+/* [Expérimental] Dernier segment d'un laser qui atteint directement un
+   duplicata de neurone miroir: n'a AUCUN effet sur sa couleur (voir
+   grid.js: _mirrorLaserBlocked) — dégradé répété au lieu d'un trait plein
+   (posé en JS sur laser-core, voir render.js) + opacité réduite ici, pour
+   lire "grésille, ne se connecte pas" plutôt qu'un laser normal. */
+.laser--blocked {
+  opacity: 0.55;
+}
+
+/* [Expérimental] Pulsation du neurone miroir au moment où une duplication
+   (ou une chaîne) vient de réussir — voir render.js: playMirrorSuccess.
+   Purement cosmétique et éphémère (la classe se retire elle-même). */
+@keyframes mirror-neuron-pulse-anim {
+  0% { transform: scale(1); }
+  25% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+.mirror-neuron-pulse {
+  animation: mirror-neuron-pulse-anim 0.6s ease-out 1;
+}
+
+/* [Expérimental] Tressautement du neurone miroir quand une duplication
+   était impossible — voir render.js: playMirrorFailure. Un mouvement
+   saccadé plutôt qu'un simple changement de couleur: pas besoin
+   d'introduire une teinte "erreur" dans le langage violet du neurone
+   miroir, le comportement suffit à signaler l'échec. */
+@keyframes mirror-neuron-fail-anim {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+.mirror-neuron-fail {
+  animation: mirror-neuron-fail-anim 0.5s ease-in-out 1;
+}
+
+/* [Expérimental] Fil éphémère entre l'origine, chaque neurone miroir
+   traversé et son duplicata — voir render.js: spawnMirrorThread. Jamais
+   persistant: chaque <svg> se retire lui-même une fois l'animation
+   terminée (animationend, avec un filet de sécurité en JS). */
+.mirror-thread-overlay {
+  position: absolute;
+  pointer-events: none;
+  z-index: 3;
+  overflow: visible;
+}
+
+@keyframes mirror-thread-draw {
+  0% { stroke-dashoffset: var(--len); opacity: 1; }
+  40% { stroke-dashoffset: 0; opacity: 1; }
+  65% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.mirror-thread-line--ok {
+  animation: mirror-thread-draw 0.6s ease-out 1 forwards;
+}
+
+/* Le fil n'atteint jamais sa cible: il se dessine à mi-chemin puis se
+   retire (retour à dashoffset = longueur totale = invisible) avant de
+   s'effacer — pour montrer la direction où la duplication a échoué sans
+   laisser croire qu'elle a fini par réussir. */
+@keyframes mirror-thread-fail-anim {
+  0% { stroke-dashoffset: var(--len); opacity: 1; }
+  35% { stroke-dashoffset: calc(var(--len) * 0.55); opacity: 1; }
+  60% { stroke-dashoffset: var(--len); opacity: 1; }
+  100% { opacity: 0; }
+}
+.mirror-thread-line--fail {
+  animation: mirror-thread-fail-anim 0.5s ease-in-out 1 forwards;
+}
+
 .laser-outline--h,
 .laser-core--h {
   position: absolute;

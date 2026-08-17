@@ -127,6 +127,19 @@ function handleCellClick(r, c) {
 
   renderer.render();
 
+  // Neurone miroir [expérimental]: animation éphémère (jamais persistante,
+  // purement cosmétique) qui montre soit la duplication qui vient de
+  // réussir, soit — si le clic a été refusé — QUEL neurone a bloqué le
+  // mouvement et dans quelle direction, plutôt qu'un simple son d'erreur
+  // générique. Voir grid.js: getLastMirrorLinks/getLastMirrorFailure.
+  if (result === "placed") {
+    const links = grid.getLastMirrorLinks();
+    if (links.length) renderer.playMirrorSuccess(links);
+  } else if (result === false) {
+    const failure = grid.getLastMirrorFailure();
+    if (failure) renderer.playMirrorFailure(failure);
+  }
+
   if (grid.isWon()) {
     playWin();
     renderStars(computeStars(grid.getPlacedLightCount(), currentLevelIndex));
