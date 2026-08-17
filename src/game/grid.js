@@ -80,10 +80,19 @@
 // on ne pose jamais la lumière d'origine seule sans son duplicata.
 // Retirer l'une des deux lumières d'une paire ainsi liée retire l'autre
 // avec elle (voir `_mirrorLinks`, `_computeMirrorDuplicates`).
-// Limitation connue (acceptable pour une mécanique expérimentale): un
-// duplicata qui illuminerait à son tour un AUTRE neurone miroir ne
-// déclenche pas de réaction en chaîne — seule la lumière posée par le
-// joueur déclenche une recherche de duplication, pas une deuxième fois.
+//
+// Réaction en chaîne: si un duplicata illumine à son tour un AUTRE neurone
+// miroir, celui-ci le duplique également, et ainsi de suite tant qu'un
+// nouveau neurone miroir se trouve sur le chemin d'un duplicata déjà créé
+// (voir `_computeMirrorDuplicates`, parcours en largeur avec anti-boucle:
+// un rebond qui retomberait sur une case déjà comptée dans CE mouvement —
+// typiquement l'aller-retour à travers le MÊME neurone miroir — ne relance
+// pas de duplication, il referme juste la chaîne). Comme pour un seul
+// neurone, c'est tout ou rien: si UNE seule duplication de la chaîne est
+// impossible, le mouvement entier est annulé. Tous les duplicatas d'une
+// même chaîne restent directement liés à la lumière d'ORIGINE (pas à leur
+// duplicata parent) — retirer l'origine les retire tous d'un coup, et ils
+// héritent tous directement de sa couleur (voir `_mirrorDuplicateOf`).
 //
 // Le duplicata N'EST PAS une lumière indépendante à part entière:
 // - Il copie TOUJOURS la couleur effective de la lumière d'origine (voir
@@ -99,6 +108,11 @@
 //   (voir `toggleLight`, qui refuse la suppression directe d'un
 //   duplicata) — seul le retrait de la lumière d'origine le fait
 //   disparaître, en cascade via `_mirrorLinks`.
+// - Un laser de charge qui atteindrait directement un duplicata (au lieu
+//   de sa propre couleur héritée) n'a AUCUN effet sur sa couleur — voir
+//   `cell._mirrorLaserBlocked` (calculé dans recompute(), lu par
+//   render.js) pour le signaler visuellement plutôt que de laisser
+//   croire que ce laser a fonctionné.
 
 export const CellType = {
   VOID: "void", // hors-grille: bloque la lumière blanche, transparent aux lasers colorés
@@ -361,30 +375,46 @@ export class LightUpGrid {
    * annuler tout le mouvement, pas seulement la duplication en échec.
    */
   _computeMirrorDuplicates(r, c) {
-    const duplicates = [];
+    // Parcours en largeur: chaque nouveau duplicata est lui-même vérifié
+    // dans ses 4 directions, exactement comme l'origine — c'est ce qui
+    // permet la réaction en chaîne (voir en tête de fichier). `seen`
+    // contient l'origine dès le départ: un rebond qui retomberait sur une
+    // case déjà comptée dans ce même mouvement (typiquement l'aller-retour
+    // à travers le MÊME neurone miroir, qui reflète mathématiquement
+    // toujours vers le point de départ) referme juste la chaîne sans
+    // relancer de duplication ni annuler le mouvement.
     const originKey = this.key(r, c);
-    for (const [dr, dc] of DIRECTIONS) {
-      let nr = r + dr;
-      let nc = c + dc;
-      while (this.inBounds(nr, nc)) {
-        const nCell = this.cells[nr][nc];
-        if (nCell.type !== CellType.EMPTY) {
-          if (nCell.type === CellType.MIRROR_NEURON) {
-            const tr = 2 * nr - r;
-            const tc = 2 * nc - c;
-            const tk = this.key(tr, tc);
-            if (tk !== originKey) {
-              const target = this.cellAt(tr, tc);
-              if (!target || target.type !== CellType.EMPTY || this.hasLight(tr, tc) || target._illuminated) {
-                return null; // case déjà éclairée/occupée, vide (void) ou mur: mouvement impossible
+    const seen = new Set([originKey]);
+    const duplicates = [];
+    const queue = [[r, c]];
+
+    while (queue.length) {
+      const [pr, pc] = queue.shift();
+      for (const [dr, dc] of DIRECTIONS) {
+        let nr = pr + dr;
+        let nc = pc + dc;
+        while (this.inBounds(nr, nc)) {
+          const nCell = this.cells[nr][nc];
+          if (nCell.type !== CellType.EMPTY) {
+            if (nCell.type === CellType.MIRROR_NEURON) {
+              const tr = 2 * nr - pr;
+              const tc = 2 * nc - pc;
+              const tk = this.key(tr, tc);
+              if (!seen.has(tk)) {
+                const target = this.cellAt(tr, tc);
+                if (!target || target.type !== CellType.EMPTY || this.hasLight(tr, tc) || target._illuminated) {
+                  return null; // case déjà éclairée/occupée, vide (void) ou mur: mouvement impossible
+                }
+                seen.add(tk);
+                duplicates.push(tk);
+                queue.push([tr, tc]);
               }
-              duplicates.push(tk);
             }
+            break; // premier obstacle rencontré dans cette direction
           }
-          break; // premier obstacle rencontré dans cette direction
+          nr += dr;
+          nc += dc;
         }
-        nr += dr;
-        nc += dc;
       }
     }
     return duplicates;
@@ -460,6 +490,12 @@ export class LightUpGrid {
           cell._litColor = { r: false, g: false, b: false };
           cell._litWhite = false;
           cell._hits = 0; // nombre de rayons distincts qui touchent cette case (intersection si >= 2)
+          // Neurone miroir [expérimental]: un laser qui atteindrait
+          // directement un duplicata n'a AUCUN effet sur sa couleur (il
+          // hérite toujours de son origine, voir étape 3 ci-dessous) — ce
+          // drapeau permet à render.js de le signaler visuellement plutôt
+          // que de laisser croire que ce laser a fonctionné normalement.
+          cell._mirrorLaserBlocked = false;
         } else if (cell.type === CellType.MIRROR) {
           // Couleurs actuellement en train de traverser ce miroir (rendu:
           // "miroir actif"), recalculé à chaque passe donc jamais périmé.
@@ -678,11 +714,19 @@ export class LightUpGrid {
 
       if (hitLight) {
         const tk = this.key(hitLight[0], hitLight[1]);
-        const t = tints.get(tk) || { r: false, g: false, b: false };
-        t.r = t.r || current.r;
-        t.g = t.g || current.g;
-        t.b = t.b || current.b;
-        tints.set(tk, t);
+        if (this._mirrorDuplicateOf.has(tk)) {
+          // Voir en tête de fichier: un duplicata ignore tout laser qui le
+          // toucherait directement, il ne garde que la couleur héritée de
+          // son origine — on ne verse donc rien dans `tints` pour lui,
+          // juste le signal visuel.
+          this.cells[hitLight[0]][hitLight[1]]._mirrorLaserBlocked = true;
+        } else {
+          const t = tints.get(tk) || { r: false, g: false, b: false };
+          t.r = t.r || current.r;
+          t.g = t.g || current.g;
+          t.b = t.b || current.b;
+          tints.set(tk, t);
+        }
       }
     }
 
@@ -726,11 +770,15 @@ export class LightUpGrid {
           const letter = appliedColors[i];
           const contributed = TARGET_CODES[letter];
           const tk = this.key(nr, nc);
-          const t = tints.get(tk) || { r: false, g: false, b: false };
-          t.r = t.r || contributed.r;
-          t.g = t.g || contributed.g;
-          t.b = t.b || contributed.b;
-          tints.set(tk, t);
+          if (this._mirrorDuplicateOf.has(tk)) {
+            neighbor._mirrorLaserBlocked = true; // voir en tête de fichier
+          } else {
+            const t = tints.get(tk) || { r: false, g: false, b: false };
+            t.r = t.r || contributed.r;
+            t.g = t.g || contributed.g;
+            t.b = t.b || contributed.b;
+            tints.set(tk, t);
+          }
 
           this.lasers.push({
             points: [[r, c], [nr, nc]],
