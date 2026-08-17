@@ -233,6 +233,7 @@
               <button id="ed-save">Sauvegarder</button>
               <button id="ed-delete">Supprimer</button>
               <button id="ed-export">Exporter</button>
+              <button id="ed-import" class="editor-btn" title="Colle le code d'un niveau (généré par Exporter) pour le charger dans l'éditeur">Importer</button>
             </div>
 
             <div class="editor-section">
@@ -246,6 +247,16 @@
 
             <p id="ed-status" class="editor-status"></p>
             <textarea id="ed-export-output" class="hidden" readonly rows="8"></textarea>
+
+            <div id="ed-import-panel" class="editor-section hidden">
+              <label class="editor-field">Coller l'objet JS d'un niveau (ex: le résultat d'Exporter)
+                <textarea id="ed-import-input" rows="8" placeholder='{ name: "...", rows: 5, cols: 5, cells: [...] }'></textarea>
+              </label>
+              <div class="editor-row">
+                <button id="ed-import-confirm" class="editor-btn">Charger ce niveau</button>
+                <button id="ed-import-cancel" class="editor-btn">Annuler</button>
+              </div>
+            </div>
           </aside>
 
           <main class="editor-board-wrap">
