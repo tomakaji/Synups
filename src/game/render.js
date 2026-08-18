@@ -290,13 +290,13 @@ function filterIcon(cell) {
  * design validé en mockup (variante E) plutôt qu'une simple pulsation
  * d'opacité globale, trop discrète pour se voir.
  *
- * La rotation (voir grid.js: chaque lumière adjacente supplémentaire
- * pivote l'ordre d'un cran) n'est PAS obtenue en recalculant quelle
+ * La rotation (voir grid.js: chaque lumière supplémentaire à portée de
+ * laser pivote l'ordre d'un cran) n'est PAS obtenue en recalculant quelle
  * couleur va dans quelle facette à chaque rendu — ça ne peut pas
  * s'animer, un changement de fill est instantané. Les 4 facettes sont
  * peintes UNE FOIS avec l'arrangement "de base" (rotation 0, dérivé
  * uniquement de `firstColor`), regroupées dans un <g class="prism-rotor">
- * qu'on fait pivoter de 90° par lumière adjacente (`cell._prismAdjacentCount`,
+ * qu'on fait pivoter de 90° par lumière en portée (`cell._prismAdjacentCount`,
  * voir grid.js) via un transform CSS. Une rotation de +90° (horaire)
  * déplace visuellement le contenu de "droite"→"bas"→"gauche"→"haut"→
  * "droite", ce qui reproduit exactement le décalage de couleurs voulu

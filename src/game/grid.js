@@ -40,14 +40,18 @@
 // entrant en contenait) — ne dévie pas, contrairement au miroir.
 //
 // Prisme (PRISM, token "P" ou "Pr"/"Pg"/"Pb"/"Pw"): case fixe du niveau
-// (non posable par le joueur) qui colore directement ses 4 cases
-// adjacentes SI elles portent une lumière — rouge/vert/bleu/blanc dans
-// l'ordre fixe gauche/bas/droite/haut. La "première couleur" (celle à
-// gauche) s'applique dès la PREMIÈRE lumière adjacente posée (0 et 1
-// lumière adjacente donnent donc le même état de base) ; chaque lumière
-// SUPPLÉMENTAIRE (la 2e, 3e, 4e...) pivote l'ordre d'un cran (90°) de
-// plus (voir PRISM_COLOR_SEQUENCE ci-dessous). L'ordre relatif reste
-// toujours rouge→vert→bleu→blanc, seul le point de départ pivote.
+// (non posable par le joueur) qui colore une lumière sur chacune de ses 4
+// directions (gauche/bas/droite/haut) SI elle est "à portée de laser" —
+// PAS seulement adjacente: on scanne comme un laser de charge colorée
+// (transparent au VOID, mais arrêté par tout autre obstacle — mur,
+// miroir, filtre, charge, autre prisme...) jusqu'à la première lumière
+// rencontrée sur cette ligne/colonne (voir `_scanRangeForLight`). La
+// "première couleur" (celle à gauche) s'applique dès la PREMIÈRE lumière
+// en portée (0 et 1 lumière en portée donnent donc le même état de
+// base) ; chaque lumière SUPPLÉMENTAIRE en portée (la 2e, 3e, 4e...)
+// pivote l'ordre d'un cran (90°) de plus (voir PRISM_COLOR_SEQUENCE
+// ci-dessous). L'ordre relatif reste toujours rouge→vert→bleu→blanc,
+// seul le point de départ pivote.
 //
 // L'icône affichée est volontairement EN AVANCE d'un cran sur cette
 // rotation "appliquée": elle montre où ira la couleur de la PROCHAINE
@@ -522,6 +526,36 @@ export class LightUpGrid {
     return count;
   }
 
+  /**
+   * Cherche, en scannant depuis (r,c) dans la direction (dr,dc), la
+   * première lumière "à portée de laser" — utilisé par le Prisme (voir en
+   * tête de fichier): transparent au VOID (comme un laser de charge
+   * colorée), mais arrêté par tout autre obstacle (mur, miroir, filtre,
+   * charge, autre prisme...). Pas de déviation ni de changement de canal
+   * ici, juste une portée en ligne droite sur la ligne/colonne visée.
+   * Retourne [nr, nc] si trouvée, sinon null.
+   */
+  _scanRangeForLight(r, c, dr, dc) {
+    let nr = r + dr;
+    let nc = c + dc;
+    while (this.inBounds(nr, nc)) {
+      const nCell = this.cells[nr][nc];
+      if (nCell.type === CellType.EMPTY) {
+        if (this.hasLight(nr, nc)) return [nr, nc];
+        nr += dr;
+        nc += dc;
+        continue;
+      }
+      if (nCell.type === CellType.VOID) {
+        nr += dr;
+        nc += dc;
+        continue;
+      }
+      break; // obstacle opaque: la portée s'arrête ici
+    }
+    return null;
+  }
+
   /** Recalcule états des indices/interdictions, lasers de couleur, puis illumination. */
   recompute() {
     for (let r = 0; r < this.rows; r++) {
@@ -771,24 +805,27 @@ export class LightUpGrid {
       }
     }
 
-    // 2b) Prismes: case fixe qui colore directement ses 4 voisins (sans
-    //     routage ni miroir, juste un contact direct) selon l'ordre fixe
-    //     gauche/bas/droite/haut, décalé d'un cran (90°) par lumière
-    //     actuellement adjacente au prisme. Alimente le même `tints` que
-    //     les lasers de charge (mélange additif identique si une case est
-    //     ausside atteinte par un laser par ailleurs), et ajoute un petit
-    //     segment "laser" visuel vers chaque voisin actuellement éclairé.
+    // 2b) Prismes: case fixe qui colore, sur chacune de ses 4 directions
+    //     (gauche/bas/droite/haut), la première lumière "à portée de
+    //     laser" (voir _scanRangeForLight: transparent au VOID, arrêté par
+    //     tout autre obstacle — PAS seulement son voisin direct), décalé
+    //     d'un cran (90°) par lumière actuellement en portée. Alimente le
+    //     même `tints` que les lasers de charge (mélange additif identique
+    //     si une case est aussi atteinte par un laser par ailleurs), et
+    //     ajoute un segment "laser" visuel vers chaque lumière en portée
+    //     (potentiellement à distance, pas juste la case voisine).
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
         const cell = this.cells[r][c];
         if (cell.type !== CellType.PRISM) continue;
 
-        const adjacentLights = this._adjacentLightCount(r, c);
+        const rangeHits = PRISM_DIRECTIONS.map(([dr, dc]) => this._scanRangeForLight(r, c, dr, dc));
+        const adjacentLights = rangeHits.filter((hit) => hit !== null).length;
         cell._prismAdjacentCount = adjacentLights; // lu par render.js pour l'angle de rotation visuel
         const baseIndex = PRISM_COLOR_SEQUENCE.indexOf(cell.firstColor);
         // Deux rotations distinctes:
         // - "appliquée": celle qui a réellement teinté les lumières déjà
-        //   posées (la 1ère lumière adjacente ne pivote pas, chaque
+        //   posées (la 1ère lumière en portée ne pivote pas, chaque
         //   lumière SUIVANTE pivote d'un cran de plus) — sert au calcul
         //   du tint, ne doit jamais changer rétroactivement la couleur
         //   d'une lumière déjà posée.
@@ -802,11 +839,10 @@ export class LightUpGrid {
         const appliedColors = PRISM_DIRECTIONS.map((_, i) => PRISM_COLOR_SEQUENCE[(appliedRotation + i) % 4]);
         cell._prismColors = PRISM_DIRECTIONS.map((_, i) => PRISM_COLOR_SEQUENCE[(displayRotation + i) % 4]);
 
-        PRISM_DIRECTIONS.forEach(([dr, dc], i) => {
-          const nr = r + dr;
-          const nc = c + dc;
-          const neighbor = this.cellAt(nr, nc);
-          if (!neighbor || neighbor.type !== CellType.EMPTY || !this.hasLight(nr, nc)) return;
+        rangeHits.forEach((hit, i) => {
+          if (!hit) return;
+          const [nr, nc] = hit;
+          const neighbor = this.cells[nr][nc];
 
           const letter = appliedColors[i];
           const contributed = TARGET_CODES[letter];

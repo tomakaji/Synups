@@ -154,7 +154,7 @@ caractère (`"2r . . Fb . P"`).
 | `/` ou `\` | `MIRROR` | Dévie un laser coloré de 90° ; opaque à la lumière blanche |
 | `r`,`g`,`b`,`y`,`c`,`m`,`w` | `EMPTY` + cible | Case cible : doit être illuminée exactement de cette couleur |
 | `Fr`,`Fg`,`Fb` | `FILTER` ⚠️ expérimental | Ne garde que ce canal d'un laser coloré qui la traverse |
-| `P`,`Pr`,`Pg`,`Pb`,`Pw` | `PRISM` ⚠️ expérimental | Colore ses 4 voisins directs (voir plus bas), défaut `r` |
+| `P`,`Pr`,`Pg`,`Pb`,`Pw` | `PRISM` ⚠️ expérimental | Colore la 1ère lumière à portée de laser sur ses 4 directions (voir plus bas), défaut `r` |
 | `M` | `MIRROR_NEURON` ⚠️ expérimental | Duplique en symétrie toute lumière qui l'éclaire (voir plus bas) |
 | `Y` | `PYRA` ⚠️ expérimental | Neurone pyramidal : activé par 1 à 3 lumières adjacentes, surcharge à 4 (voir plus bas) |
 
@@ -165,11 +165,17 @@ colorés uniquement).
 
 ### Prisme (expérimental)
 
-Case fixe non posable par le joueur. Colore ses 4 voisins directs
-gauche/bas/droite/haut dans l'ordre fixe rouge→vert→bleu→blanc. La
-"première couleur" (paramètre `firstColor`, celle à gauche) s'applique
-dès la **première** lumière adjacente posée ; chaque lumière
-**supplémentaire** pivote l'ordre d'un cran (90°) de plus. L'icône
+Case fixe non posable par le joueur. Colore, sur chacune de ses 4
+directions gauche/bas/droite/haut, la première lumière **à portée de
+laser** — pas seulement sa case voisine directe : le prisme scanne comme
+un laser de charge colorée (transparent au VOID, mais arrêté par tout
+autre obstacle — mur, miroir, filtre, charge, autre prisme...) jusqu'à
+la première lumière rencontrée sur cette ligne/colonne, potentiellement
+à distance (voir `_scanRangeForLight` dans `src/game/grid.js`). L'ordre
+fixe des couleurs assignées à chaque direction reste rouge→vert→bleu→blanc.
+La "première couleur" (paramètre `firstColor`, celle à gauche) s'applique
+dès la **première** lumière en portée ; chaque lumière
+**supplémentaire** en portée pivote l'ordre d'un cran (90°) de plus. L'icône
 affichée est volontairement **en avance d'un cran** sur l'état réellement
 appliqué : elle montre où ira la couleur de la *prochaine* lumière plutôt
 que l'état déjà en place, pour que le joueur puisse anticiper avant de
