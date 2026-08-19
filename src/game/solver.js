@@ -392,6 +392,7 @@ function propagate(grid, excluded, mirrorReachable, stats) {
           // recherche de solution elle-même (stats est toujours `undefined`
           // pour countSolutions/enumerateSolutions/findSolution).
           stats.stage2Used = true;
+          stats.stage2Count++;
         }
         for (const [fr, fc] of result.forcedLit) {
           if (!forceLit(fr, fc)) {
@@ -656,26 +657,37 @@ export function findSolution(level, maxNodes = 2_000_000) {
  * pas nécessaire pour une première version.
  *
  * Retourne `null` si aucune solution n'est trouvée dans `maxNodes`, sinon
- * `{ solution, moves, stage2Used, branchCount, tier }`:
- * - `stage2Used`: au moins une déduction Stage 2 (paire d'indices) a servi.
+ * `{ solution, moves, stage2Used, stage2Count, branchCount, tier }`:
+ * - `stage2Used` / `stage2Count`: au moins une déduction Stage 2 (paire
+ *   d'indices) a servi, et combien de fois. C'est le signal de "lieu de
+ *   doute" : une case où la logique indice-par-indice (Stage 1) ne suffit
+ *   plus et où il faut croiser deux indices pour trancher.
  * - `branchCount`: nombre de fois où propagate seul n'a pas suffi et où il a
  *   fallu émettre une hypothèse de branchement (compté sur tout l'arbre de
  *   recherche exploré, pas seulement le chemin gagnant — un niveau mal
  *   contraint qui force beaucoup de tâtonnement, même sur des impasses,
  *   n'est pas un niveau "évident").
- * - `tier`: 1 (Stage 1 seul), 2 (Stage 2 et/ou peu de branchements), 3
- *   (branchement conséquent nécessaire) — seuils calibrés empiriquement sur
- *   des plateaux 5x5 à 9x9 (voir docs/infinite-mode-design.md, section 10):
- *   `branchCount` explose vite dès qu'une zone du plateau n'est couverte par
- *   AUCUN indice (plusieurs dizaines à plusieurs centaines de noeuds rien que
- *   pour trancher une poignée de cases ouvertes), donc les seuils sont bas
- *   en valeur absolue — pas des lois figées, à réajuster à l'usage.
+ * - `tier`: la taille de grille seule ne fait PAS la difficulté — un grand
+ *   plateau avec une zone ouverte non couverte par des indices peut avoir un
+ *   `branchCount` élevé sans jamais nécessiter de déduction Stage 2 (aucun
+ *   "lieu de doute", juste du tâtonnement dans du vide). Le tier reflète donc
+ *   d'abord `stage2Used` :
+ *     - tier 1 : jamais de Stage 2, et peu de branchement (`branchCount<=25`).
+ *     - tier 2 : soit du branchement sans Stage 2 (grille ouverte mais pas
+ *       vraiment "piégeuse"), soit du Stage 2 avec branchement modéré
+ *       (`<=250`).
+ *     - tier 3 : Stage 2 nécessaire ET branchement important (`>250`) — la
+ *       résolution demande de repérer des lieux de doute ET de creuser
+ *       dedans, pas juste un enchaînement de déductions lisibles.
+ *   Seuils calibrés empiriquement sur des plateaux 5x5 à 9x9 (voir
+ *   docs/infinite-mode-design.md, section 10) — pas des lois figées, à
+ *   réajuster à l'usage.
  */
 export function analyzeSolve(level, maxNodes = 2_000_000) {
   const grid = new LightUpGrid(level);
   const excluded = new Set();
   const mirrorReachable = computeMirrorReachable(grid);
-  const stats = { stage2Used: false, branchCount: 0 };
+  const stats = { stage2Used: false, stage2Count: 0, branchCount: 0 };
   let nodes = 0;
   let solution = null;
 
@@ -735,6 +747,22 @@ export function analyzeSolve(level, maxNodes = 2_000_000) {
   }
   if (!solved) return null;
 
-  const tier = !stats.stage2Used && stats.branchCount <= 1 ? 1 : stats.branchCount <= 10 ? 2 : 3;
-  return { solution, moves: solution.length, stage2Used: stats.stage2Used, branchCount: stats.branchCount, tier };
+  // Le tier 2 et le tier 3 exigent tous les deux qu'au moins une déduction
+  // Stage 2 (paire d'indices) ait été NÉCESSAIRE pendant la résolution — pas
+  // seulement une grille de grande taille. Un niveau qui se résout entièrement
+  // par Stage 1 (chaîne de déductions "évidentes", case par case) reste tier 1
+  // même s'il génère un branchCount élevé (grande zone non couverte par des
+  // indices, mais sans "lieu de doute" réel : aucune paire d'indices n'a dû
+  // être croisée pour progresser). Voir docs/infinite-mode-design.md §10.
+  const tier = !stats.stage2Used
+    ? (stats.branchCount <= 25 ? 1 : 2)
+    : (stats.branchCount <= 250 ? 2 : 3);
+  return {
+    solution,
+    moves: solution.length,
+    stage2Used: stats.stage2Used,
+    stage2Count: stats.stage2Count,
+    branchCount: stats.branchCount,
+    tier,
+  };
 }

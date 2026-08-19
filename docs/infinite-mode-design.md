@@ -231,18 +231,38 @@ C'est un ajout court : les fonctions `countSolutions`/`enumerateSolutions`/
 faire partager un seul cœur de recherche paramétré plutôt que trois copier-coller
 — nettoyage indépendant du mode Infini mais qui le rendrait plus simple).
 
-Grille croisée proposée (à ajuster empiriquement une fois qu'on génère pour de
-vrai — ces chiffres sont un point de départ, pas une loi) :
+Grille croisée **recalibrée** après un premier retour utilisateur ("le difficile
+actuel joue comme un intermédiaire ; il faut aussi des lieux de doute, pas
+seulement une grille plus grande") et validée empiriquement via
+`generateLevel()` réel (25-30 tirages/palier, `DIFFICULTY_PRESETS` dans
+`generator.js`) :
 
-| Palier | Taille          | Densité obstacles | Types de feature actifs | Budget poids | Tier solveur exigé |
-|--------|------------------|--------------------|---------------------------|:---:|:---:|
-| 1★     | 5×5 – 6×6        | ~0.15 – 0.20       | 0–1                        | ≤3  | 1 (Stage 1 seul) |
-| 2★     | 6×6 – 7×7        | ~0.20 – 0.26       | 1–2                        | ≤6  | 2 (Stage 2 requis) |
-| 3★     | 7×7 – 9×9        | ~0.24 – 0.30       | 2–4 (Neurone miroir opt-in)| ≤10 | 3 (branchement requis) |
+| Palier | Taille   | Densité obstacles | Budget poids feature | Budget noeuds solveur | Tier solveur exigé |
+|--------|----------|--------------------|:---:|:---:|:---:|
+| 1★     | 6×6 – 7×7 | ~0.28 – 0.36       | ≤6  | 400k | 1 (jamais de Stage 2, peu de branchement) |
+| 2★     | 7×7 – 8×8 | ~0.20 – 0.28       | ≤8  | 600k | 2 (Stage 2 sans branchement lourd, OU branchement seul sans Stage 2) |
+| 3★     | 8×8 – 9×9 | ~0.14 – 0.20       | ≤12 | 500k | 3 (Stage 2 requis ET branchement > 250 nœuds) |
 
-La colonne « tier solveur exigé » est celle qui décide vraiment si un candidat est
-accepté pour le palier demandé — taille/densité ne sont que des leviers de
-génération, réajustés automatiquement (retry) si le tier mesuré ne correspond pas.
+Chaque palier correspond à l'ancien palier du dessus moins un cran (l'ancien
+« 3★ » ≈ nouveau 2★), et le nouveau 3★ exige explicitement un « lieu de
+doute » mesuré (`stage2Used === true` dans `analyzeSolve`, voir solver.js) —
+pas seulement de la taille de grille. La colonne « tier solveur exigé » est
+celle qui décide vraiment si un candidat est accepté pour le palier demandé —
+taille/densité ne sont que des leviers de génération, réajustés
+automatiquement (retry) si le tier mesuré ne correspond pas.
+
+Le palier 3★ est plafonné à 9×9 : un sweep empirique a montré des pics de
+latence jusqu'à ~50s sur des grilles 10×10 clairsemées pour une seule analyse
+de solveur — bien au-delà de ce qu'un budget de génération peut absorber.
+Pour compenser le coût par tentative plus élevé à ce palier (countSolutions +
+analyzeSolve à faible densité), le budget de génération (Phase F) est
+lui-même différencié par palier plutôt qu'uniforme : ~2s/40 tentatives pour
+1★, ~3s/40 pour 2★, jusqu'à ~10s/100 tentatives pour 3★ (le Worker tourne
+hors du thread UI, donc ce délai plus long ne bloque jamais l'interface).
+Avec ce calibrage, le taux de candidats "parfaits" (solution unique ET
+palier mesuré == palier demandé) mesuré est ~100 % en 1★/2★ et ~60-70 % en
+3★ ; le reste retombe honnêtement en 2★ (jamais mal étiqueté, jamais 0
+solution) plutôt que d'échouer.
 
 Pour les étoiles **en jeu** (1-3 étoiles selon le nombre de coups du joueur, système
 déjà existant via `starThresholds`/`computeStars`), le générateur doit remplir

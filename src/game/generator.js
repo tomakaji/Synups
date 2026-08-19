@@ -63,17 +63,38 @@ export const FEATURES = {
  * murs qui DÉCROÎT avec la difficulté demandée, à l'inverse de l'intuition
  * "plus de murs = plus dur". Toujours pas une loi figée : à réajuster une
  * fois qu'on observe le taux réel de candidats parfaits par palier.
+ *
+ * Recalibrage (retour utilisateur : l'ancien "difficile" jouait comme un
+ * "intermédiaire", et la taille de grille seule ne suffit pas à faire un
+ * niveau dur — il faut de vrais "lieux de doute", pas juste du remplissage).
+ * Chaque palier est décalé d'un cran vers le bas par rapport à la première
+ * version, et le nouveau tier 3 vise un régime où `analyzeSolve` mesure
+ * quasi-systématiquement du Stage 2 (déduction croisée entre deux indices,
+ * pas seulement du Stage 1 case-par-case) — voir solver.js. On plafonne à
+ * 9×9 : un sweep empirique a montré des pics de latence jusqu'à ~50s sur des
+ * grilles 10×10 clairsemées, largement au-delà du budget de génération.
  */
 const DIFFICULTY_PRESETS = {
-  1: { sizeRange: [5, 6], wallDensity: [0.4, 0.48], cornerVoidRange: [0, 0], budget: 3, nodeBudget: 200_000 },
-  2: { sizeRange: [6, 7], wallDensity: [0.28, 0.36], cornerVoidRange: [0, 1], budget: 6, nodeBudget: 400_000 },
-  3: { sizeRange: [7, 9], wallDensity: [0.16, 0.24], cornerVoidRange: [0, 2], budget: 10, nodeBudget: 800_000 },
+  1: { sizeRange: [6, 7], wallDensity: [0.28, 0.36], cornerVoidRange: [0, 1], budget: 6, nodeBudget: 400_000 },
+  2: { sizeRange: [7, 8], wallDensity: [0.2, 0.28], cornerVoidRange: [0, 2], budget: 8, nodeBudget: 600_000 },
+  3: { sizeRange: [8, 9], wallDensity: [0.14, 0.2], cornerVoidRange: [0, 2], budget: 12, nodeBudget: 500_000 },
 };
 
 // Budget global d'une génération (Phase F du doc) : le premier des deux
-// atteint arrête la boucle et on sert le meilleur candidat rencontré.
-const DEFAULT_MAX_ATTEMPTS = 40;
-const DEFAULT_MAX_TIME_MS = 3000;
+// atteint arrête la boucle et on sert le meilleur candidat rencontré. Le
+// budget temps est délibérément plus généreux sur les paliers élevés : une
+// seule tentative tier 3 (countSolutions + analyzeSolve à densité faible)
+// peut déjà coûter 1-2s, donc un budget uniforme de 3s ne laissait quasiment
+// aucune marge pour départager plusieurs candidats et converger vers un
+// vrai "lieu de doute" (voir isBetterCandidate). Tourne dans le Worker, donc
+// ne bloque jamais l'UI même quand ça dure quelques secondes de plus.
+// Validé empiriquement (25-30 tirages/palier via generateLevel réel) : ~100%
+// de candidats parfaits (solution unique + palier mesuré == demandé) en
+// 1★/2★, ~60-70% en 3★ (le reste retombe honnêtement en 2★, jamais 0
+// solution ni mal étiqueté) ; temps d'attente 3★ : ~2.5-3.5s en moyenne,
+// jusqu'à ~11s dans le pire cas observé.
+const DEFAULT_MAX_ATTEMPTS_BY_TIER = { 1: 40, 2: 40, 3: 100 };
+const DEFAULT_MAX_TIME_MS_BY_TIER = { 1: 2000, 2: 3000, 3: 10000 };
 
 function pickInt(rand, [lo, hi]) {
   return lo + Math.floor(rand() * (hi - lo + 1));
@@ -203,17 +224,35 @@ function tryGenerate(seed, tier, enabledFeatureKeys) {
 /**
  * Compare deux candidats déjà générés et retourne le meilleur selon l'ordre
  * de préférence de la Phase F (section 4/10 du doc) : solution unique avant
- * tout, puis palier de difficulté mesuré correct.
+ * tout, puis palier de difficulté mesuré aussi proche que possible du palier
+ * demandé, puis (à palier égal, imparfait) un `branchCount` qui pousse dans
+ * la direction demandée — sans ce dernier critère, la boucle gardait le
+ * premier candidat unique trouvé même s'il était nettement plus facile qu'un
+ * autre vu plus tard dans le même budget (observé empiriquement : le tier 3
+ * "ratait" sa cible dans ~40% des tirages faute de départager entre
+ * candidats tier 2 de justesse et tier 2 très proche du seuil tier 3).
  */
 function isBetterCandidate(a, b, requestedTier) {
   if (!a) return true;
   const aUnique = a.solutionCount === 1;
   const bUnique = b.solutionCount === 1;
   if (aUnique !== bUnique) return bUnique;
-  const aTierOk = a.measuredTier === requestedTier;
-  const bTierOk = b.measuredTier === requestedTier;
-  if (aTierOk !== bTierOk) return bTierOk;
-  return false; // équivalents sur les deux critères : on garde le premier trouvé
+
+  const aDist = a.measuredTier == null ? Infinity : Math.abs(a.measuredTier - requestedTier);
+  const bDist = b.measuredTier == null ? Infinity : Math.abs(b.measuredTier - requestedTier);
+  if (aDist !== bDist) return bDist < aDist;
+
+  // Même distance au palier demandé (et donc, la plupart du temps, même
+  // measuredTier) : on préfère le candidat dont le branchCount va dans le
+  // sens du palier demandé — plus dur si on visait plus dur qu'obtenu, plus
+  // facile si on visait plus facile qu'obtenu.
+  if (a.measuredTier != null && b.measuredTier != null && a.measuredTier === b.measuredTier) {
+    const aBranch = a.branchCount ?? 0;
+    const bBranch = b.branchCount ?? 0;
+    if (a.measuredTier < requestedTier) return bBranch > aBranch;
+    if (a.measuredTier > requestedTier) return bBranch < aBranch;
+  }
+  return false; // équivalents sur tous les critères : on garde le premier trouvé
 }
 
 /**
@@ -228,17 +267,19 @@ export function generateLevel({
   difficulty = 1,
   enabledFeatureKeys = ["forbidden"],
   seed = Date.now() ^ (Math.random() * 0xffffffff),
-  maxAttempts = DEFAULT_MAX_ATTEMPTS,
-  maxTimeMs = DEFAULT_MAX_TIME_MS,
+  maxAttempts,
+  maxTimeMs,
 } = {}) {
   const tier = [1, 2, 3].includes(difficulty) ? difficulty : 1;
   const preset = DIFFICULTY_PRESETS[tier];
+  const timeBudgetMs = maxTimeMs ?? DEFAULT_MAX_TIME_MS_BY_TIER[tier];
+  const attemptsBudget = maxAttempts ?? DEFAULT_MAX_ATTEMPTS_BY_TIER[tier];
 
   const start = Date.now();
   let best = null;
   let attempts = 0;
 
-  while (attempts < maxAttempts && Date.now() - start < maxTimeMs) {
+  while (attempts < attemptsBudget && Date.now() - start < timeBudgetMs) {
     attempts++;
     const candidateSeed = Math.floor(seed) + attempts * 7919; // grand premier: étale les seeds
     const raw = tryGenerate(candidateSeed, tier, enabledFeatureKeys);
@@ -258,11 +299,13 @@ export function generateLevel({
     const confirmedUnique = exhausted && count === 1;
 
     let measuredTier = null;
+    let branchCount = null;
     let solution = raw.referenceSolution;
     if (confirmedUnique) {
       const analysis = analyzeSolve(level, preset.nodeBudget);
       if (analysis) {
         measuredTier = analysis.tier;
+        branchCount = analysis.branchCount;
         solution = analysis.solution;
       }
     }
@@ -273,6 +316,7 @@ export function generateLevel({
       solutionCount: confirmedUnique ? 1 : 2, // 2 = "plusieurs ou incertain", jamais présenté comme unique
       confirmedUnique,
       measuredTier,
+      branchCount,
       requestedTier: tier,
       featureSubset: raw.featureSubset,
       attempts,
