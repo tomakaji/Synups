@@ -1,8 +1,18 @@
 
 # Mode Infini — proposition de design (v1)
 
-Statut: brouillon pour discussion, aucun code écrit. Objectif: définir précisément
-*quoi construire* avant de commencer l'implémentation.
+Statut: décisions d'architecture validées (voir section 10), aucun code écrit.
+Prochaine étape: implémentation de la Phase 1 (MVP, section 9).
+
+## Décisions validées
+
+- **Unicité**: best-effort. Le générateur essaie fort d'obtenir une solution
+  unique, mais passé un budget de temps/tentatives, il sert le meilleur candidat
+  trouvé plutôt que de faire attendre le joueur — voir section 8 pour le critère
+  exact de « meilleur candidat ».
+- **Perf**: génération dans un Web Worker dès la première version.
+- **Phasage**: on commence par le MVP (formes + cases interdites + indices
+  numériques, sans couleur ni mécaniques spéciales) avant d'ajouter le reste.
 
 ## 1. Objectifs
 
@@ -118,9 +128,12 @@ réel de la grille après simulation. Zéro recherche combinatoire pour cette é
 
 ### Phase D — vérification
 
-`countSolutions(level, 2, budget)` : si `count !== 1` (0, plusieurs, ou budget
-dépassé sans conclure), le candidat est jeté, nouvelle seed, retry. Comme
-aujourd'hui, plafonné à N tentatives.
+`countSolutions(level, 2, budget)` : si `count === 0`, le candidat est rejeté
+immédiatement (niveau impossible, jamais servi). Si `count !== 1` (plusieurs
+solutions, ou budget dépassé sans conclure), le candidat n'est pas rejeté tout de
+suite : il est **conservé comme filet de sécurité** (voir la politique
+best-effort ci-dessous) et le générateur retente quand même une nouvelle seed en
+espérant mieux, jusqu'à épuisement du budget global de la Phase F.
 
 ### Phase E — notation de la difficulté réelle, puis acceptation
 
@@ -128,8 +141,29 @@ C'est la partie vraiment nouvelle par rapport aux scripts existants (détaillée
 section 6) : on ne fait pas confiance à la taille/densité pour deviner la
 difficulté, on **mesure** la difficulté du candidat validé en observant *quelles
 techniques le solveur a dû utiliser* pour le résoudre. Si le palier mesuré ne
-correspond pas au palier demandé, retry avec des paramètres de phase A légèrement
-ajustés (densité +/-, nombre de features +/-).
+correspond pas au palier demandé, le candidat est traité comme la Phase D
+(conservé comme filet de sécurité si rien de mieux n'est trouvé, mais on retente).
+
+### Phase F — budget global et politique best-effort (décidé)
+
+Le générateur boucle sur les phases A→E jusqu'à trouver un candidat **parfait**
+(solution unique ET palier de difficulté mesuré == palier demandé), ou jusqu'à
+épuiser un budget global (nombre de tentatives ET temps écoulé, le premier des
+deux qui tombe — proposition de départ : 40 tentatives ou 3 secondes). Si le
+budget s'épuise sans candidat parfait, on sert le **meilleur candidat rencontré**
+selon cet ordre de préférence :
+
+1. solution unique, palier de difficulté différent du palier demandé (mieux vaut
+   un niveau honnête mais mal calibré qu'un niveau ambigu) ;
+2. plusieurs solutions, mais palier de difficulté correct ;
+3. plusieurs solutions et palier incorrect (dernier recours, seulement si rien de
+   mieux n'a été vu du tout) ;
+4. jamais un candidat à 0 solution (toujours rejeté, quel que soit le budget).
+
+Dans les cas 2 et 3 (solution non unique), l'écran de jeu affiche un badge discret
+(« variante multiple » ou équivalent) plutôt que de le faire passer pour un niveau
+à solution unique comme les autres — transparence envers le joueur plutôt que
+correction silencieuse.
 
 ## 5. Modèle de features sélectionnables
 
@@ -236,7 +270,7 @@ les niveaux statiques sans seuils explicites.
   `Niveau suivant` qui relance une génération avec les mêmes réglages plutôt que
   d'avancer dans un tableau `levels`.
 
-## 8. Contrainte de performance : Web Worker
+## 8. Contrainte de performance : Web Worker (décidé)
 
 Les mesures de cette session (`npm run check-unique` sur les niveaux existants)
 donnent une idée réaliste des coûts : la plupart des niveaux se vérifient en
@@ -244,18 +278,16 @@ quelques ms, mais un niveau avec Neurone miroir a pris ~2.4s, et un niveau dense
 sans mécanique spéciale (« Pyras ») a pris ~8s. Le mode Infini va *générer et
 rejeter* plusieurs candidats par niveau (retry sur non-unicité et sur mauvais
 palier de difficulté) — donc le pire cas cumulé peut dépasser largement le budget
-d'un thread UI.
+d'un thread UI. Décision : `generator.js` tourne dans un **Web Worker**
+(`generator.worker.js`) dès la première version, pas seulement si besoin plus
+tard.
 
-Proposition : faire tourner `generator.js` dans un **Web Worker**
-(`generator.worker.js`), avec message `{ type: "generate", difficulty, features,
-seed }` → `{ level, solution, difficultyReport }`. L'UI reste réactive, l'état de
-chargement peut afficher une estimation/progression (nombre de tentatives). Un
-budget de temps global (pas seulement un budget de nœuds par tentative) doit
-borner l'ensemble du processus — si aucun candidat satisfaisant n'est trouvé après,
-disons, 3 secondes ou 40 tentatives, on renvoie le **meilleur candidat trouvé**
-(solution unique si possible, sinon la moins mauvaise) plutôt que de bloquer
-indéfiniment — même philosophie de dégradation gracieuse que `countSolutions`
-aujourd'hui (`exhausted: false`).
+Message `{ type: "generate", difficulty, features, seed }` → `{ level, solution,
+difficultyReport }`. L'UI reste réactive, l'état de chargement peut afficher une
+estimation/progression (nombre de tentatives). Le budget global décrit en Phase F
+(40 tentatives ou 3 secondes, premier des deux atteint) borne le Worker — il
+répond toujours dans ce délai, avec le meilleur candidat trouvé si besoin (jamais
+un blocage indéfini).
 
 Les scripts Node existants (`scripts/*.mjs`) n'ont pas de Worker/DOM : le cœur
 `generator.js` doit rester utilisable directement depuis Node (comme
@@ -278,23 +310,27 @@ Livrer par étapes plutôt que tout d'un coup, chaque étape jouable seule :
 5. **Neurone miroir** (opt-in, capé à 1/niveau, 3★ uniquement, avec la passe
    d'invariant supplémentaire décrite section 5).
 
-## 10. Risques & questions ouvertes
+## 10. Risques restants
 
-- **Unicité stricte vs best-effort** : à budget de tentatives fixé, certaines
-  combinaisons de features/difficulté peuvent rarement produire une solution
-  unique (on l'a vu avec « Neurone mirroir », qui s'est avéré avoir 2 solutions
-  une fois le solveur corrigé). Faut-il livrer occasionnellement un niveau à 2
-  solutions avec un badge discret, ou uniquement réessayer indéfiniment (au risque
-  de latence) ?
-- **Web Worker vs génération synchrone** : le Worker est la solution la plus sûre
-  pour ne jamais geler l'UI, mais ajoute de la complexité de build/message-passing.
-  Une version synchrone d'abord (acceptable si les temps de génération restent
-  courts en pratique pour la Phase 1/MVP) pourrait suffire au début.
-- **Ordre de phasage** : je propose MVP → Couleur → Miroir/Filtre → Prisme/Pyra →
-  Neurone miroir, du moins risqué au plus coûteux. À confirmer.
+Les trois décisions d'architecture (unicité best-effort, Worker dès le départ,
+MVP en premier — voir « Décisions validées » en tête de document) sont tranchées.
+Ce qui reste ouvert, à affiner en implémentant plutôt qu'en discutant dans l'abstrait :
+
+- **Calibrage des seuils** (densité par palier, budget de complexité par feature,
+  40 tentatives/3 secondes en Phase F) : ce sont des points de départ raisonnables
+  mais pas des lois — à ajuster une fois qu'on génère pour de vrai et qu'on observe
+  le taux réel de candidats parfaits par palier/feature.
+- **Fréquence réelle du best-effort dégradé** : combien de fois, en pratique, le
+  budget de la Phase F s'épuise-t-il avant de trouver un candidat parfait ? Si
+  c'est fréquent sur des combos courantes (pas seulement Neurone miroir), ça
+  vaudra le coup de retravailler la construction en Phase B/C plutôt que de
+  compter sur le retry pur.
+- **Ordre de phasage des mécaniques après le MVP** (Couleur → Miroir/Filtre →
+  Prisme/Pyra → Neurone miroir, du moins risqué au plus coûteux) : proposé par
+  défaut, mais pourra être réordonné librement selon ce qui intéresse le plus une
+  fois le MVP en main.
 
 ---
 
-Prochaine étape suggérée : valider les choix ci-dessus (notamment section 10), puis
-commencer l'implémentation par la Phase 1 (MVP) — la partie la plus proche de code
-déjà existant et testé.
+Prochaine étape : implémentation de la Phase 1 (MVP) — la partie la plus proche de
+code déjà existant et testé.
