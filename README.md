@@ -263,6 +263,35 @@ Les niveaux sauvegardés localement dans l'éditeur ne sont PAS dans
 `levels.js` — c'est un espace de brouillon. Pour qu'un niveau rejoigne le
 jeu, il faut copier le code exporté dans `src/game/levels.js`.
 
+## Mode Infini [MVP]
+
+Bouton "Infini" en haut. Génère un niveau à la volée plutôt que de piocher
+dans `levels.js` — voir `docs/infinite-mode-design.md` pour la conception
+complète (paliers de difficulté, budget de complexité par mécanique,
+politique best-effort, plan de phasage).
+
+- Écran de réglages : difficulté (1 à 3 étoiles) + mécaniques autorisées.
+  Cette première version ne génère que des formes (murs/void) + cases
+  interdites + indices numériques — les autres mécaniques (couleur,
+  miroir, filtre, prisme, pyra, neurone miroir) sont déjà listées dans
+  l'écran mais grisées ("bientôt"), en attente des phases suivantes.
+- La génération tourne dans un Web Worker (`src/game/generator.worker.js`)
+  pour ne jamais geler l'interface : plusieurs tentatives sont essayées en
+  arrière-plan (formes candidates + vérification d'unicité via le
+  solveur), bornées à 40 essais ou 3 secondes.
+- La difficulté n'est PAS devinée depuis la taille/densité de la grille :
+  elle est MESURÉE après coup via `analyzeSolve()` dans `solver.js`, en
+  observant quelles techniques de résolution ont été nécessaires (indice
+  isolé seul, interaction entre deux indices, ou vrai branchement/pari) —
+  même principe que les notations de difficulté Sudoku.
+- Politique best-effort : si aucun candidat "parfait" (solution unique ET
+  difficulté exacte) n'est trouvé dans le budget, le meilleur candidat
+  rencontré est servi quand même, avec un badge "variante multiple" si sa
+  solution n'a pas pu être confirmée unique — jamais un niveau à 0
+  solution, et jamais une attente indéfinie.
+- Les niveaux générés ne sont jamais écrits dans `levels.js` : ils
+  n'existent qu'en mémoire, régénérés à chaque "Nouveau niveau".
+
 ## Son
 
 Tout est synthétisé via Tone.js (aucun fichier audio), pensé comme une
@@ -273,7 +302,7 @@ uniformément.
 
 ## Notation en étoiles
 
-`computeStars(moves, levelIndex)` dans `main.js` : si le niveau définit
+`computeStars(moves, level)` dans `main.js` : si le niveau définit
 `starThresholds: [seuil3etoiles, seuil2etoiles]` dans `levels.js`, on
 l'utilise directement. Sinon, calcul automatique via le solveur (nombre
 de lumières d'une solution valide = "par") : 3 étoiles si `moves <= par`,

@@ -11,9 +11,17 @@
       <header class="topbar">
         <h1>Synups</h1>
         <div id="play-view-controls" class="level-controls">
-          <button id="btn-prev" aria-label="Niveau précédent">&larr;</button>
-          <span id="level-name">1</span>
-          <button id="btn-next" aria-label="Niveau suivant">&rarr;</button>
+          <span id="nav-static" class="nav-group">
+            <button id="btn-prev" aria-label="Niveau précédent">&larr;</button>
+            <span id="level-name">1</span>
+            <button id="btn-next" aria-label="Niveau suivant">&rarr;</button>
+          </span>
+          <span id="nav-infinite" class="nav-group hidden">
+            <span id="infinite-level-label">∞</span>
+            <span id="infinite-badge" class="infinite-badge hidden" title="Ce niveau n'a pas de solution unique confirmée — plusieurs façons de le résoudre existent peut-être">variante multiple</span>
+            <button id="btn-infinite-settings">Réglages</button>
+            <button id="btn-infinite-next">Nouveau niveau</button>
+          </span>
           <button id="btn-undo" disabled>Annuler</button>
           <button id="btn-reset">Réinitialiser</button>
           <span id="move-count" class="move-count">0 coup</span>
@@ -22,13 +30,45 @@
           <label for="volume-slider">Volume</label>
           <input id="volume-slider" type="range" min="0" max="100" value="80" step="1" />
         </div>
-        <button id="btn-mode-toggle" class="mode-toggle">Éditeur</button>
+        <div class="mode-switch" id="mode-switch">
+          <button data-mode="play" class="mode-switch-btn active">Jouer</button>
+          <button data-mode="infinite" class="mode-switch-btn">Infini</button>
+          <button data-mode="editor" class="mode-switch-btn">Éditeur</button>
+        </div>
       </header>
 
       <div id="play-view">
         <main id="board-container">
           <div id="board"></div>
         </main>
+      </div>
+
+      <div id="infinite-config-view" class="hidden">
+        <div class="infinite-config">
+          <h2>Mode Infini <span class="infinite-config-tag">expérimental</span></h2>
+          <p class="infinite-config-hint">
+            Un niveau différent à chaque génération. Choisis une difficulté et les
+            mécaniques autorisées — tout cocher ne veut pas dire que tout sera
+            utilisé, juste que tout est permis.
+          </p>
+
+          <div class="infinite-config-section">
+            <span class="infinite-config-label">Difficulté</span>
+            <div id="infinite-difficulty" class="infinite-difficulty">
+              <button data-difficulty="1" class="infinite-star-btn active" aria-label="1 étoile">★☆☆</button>
+              <button data-difficulty="2" class="infinite-star-btn" aria-label="2 étoiles">★★☆</button>
+              <button data-difficulty="3" class="infinite-star-btn" aria-label="3 étoiles">★★★</button>
+            </div>
+          </div>
+
+          <div class="infinite-config-section">
+            <span class="infinite-config-label">Mécaniques autorisées</span>
+            <div id="infinite-features" class="infinite-features"></div>
+          </div>
+
+          <button id="btn-infinite-generate" class="infinite-generate-btn">Générer</button>
+          <p id="infinite-status" class="infinite-status" aria-live="polite"></p>
+        </div>
       </div>
 
       <div id="editor-view" class="hidden">

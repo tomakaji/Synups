@@ -598,11 +598,20 @@ body {
   color: var(--accent);
 }
 
-/* ---------- Bascule Jeu / Éditeur ---------- */
+/* ---------- Bascule Jeu / Infini / Éditeur ---------- */
 
-.mode-toggle {
-  background: none;
+.mode-switch {
+  display: flex;
+  gap: 2px;
+  background: #0e1119;
   border: 1px solid #2a3040;
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.mode-switch-btn {
+  background: none;
+  border: none;
   color: var(--text-dim);
   padding: 6px 14px;
   border-radius: 6px;
@@ -612,14 +621,206 @@ body {
   transition: all 0.2s;
 }
 
-.mode-toggle:hover {
-  border-color: var(--accent);
+.mode-switch-btn:hover {
+  color: var(--accent);
+}
+
+.mode-switch-btn.active {
+  background: var(--panel);
   color: var(--accent);
 }
 
 #play-view.hidden,
-#editor-view.hidden {
+#editor-view.hidden,
+#infinite-config-view.hidden {
   display: none;
+}
+
+/* ---------- Mode Infini : navigation + panneau de réglages ---------- */
+
+.nav-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-group.hidden {
+  display: none;
+}
+
+#infinite-level-label {
+  color: var(--accent);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+
+.infinite-badge {
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+  color: var(--text-dim);
+  border: 1px solid #3a3550;
+  border-radius: 999px;
+  padding: 2px 9px;
+  cursor: help;
+}
+
+.infinite-badge.hidden {
+  display: none;
+}
+
+#btn-infinite-settings,
+#btn-infinite-next {
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text-dim);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: all 0.2s;
+}
+
+#btn-infinite-settings:hover,
+#btn-infinite-next:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.infinite-config {
+  width: min(520px, 92vw);
+  margin: 40px auto;
+  background: var(--panel);
+  border: 1px solid #1c2130;
+  border-radius: 12px;
+  padding: 28px 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.infinite-config h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.infinite-config-tag {
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  border: 1px solid #3a3550;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.infinite-config-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.infinite-config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.infinite-config-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.infinite-difficulty {
+  display: flex;
+  gap: 8px;
+}
+
+.infinite-star-btn {
+  flex: 1;
+  background: #0e1119;
+  border: 1px solid #2a3040;
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 1.1rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.infinite-star-btn:hover {
+  border-color: var(--accent);
+}
+
+.infinite-star-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(110, 231, 255, 0.08);
+}
+
+.infinite-features {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.infinite-feature-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: var(--text);
+  padding: 4px 0;
+}
+
+.infinite-feature-row input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+}
+
+.infinite-feature-row.disabled {
+  color: var(--text-dim);
+  opacity: 0.6;
+}
+
+.infinite-feature-tag {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  border: 1px solid #2a3040;
+  border-radius: 999px;
+  padding: 1px 7px;
+  margin-left: auto;
+}
+
+.infinite-generate-btn {
+  background: var(--accent);
+  color: #06121a;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: opacity 0.2s;
+}
+
+.infinite-generate-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.infinite-status {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  min-height: 1.2em;
 }
 
 /* ---------- Éditeur de niveaux ---------- */

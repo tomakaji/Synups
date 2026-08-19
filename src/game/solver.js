@@ -292,7 +292,7 @@ function pairDeductions(grid, clueA, clueB, excluded, mirrorReachable) {
  * ou `{ ok:true, litAdded, excludedAdded }` sinon — l'appelant doit annuler
  * `litAdded`/`excludedAdded` lui-même une fois le noeud terminé.
  */
-function propagate(grid, excluded, mirrorReachable) {
+function propagate(grid, excluded, mirrorReachable, stats) {
   const litAdded = [];
   const excludedAdded = [];
 
@@ -384,6 +384,14 @@ function propagate(grid, excluded, mirrorReachable) {
         if (!result.ok) {
           undo();
           return { ok: false };
+        }
+        if (stats && (result.forcedLit.length > 0 || result.forcedDark.length > 0)) {
+          // Voir analyzeSolve(): une déduction Stage 2 a été NÉCESSAIRE pour
+          // avancer ici (Stage 1 seul ne suffisait plus) — signal utilisé
+          // pour noter la difficulté réelle du niveau, indépendant de la
+          // recherche de solution elle-même (stats est toujours `undefined`
+          // pour countSolutions/enumerateSolutions/findSolution).
+          stats.stage2Used = true;
         }
         for (const [fr, fc] of result.forcedLit) {
           if (!forceLit(fr, fc)) {
@@ -629,4 +637,104 @@ export function findSolution(level, maxNodes = 2_000_000) {
     if (e instanceof NodeBudgetExceeded) return null;
     throw e;
   }
+}
+
+/**
+ * Comme `findSolution`, mais mesure AUSSI quelles techniques de résolution
+ * ont été nécessaires — utilisé par le mode Infini (voir docs/
+ * infinite-mode-design.md, section 6) pour noter la difficulté RÉELLE d'un
+ * niveau généré plutôt que de deviner à partir de sa taille/densité, même
+ * principe que les notations de difficulté Sudoku ("quelle est la technique
+ * la plus avancée nécessaire, pas juste combien de chiffres manquent").
+ *
+ * Duplique volontairement la recherche de `findSolution` plutôt que de la
+ * réutiliser: `propagate`/`search` sont déjà minces, et éviter de complexifier
+ * les trois fonctions déjà en prod (countSolutions/enumerateSolutions/
+ * findSolution) avec un paramètre `stats` qu'elles n'utilisent jamais réduit
+ * le risque de régression. Une fusion des quatre en un seul coeur de
+ * recherche partagé reste une amélioration future raisonnable (voir le doc),
+ * pas nécessaire pour une première version.
+ *
+ * Retourne `null` si aucune solution n'est trouvée dans `maxNodes`, sinon
+ * `{ solution, moves, stage2Used, branchCount, tier }`:
+ * - `stage2Used`: au moins une déduction Stage 2 (paire d'indices) a servi.
+ * - `branchCount`: nombre de fois où propagate seul n'a pas suffi et où il a
+ *   fallu émettre une hypothèse de branchement (compté sur tout l'arbre de
+ *   recherche exploré, pas seulement le chemin gagnant — un niveau mal
+ *   contraint qui force beaucoup de tâtonnement, même sur des impasses,
+ *   n'est pas un niveau "évident").
+ * - `tier`: 1 (Stage 1 seul), 2 (Stage 2 et/ou peu de branchements), 3
+ *   (branchement conséquent nécessaire) — seuils calibrés empiriquement sur
+ *   des plateaux 5x5 à 9x9 (voir docs/infinite-mode-design.md, section 10):
+ *   `branchCount` explose vite dès qu'une zone du plateau n'est couverte par
+ *   AUCUN indice (plusieurs dizaines à plusieurs centaines de noeuds rien que
+ *   pour trancher une poignée de cases ouvertes), donc les seuils sont bas
+ *   en valeur absolue — pas des lois figées, à réajuster à l'usage.
+ */
+export function analyzeSolve(level, maxNodes = 2_000_000) {
+  const grid = new LightUpGrid(level);
+  const excluded = new Set();
+  const mirrorReachable = computeMirrorReachable(grid);
+  const stats = { stage2Used: false, branchCount: 0 };
+  let nodes = 0;
+  let solution = null;
+
+  function currentLights() {
+    return grid.getPlacedLights();
+  }
+
+  function search() {
+    if (++nodes > maxNodes) throw new NodeBudgetExceeded();
+
+    const prop = propagate(grid, excluded, mirrorReachable, stats);
+    let found = false;
+
+    if (prop.ok) {
+      const undecided = getUndecided(grid, excluded);
+
+      if (undecided.length === 0) {
+        if (grid.isWon()) {
+          solution = currentLights();
+          found = true;
+        }
+      } else {
+        stats.branchCount++;
+        const [r, c] = pickBranchCell(grid, undecided, excluded);
+        const key = keyOf(r, c);
+
+        excluded.add(key);
+        found = search();
+        excluded.delete(key);
+
+        if (!found) {
+          const result = grid.toggleLight(r, c);
+          if (result === "placed") {
+            if (!anyClueError(grid)) found = search();
+            if (!found) grid.toggleLight(r, c);
+          }
+        }
+      }
+
+      if (!found) {
+        for (let i = prop.litAdded.length - 1; i >= 0; i--) {
+          grid.toggleLight(prop.litAdded[i][0], prop.litAdded[i][1]);
+        }
+        for (const k of prop.excludedAdded) excluded.delete(k);
+      }
+    }
+
+    return found;
+  }
+
+  let solved;
+  try {
+    solved = search();
+  } catch (e) {
+    if (e instanceof NodeBudgetExceeded) return null;
+    throw e;
+  }
+  if (!solved) return null;
+
+  const tier = !stats.stage2Used && stats.branchCount <= 1 ? 1 : stats.branchCount <= 10 ? 2 : 3;
+  return { solution, moves: solution.length, stage2Used: stats.stage2Used, branchCount: stats.branchCount, tier };
 }

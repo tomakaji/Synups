@@ -17,8 +17,16 @@ import {
 import { createBoardRenderer } from "./game/render.js";
 import { initEditor } from "./editor.js";
 import { findSolution } from "./game/solver.js";
+import { FEATURES } from "./game/generator.js";
+import { requestLevel } from "./game/infiniteClient.js";
 
 let currentLevelIndex = 0;
+// Le niveau EFFECTIVEMENT en cours, statique (`levels[currentLevelIndex]`)
+// ou généré à la volée (mode Infini) — voir loadLevel/loadInfiniteLevel.
+// `computeStars` travaille sur cet objet directement plutôt que sur un
+// index, pour ne pas dépendre du tableau `levels` quand la source est le
+// générateur.
+let currentLevel = null;
 let grid = null;
 // Historique des coups (poses/retraits de lumière) pour le bouton
 // "Annuler": pas de limite tant qu'on n'a pas tout remonté, vidé à chaque
@@ -30,22 +38,26 @@ let moveHistory = [];
 // `starThresholds`. Calculé à la demande (au moment de la victoire, pas au
 // chargement du niveau: certains niveaux prennent jusqu'à ~1s à résoudre,
 // pas la peine de ralentir la navigation entre niveaux pour ça) et mis en
-// cache par index de niveau pour ne jamais le recalculer deux fois.
+// cache par OBJET niveau (Map à clé objet: fonctionne aussi bien pour un
+// niveau statique que pour un niveau généré, jamais deux fois le même objet
+// en mémoire pour deux niveaux différents). Les niveaux générés par le mode
+// Infini fournissent déjà `starThresholds` explicitement (voir
+// generator.js), donc ce chemin de secours ne les concerne en pratique
+// jamais — gardé quand même par cohérence/robustesse.
 const parCache = new Map();
 
-function computeStars(moves, levelIndex) {
-  const level = levels[levelIndex];
+function computeStars(moves, level) {
   if (Array.isArray(level.starThresholds) && level.starThresholds.length === 2) {
     const [threeMax, twoMax] = level.starThresholds;
     if (moves <= threeMax) return 3;
     if (moves <= twoMax) return 2;
     return 1;
   }
-  let par = parCache.get(levelIndex);
+  let par = parCache.get(level);
   if (par === undefined) {
     const solution = findSolution(level, 400_000);
     par = solution ? solution.length : null;
-    parCache.set(levelIndex, par);
+    parCache.set(level, par);
   }
   if (par == null) return null;
   if (moves <= par) return 3;
@@ -99,16 +111,22 @@ function renderStars(stars) {
     .join("");
 }
 
-function loadLevel(index) {
-  currentLevelIndex = ((index % levels.length) + levels.length) % levels.length;
-  const level = levels[currentLevelIndex];
-  grid = new LightUpGrid(level);
+/** Commun aux niveaux statiques et générés: prépare le plateau une fois
+ * `grid`/`currentLevel` déjà positionnés par l'appelant. */
+function startBoard() {
   moveHistory = [];
   syncMoveUi();
-  levelNameEl.textContent = `${currentLevelIndex + 1}. ${level.name}`;
   renderer.build(grid, { onCellClick: handleCellClick, sounds });
   winOverlay.classList.add("hidden");
   renderStars(null);
+}
+
+function loadLevel(index) {
+  currentLevelIndex = ((index % levels.length) + levels.length) % levels.length;
+  currentLevel = levels[currentLevelIndex];
+  grid = new LightUpGrid(currentLevel);
+  levelNameEl.textContent = `${currentLevelIndex + 1}. ${currentLevel.name}`;
+  startBoard();
 }
 
 function handleCellClick(r, c) {
@@ -142,7 +160,7 @@ function handleCellClick(r, c) {
 
   if (grid.isWon()) {
     playWin();
-    renderStars(computeStars(grid.getPlacedLightCount(), currentLevelIndex));
+    renderStars(computeStars(grid.getPlacedLightCount(), currentLevel));
     winOverlay.classList.remove("hidden");
   }
 }
@@ -170,10 +188,6 @@ function undoLastMove() {
   winOverlay.classList.add("hidden");
 }
 
-document.getElementById("btn-prev").onclick = () => loadLevel(currentLevelIndex - 1);
-document.getElementById("btn-next").onclick = () => loadLevel(currentLevelIndex + 1);
-document.getElementById("btn-next-win").onclick = () => loadLevel(currentLevelIndex + 1);
-document.getElementById("btn-reset").onclick = () => loadLevel(currentLevelIndex);
 btnUndo.onclick = undoLastMove;
 
 // Réglage de volume simple: un seul curseur pour tous les sons (voir
@@ -184,31 +198,232 @@ volumeSlider.addEventListener("input", () => {
   setMasterVolume(Number(volumeSlider.value) / 100);
 });
 
-// Bascule Jeu / Éditeur : deux vues superposées dans la même page, plutôt
-// qu'un routage — c'est un prototype mono-page.
+// ---------- Mode Infini ----------
+// Voir docs/infinite-mode-design.md. Un niveau généré est un objet niveau
+// STANDARD (comme n'importe quelle entrée de levels.js) : une fois obtenu,
+// il traverse exactement le même chemin (`grid`/`renderer`/`handleCellClick`)
+// qu'un niveau statique — seule la façon dont on l'obtient diffère.
+
+const navStaticEl = document.getElementById("nav-static");
+const navInfiniteEl = document.getElementById("nav-infinite");
+const infiniteLevelLabelEl = document.getElementById("infinite-level-label");
+const infiniteBadgeEl = document.getElementById("infinite-badge");
+const btnInfiniteSettings = document.getElementById("btn-infinite-settings");
+const btnInfiniteNext = document.getElementById("btn-infinite-next");
+const infiniteConfigView = document.getElementById("infinite-config-view");
+const infiniteFeaturesEl = document.getElementById("infinite-features");
+const btnInfiniteGenerate = document.getElementById("btn-infinite-generate");
+const infiniteStatusEl = document.getElementById("infinite-status");
+
+let infiniteDifficulty = 1;
+// Cochées par défaut: seules les features déjà implémentées (voir
+// generator.js) ont un sens à activer d'office ; les autres sont visibles
+// (roadmap) mais grisées tant qu'elles ne sont pas encore génératrices.
+let infiniteEnabledFeatures = new Set(Object.keys(FEATURES).filter((k) => FEATURES[k].implemented));
+let lastInfiniteResult = null; // dernier niveau généré (pour "Réglages" -> retour au jeu sans perdre la partie)
+let infiniteRequestInFlight = false;
+
+document.querySelectorAll(".infinite-star-btn").forEach((btn) => {
+  btn.onclick = () => {
+    infiniteDifficulty = Number(btn.dataset.difficulty);
+    document.querySelectorAll(".infinite-star-btn").forEach((b) => b.classList.toggle("active", b === btn));
+  };
+});
+
+/** Construit la liste de checkboxes features à partir de FEATURES (voir
+ * generator.js) — une feature non `implemented` reste visible (roadmap)
+ * mais désactivée ; une feature avec `requires` se grise/se décoche
+ * automatiquement tant que sa dépendance n'est pas cochée. */
+function buildFeatureChecklist() {
+  infiniteFeaturesEl.innerHTML = "";
+  for (const [key, feature] of Object.entries(FEATURES)) {
+    const row = document.createElement("label");
+    row.className = "infinite-feature-row";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.dataset.featureKey = key;
+    input.checked = infiniteEnabledFeatures.has(key);
+    input.disabled = !feature.implemented;
+
+    const span = document.createElement("span");
+    span.textContent = feature.label;
+
+    row.append(input, span);
+
+    if (!feature.implemented) {
+      const tag = document.createElement("span");
+      tag.className = "infinite-feature-tag";
+      tag.textContent = "bientôt";
+      row.append(tag);
+      row.classList.add("disabled");
+    }
+
+    input.addEventListener("change", () => {
+      if (input.checked) infiniteEnabledFeatures.add(key);
+      else infiniteEnabledFeatures.delete(key);
+      refreshFeatureDependencies();
+    });
+
+    infiniteFeaturesEl.appendChild(row);
+  }
+  refreshFeatureDependencies();
+}
+
+/** Grise/décoche une feature dont la dépendance (`requires`) n'est plus
+ * cochée — voir FEATURES dans generator.js (ex: Miroir/Filtre/Prisme
+ * dépendent tous de Couleur). */
+function refreshFeatureDependencies() {
+  for (const [key, feature] of Object.entries(FEATURES)) {
+    if (!feature.requires) continue;
+    const input = infiniteFeaturesEl.querySelector(`input[data-feature-key="${key}"]`);
+    if (!input) continue;
+    const dependencyMet = infiniteEnabledFeatures.has(feature.requires);
+    const row = input.closest(".infinite-feature-row");
+    if (!dependencyMet && input.checked) {
+      input.checked = false;
+      infiniteEnabledFeatures.delete(key);
+    }
+    const shouldDisable = !feature.implemented || !dependencyMet;
+    input.disabled = shouldDisable;
+    row.classList.toggle("disabled", shouldDisable);
+  }
+}
+
+buildFeatureChecklist();
+
+function starsLabel(tier) {
+  return "★".repeat(tier) + "☆".repeat(3 - tier);
+}
+
+function loadInfiniteLevel(result) {
+  lastInfiniteResult = result;
+  currentLevelIndex = -1;
+  currentLevel = result.level;
+  grid = new LightUpGrid(currentLevel);
+  const shownTier = result.measuredTier ?? result.requestedTier;
+  infiniteLevelLabelEl.textContent = `∞ · ${starsLabel(shownTier)}`;
+  infiniteBadgeEl.classList.toggle("hidden", result.confirmedUnique);
+  startBoard();
+}
+
+async function runGeneration({ intoBoard }) {
+  if (infiniteRequestInFlight) return;
+  infiniteRequestInFlight = true;
+  btnInfiniteGenerate.disabled = true;
+  btnInfiniteNext.disabled = true;
+  const statusTarget = intoBoard ? infiniteLevelLabelEl : infiniteStatusEl;
+  const previousLabel = statusTarget.textContent;
+  statusTarget.textContent = intoBoard ? "∞ · génération…" : "Génération en cours…";
+
+  try {
+    const result = await requestLevel({
+      difficulty: infiniteDifficulty,
+      enabledFeatureKeys: Array.from(infiniteEnabledFeatures),
+    });
+    if (!result) {
+      statusTarget.textContent = intoBoard
+        ? previousLabel
+        : "Échec de génération avec ces réglages — réessaie (ou change les réglages).";
+      return;
+    }
+    infiniteConfigView.classList.add("hidden");
+    navStaticEl.classList.add("hidden");
+    navInfiniteEl.classList.remove("hidden");
+    playView.classList.remove("hidden");
+    loadInfiniteLevel(result);
+    infiniteStatusEl.textContent = "";
+  } catch (err) {
+    statusTarget.textContent = "Erreur du générateur — réessaie.";
+    console.error(err);
+  } finally {
+    infiniteRequestInFlight = false;
+    btnInfiniteGenerate.disabled = false;
+    btnInfiniteNext.disabled = false;
+  }
+}
+
+btnInfiniteGenerate.onclick = () => runGeneration({ intoBoard: false });
+btnInfiniteNext.onclick = () => runGeneration({ intoBoard: true });
+btnInfiniteSettings.onclick = () => {
+  infiniteConfigView.classList.remove("hidden");
+  playView.classList.add("hidden");
+};
+
+// ---------- Navigation haut / bas selon le mode courant ----------
+// btn-reset et le bouton "Niveau suivant" de l'écran de victoire sont
+// partagés entre les modes Jouer et Infini (contrairement à prev/next,
+// masqués en Infini avec #nav-static) — leur comportement dépend donc du
+// mode courant plutôt que d'appeler systématiquement loadLevel().
+
+document.getElementById("btn-prev").onclick = () => loadLevel(currentLevelIndex - 1);
+document.getElementById("btn-next").onclick = () => loadLevel(currentLevelIndex + 1);
+
+document.getElementById("btn-next-win").onclick = () => {
+  if (mode === "infinite") runGeneration({ intoBoard: true });
+  else loadLevel(currentLevelIndex + 1);
+};
+
+document.getElementById("btn-reset").onclick = () => {
+  if (mode === "infinite" && lastInfiniteResult) loadInfiniteLevel(lastInfiniteResult);
+  else loadLevel(currentLevelIndex);
+};
+
+// ---------- Bascule Jouer / Infini / Éditeur ----------
+// Trois vues superposées dans la même page, plutôt qu'un routage — c'est un
+// prototype mono-page.
 const playView = document.getElementById("play-view");
 const editorView = document.getElementById("editor-view");
-const btnMode = document.getElementById("btn-mode-toggle");
+const modeSwitchEl = document.getElementById("mode-switch");
 
-let editorActive = false;
-function setMode(editing) {
-  editorActive = editing;
-  playView.classList.toggle("hidden", editing);
-  editorView.classList.toggle("hidden", !editing);
-  btnMode.textContent = editing ? "Jouer" : "Éditeur";
-  if (editing) editorApi.onShow();
+let mode = "play";
+function setMode(next) {
+  mode = next;
+  document.querySelectorAll(".mode-switch-btn").forEach((b) => b.classList.toggle("active", b.dataset.mode === next));
+
+  editorView.classList.toggle("hidden", next !== "editor");
+  if (next === "editor") {
+    playView.classList.add("hidden");
+    infiniteConfigView.classList.add("hidden");
+    editorApi.onShow();
+    return;
+  }
+
+  if (next === "play") {
+    infiniteConfigView.classList.add("hidden");
+    navStaticEl.classList.remove("hidden");
+    navInfiniteEl.classList.add("hidden");
+    playView.classList.remove("hidden");
+    return;
+  }
+
+  // next === "infinite": si une partie est déjà en cours, on la retrouve
+  // telle quelle (ne jamais perdre une génération pour un simple aller-retour
+  // de mode) ; sinon on ouvre directement le panneau de réglages.
+  navStaticEl.classList.add("hidden");
+  if (lastInfiniteResult) {
+    navInfiniteEl.classList.remove("hidden");
+    playView.classList.remove("hidden");
+    infiniteConfigView.classList.add("hidden");
+  } else {
+    navInfiniteEl.classList.add("hidden");
+    playView.classList.add("hidden");
+    infiniteConfigView.classList.remove("hidden");
+  }
 }
-btnMode.onclick = () => setMode(!editorActive);
+modeSwitchEl.querySelectorAll(".mode-switch-btn").forEach((btn) => {
+  btn.onclick = () => setMode(btn.dataset.mode);
+});
 
 const editorApi = initEditor({ levels });
 
-// Raccourci Ctrl+Z / Cmd+Z pour annuler, uniquement en jeu (pas en éditeur:
-// on laisse le Ctrl+Z natif du navigateur fonctionner dans les champs de
-// l'éditeur, ex. le nom du niveau) et jamais quand le focus est déjà sur un
-// champ de saisie (même raison).
+// Raccourci Ctrl+Z / Cmd+Z pour annuler, en jeu comme en Infini (pas en
+// éditeur: on laisse le Ctrl+Z natif du navigateur fonctionner dans les
+// champs de l'éditeur, ex. le nom du niveau) et jamais quand le focus est
+// déjà sur un champ de saisie (même raison).
 window.addEventListener("keydown", (e) => {
   const isUndo = (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z";
-  if (!isUndo || editorActive) return;
+  if (!isUndo || mode === "editor") return;
   const tag = document.activeElement?.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
   e.preventDefault();
