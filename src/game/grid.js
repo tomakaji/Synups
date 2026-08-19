@@ -433,6 +433,19 @@ export class LightUpGrid {
     const links = []; // { from:[r,c], neuron:[r,c], to:[r,c] }, un par saut de chaîne
     const queue = [[r, c]];
     this._lastMirrorFailure = null;
+    // Un duplicata doit respecter la même règle "pas de pose sur une case
+    // déjà illuminée" qu'une lumière normale — mais `target._illuminated`
+    // ci-dessous ne reflète que l'état AVANT ce mouvement (recompute() n'a
+    // pas encore tourné): il faut donc aussi vérifier explicitement contre
+    // les lumières que CE mouvement est en train de poser (l'origine et les
+    // duplicatas déjà validés plus tôt dans ce même parcours), sans quoi un
+    // duplicata plus loin dans une chaîne peut se retrouver, une fois le
+    // mouvement réellement appliqué, sur la même ligne/colonne à vue directe
+    // que l'origine ou qu'un duplicata frère. `placedThisMove` grandit au
+    // fur et à mesure des acceptations ; la relation de vue directe étant
+    // symétrique, vérifier chaque nouvelle case contre tout ce qui est déjà
+    // dedans suffit à couvrir toutes les paires.
+    const placedThisMove = [[r, c]];
 
     while (queue.length) {
       const [pr, pc] = queue.shift();
@@ -455,22 +468,63 @@ export class LightUpGrid {
         if (seen.has(tk)) continue;
 
         const target = this.cellAt(tr, tc);
-        if (!target || target.type !== CellType.EMPTY || this.hasLight(tr, tc) || target._illuminated) {
-          // Case déjà éclairée/occupée, vide (void) ou mur: cette
-          // duplication précise est impossible, donc tout le mouvement
-          // l'est aussi. On garde de quoi animer l'échec (voir render.js:
-          // playMirrorFailure) avant d'abandonner.
+        const seesLightThisMove =
+          !!target &&
+          target.type === CellType.EMPTY &&
+          placedThisMove.some(([lr, lc]) => this._lineOfSight(tr, tc, lr, lc));
+        if (
+          !target ||
+          target.type !== CellType.EMPTY ||
+          this.hasLight(tr, tc) ||
+          target._illuminated ||
+          seesLightThisMove
+        ) {
+          // Case déjà éclairée/occupée, vide (void), mur, ou à vue directe
+          // d'une lumière que ce même mouvement est en train de poser
+          // (l'origine ou un duplicata frère) : cette duplication précise
+          // est impossible, donc tout le mouvement l'est aussi. On garde de
+          // quoi animer l'échec (voir render.js: playMirrorFailure) avant
+          // d'abandonner.
           this._lastMirrorFailure = { neuron: [nr, nc], from: [pr, pc], attempted: [tr, tc] };
           return null;
         }
         seen.add(tk);
         duplicates.push(tk);
+        placedThisMove.push([tr, tc]);
         links.push({ from: [pr, pc], neuron: [nr, nc], to: [tr, tc] });
         queue.push([tr, tc]);
       }
     }
     this._lastMirrorLinks = links;
     return duplicates;
+  }
+
+  /** Vrai si (r1,c1) et (r2,c2) sont sur la même ligne ou colonne avec un
+   * chemin dégagé entre elles (aucune case non-EMPTY strictement entre les
+   * deux) — c'est-à-dire si une lumière posée sur l'une illuminerait
+   * l'autre, exactement selon la même logique que la propagation de
+   * l'illumination en étape 3 de `recompute()` (une case EMPTY ne bloque
+   * jamais la vue, qu'elle porte elle-même une lumière ou non). Utilisé par
+   * `_computeMirrorDuplicates` pour valider un duplicata contre les autres
+   * lumières que le MÊME mouvement est en train de poser. */
+  _lineOfSight(r1, c1, r2, c2) {
+    if (!this.inBounds(r1, c1) || !this.inBounds(r2, c2)) return false;
+    if (r1 === r2 && c1 === c2) return false;
+    if (r1 === r2) {
+      const [lo, hi] = c1 < c2 ? [c1, c2] : [c2, c1];
+      for (let c = lo + 1; c < hi; c++) {
+        if (this.cells[r1][c].type !== CellType.EMPTY) return false;
+      }
+      return true;
+    }
+    if (c1 === c2) {
+      const [lo, hi] = r1 < r2 ? [r1, r2] : [r2, r1];
+      for (let r = lo + 1; r < hi; r++) {
+        if (this.cells[r][c1].type !== CellType.EMPTY) return false;
+      }
+      return true;
+    }
+    return false;
   }
 
   /** Composante connexe de `k` dans le graphe `_mirrorLinks` (k inclus). */
