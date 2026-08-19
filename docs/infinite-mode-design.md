@@ -231,38 +231,62 @@ C'est un ajout court : les fonctions `countSolutions`/`enumerateSolutions`/
 faire partager un seul cœur de recherche paramétré plutôt que trois copier-coller
 — nettoyage indépendant du mode Infini mais qui le rendrait plus simple).
 
-Grille croisée **recalibrée** après un premier retour utilisateur ("le difficile
-actuel joue comme un intermédiaire ; il faut aussi des lieux de doute, pas
-seulement une grille plus grande") et validée empiriquement via
-`generateLevel()` réel (25-30 tirages/palier, `DIFFICULTY_PRESETS` dans
-`generator.js`) :
+**Recalibrage v1 → v2 (génération "réparation ciblée" au lieu de "générer et
+prier")** : un premier retour utilisateur a établi les paliers ci-dessus (v1,
+génération par densité aléatoire + rejet/retry complet en cas d'échec), mais
+un second retour a signalé que le palier 3★ restait lent (jusqu'à ~10s dans
+le pire cas, taux de candidats parfaits ~60-70%). Recherche a suivi
+(générateur Akari dédié github.com/Borroot/akari, issu d'une thèse sur
+Akari) : leur approche ne génère JAMAIS un plateau sparse au hasard en
+espérant qu'il soit unique — elle part d'un plateau DENSE (rapide à
+résoudre, presque toujours unique du premier coup) puis, en cas d'ambiguïté,
+répare CIBLÉE (ajoute une contrainte précisément là où les solutions
+trouvées divergent, au lieu de tout regénérer), et minimise ensuite les
+indices un par un (en ne gardant chaque retrait que s'il préserve l'unicité)
+pour contrôler la difficulté — plutôt que d'espérer qu'une densité aléatoire
+tombe dans la bonne fourchette. `generator.js` implémente maintenant cette
+approche (`repairToUnique` + `stripToTargetTier`) :
 
-| Palier | Taille   | Densité obstacles | Budget poids feature | Budget noeuds solveur | Tier solveur exigé |
-|--------|----------|--------------------|:---:|:---:|:---:|
-| 1★     | 6×6 – 7×7 | ~0.28 – 0.36       | ≤6  | 400k | 1 (jamais de Stage 2, peu de branchement) |
-| 2★     | 7×7 – 8×8 | ~0.20 – 0.28       | ≤8  | 600k | 2 (Stage 2 sans branchement lourd, OU branchement seul sans Stage 2) |
-| 3★     | 8×8 – 9×9 | ~0.14 – 0.20       | ≤12 | 500k | 3 (Stage 2 requis ET branchement > 250 nœuds) |
+| Palier | Taille   | Densité initiale (dense = rapide à unifier) | Budget poids feature | Budget noeuds (minimisation) | Budget noeuds (réparation) |
+|--------|----------|:---:|:---:|:---:|:---:|
+| 1★     | 6×6 – 7×7 | ~0.38 – 0.46 | ≤6  | 200k | 120k |
+| 2★     | 7×7 – 8×8 | ~0.34 – 0.42 | ≤8  | 300k | 120k |
+| 3★     | 8×8 – 9×9 | ~0.32 – 0.40 | ≤12 | 450k | 150k |
 
-Chaque palier correspond à l'ancien palier du dessus moins un cran (l'ancien
-« 3★ » ≈ nouveau 2★), et le nouveau 3★ exige explicitement un « lieu de
-doute » mesuré (`stage2Used === true` dans `analyzeSolve`, voir solver.js) —
-pas seulement de la taille de grille. La colonne « tier solveur exigé » est
-celle qui décide vraiment si un candidat est accepté pour le palier demandé —
-taille/densité ne sont que des leviers de génération, réajustés
-automatiquement (retry) si le tier mesuré ne correspond pas.
+Contrairement à la v1, la densité de départ n'est plus le levier principal
+de difficulté (elle est volontairement DENSE pour tous les paliers, pour que
+la réparation converge vite) — c'est la phase de minimisation qui retire des
+indices jusqu'à ce que `analyzeAndCount` (solver.js, voir §6/analyzeSolve
+plus haut, fusionné avec le comptage de solutions) mesure exactement le
+palier demandé, en s'arrêtant PILE dessus. Comme retirer une contrainte ne
+peut jamais rendre un puzzle plus facile (seulement égal ou plus dur), cette
+minimisation est monotone — beaucoup plus fiable qu'un tirage de densité au
+hasard. Le palier 3★ reste plafonné à 9×9 (pic de latence jusqu'à ~50s
+mesuré sur du 10×10 clairsemé pour une seule analyse solveur, bien au-delà
+de ce qu'un budget de génération peut absorber).
 
-Le palier 3★ est plafonné à 9×9 : un sweep empirique a montré des pics de
-latence jusqu'à ~50s sur des grilles 10×10 clairsemées pour une seule analyse
-de solveur — bien au-delà de ce qu'un budget de génération peut absorber.
-Pour compenser le coût par tentative plus élevé à ce palier (countSolutions +
-analyzeSolve à faible densité), le budget de génération (Phase F) est
-lui-même différencié par palier plutôt qu'uniforme : ~2s/40 tentatives pour
-1★, ~3s/40 pour 2★, jusqu'à ~10s/100 tentatives pour 3★ (le Worker tourne
-hors du thread UI, donc ce délai plus long ne bloque jamais l'interface).
-Avec ce calibrage, le taux de candidats "parfaits" (solution unique ET
-palier mesuré == palier demandé) mesuré est ~100 % en 1★/2★ et ~60-70 % en
-3★ ; le reste retombe honnêtement en 2★ (jamais mal étiqueté, jamais 0
-solution) plutôt que d'échouer.
+Chaque tentative (`tryGenerate`) est bornée par une deadline wall-clock
+PARTAGÉE entre la réparation et la minimisation (pas seulement un budget de
+nœuds par appel solveur individuel) — sans ce garde-fou, un essai malchanceux
+pouvait mesurément dépasser de loin le budget annoncé (jusqu'à ~30s cumulés sur
+plusieurs dizaines d'appels solveur consécutifs, chacun respectant pourtant
+son propre budget de nœuds). Le budget de génération global (Phase F) reste
+différencié par palier, mais nettement réduit par rapport à la v1 puisque la
+v2 converge presque toujours en 1-2 tentatives au lieu de dizaines : ~1.5s/15
+tentatives en 1★, ~2s/15 en 2★, ~5s/25 en 3★ (le Worker — ou pool de
+Workers, voir §8 — tourne hors du thread UI, donc ce délai ne bloque jamais
+l'interface). Validé empiriquement (40-100 tirages/palier via
+`generateLevel()` réel) : taux de candidats parfaits ~100% en 1★/2★ et ~97-99%
+en 3★ (contre ~60-70% en v1), latence 3★ moyenne ~500-750ms, pire cas observé
+~7s (contre ~10-11s, voire un bug à ~30s, en v1) — tout en restant TOUJOURS
+confirmé unique par construction (chaque retrait d'indice n'est commité
+qu'après vérification, jamais un plateau ambigu n'est servi).
+
+Bonus découvert en cours de route : la feature "Cases interdites" ne
+produisait en v1 aucun effet observable (bug latent — les deux branches du
+`? :` produisaient accidentellement le même token "0"). Corrigé dans
+`resolveAndDeriveClues` : décoché, un mur à 0 lumière adjacente devient
+maintenant un mur neutre sans contrainte plutôt qu'une case interdite.
 
 Pour les étoiles **en jeu** (1-3 étoiles selon le nombre de coups du joueur, système
 déjà existant via `starThresholds`/`computeStars`), le générateur doit remplir

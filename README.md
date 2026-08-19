@@ -275,20 +275,28 @@ politique best-effort, plan de phasage).
   interdites + indices numériques — les autres mécaniques (couleur,
   miroir, filtre, prisme, pyra, neurone miroir) sont déjà listées dans
   l'écran mais grisées ("bientôt"), en attente des phases suivantes.
-- La génération tourne dans un Web Worker (`src/game/generator.worker.js`)
-  pour ne jamais geler l'interface : plusieurs tentatives sont essayées en
-  arrière-plan (formes candidates + vérification d'unicité via le
-  solveur), bornées à 40 essais ou 3 secondes.
-- La difficulté n'est PAS devinée depuis la taille/densité de la grille :
-  elle est MESURÉE après coup via `analyzeSolve()` dans `solver.js`, en
-  observant quelles techniques de résolution ont été nécessaires (indice
-  isolé seul, interaction entre deux indices, ou vrai branchement/pari) —
-  même principe que les notations de difficulté Sudoku.
-- Politique best-effort : si aucun candidat "parfait" (solution unique ET
-  difficulté exacte) n'est trouvé dans le budget, le meilleur candidat
-  rencontré est servi quand même, avec un badge "variante multiple" si sa
-  solution n'a pas pu être confirmée unique — jamais un niveau à 0
-  solution, et jamais une attente indéfinie.
+- La génération tourne dans un POOL de Web Workers (`src/game/
+  generator.worker.js` + `infiniteClient.js`) pour ne jamais geler
+  l'interface : plusieurs tentatives sont essayées en parallèle (jusqu'à 4
+  Workers, calé sur le nombre de cœurs dispo), le premier candidat parfait
+  gagnant la course.
+- Chaque tentative part d'un plateau DENSE (rapide à résoudre, presque
+  toujours unique du premier coup), puis: (1) réparation ciblée si
+  ambigu — ajoute une contrainte précisément là où deux solutions trouvées
+  divergent, plutôt que de tout regénérer au hasard ; (2) minimisation —
+  retire des indices un par un tant que l'unicité tient, jusqu'à atteindre
+  le palier de difficulté demandé. Un plateau accepté est donc TOUJOURS
+  confirmé unique par construction (voir `generator.js`, inspiré d'un
+  générateur Akari dédié — github.com/Borroot/akari). La difficulté n'est
+  PAS devinée depuis la taille/densité de la grille : elle est MESURÉE via
+  `analyzeAndCount()` dans `solver.js`, en observant quelles techniques de
+  résolution ont été nécessaires (indice isolé seul, interaction entre deux
+  indices, ou vrai branchement/pari) — même principe que les notations de
+  difficulté Sudoku.
+- Politique best-effort : si aucun candidat n'atteint PILE le palier
+  demandé dans le budget, le meilleur candidat rencontré est servi quand
+  même (toujours à solution unique) — jamais un niveau à 0 ou plusieurs
+  solutions, et jamais une attente indéfinie.
 - Les niveaux générés ne sont jamais écrits dans `levels.js` : ils
   n'existent qu'en mémoire, régénérés à chaque "Nouveau niveau".
 
