@@ -72,22 +72,26 @@
 // couleur n'est pas fixée au level-design mais recalculée à chaque passe.
 //
 // [Expérimental] Neurone miroir (MIRROR_NEURON, token "M"): obstacle fixe
-// du niveau (non posable par le joueur). Dès qu'une lumière l'illumine
-// (elle est sur sa ligne/colonne, avec ligne de vue directe — même
-// logique que l'illumination de base) le neurone la duplique
-// AUTOMATIQUEMENT en symétrie centrale par rapport à lui-même (si la
-// lumière est à distance d du neurone dans une direction, le duplicata
-// apparaît à distance d dans la direction opposée). Si cette case
-// symétrique ne peut pas légalement recevoir de lumière (hors-grille,
-// case non vide, déjà occupée ou déjà illuminée), alors TOUT le
-// mouvement est annulé (toggleLight renvoie false, son d'erreur) —
-// on ne pose jamais la lumière d'origine seule sans son duplicata.
-// Retirer l'une des deux lumières d'une paire ainsi liée retire l'autre
-// avec elle (voir `_mirrorLinks`, `_computeMirrorDuplicates`).
+// du niveau (non posable par le joueur). Dès qu'une lumière se trouve
+// N'IMPORTE OÙ sur sa ligne ou sa colonne — PAS de ligne de vue requise:
+// peu importe la distance et peu importe ce qu'il y a entre les deux (mur,
+// void, un autre obstacle, même une autre lumière) — le neurone la
+// duplique AUTOMATIQUEMENT en symétrie centrale par rapport à lui-même (si
+// la lumière est à distance d du neurone dans une direction, le duplicata
+// apparaît à distance d dans la direction opposée). Seule la case CIBLE du
+// duplicata doit rester légale (dans la grille, case vide, pas déjà
+// occupée, pas déjà illuminée) — voir `_computeMirrorDuplicates`, qui
+// balaie chaque ligne/colonne jusqu'au premier neurone miroir rencontré
+// (ignorant tout le reste en chemin) plutôt que jusqu'au premier obstacle.
+// Si la case cible calculée n'est pas légale, TOUT le mouvement est annulé
+// (toggleLight renvoie false, son d'erreur) — on ne pose jamais la lumière
+// d'origine seule sans son duplicata. Retirer l'une des deux lumières
+// d'une paire ainsi liée retire l'autre avec elle (voir `_mirrorLinks`,
+// `_computeMirrorDuplicates`).
 //
-// Réaction en chaîne: si un duplicata illumine à son tour un AUTRE neurone
-// miroir, celui-ci le duplique également, et ainsi de suite tant qu'un
-// nouveau neurone miroir se trouve sur le chemin d'un duplicata déjà créé
+// Réaction en chaîne: si un duplicata se retrouve à son tour sur la
+// ligne/colonne d'un AUTRE neurone miroir (à n'importe quelle distance,
+// obstacles ou pas), celui-ci le duplique également, et ainsi de suite
 // (voir `_computeMirrorDuplicates`, parcours en largeur avec anti-boucle:
 // un rebond qui retomberait sur une case déjà comptée dans CE mouvement —
 // typiquement l'aller-retour à travers le MÊME neurone miroir — ne relance
@@ -403,12 +407,16 @@ export class LightUpGrid {
 
   /**
    * Cherche, pour une lumière qu'on voudrait poser en (r,c), tous les
-   * neurones miroirs qu'elle illumine directement (premier obstacle
-   * rencontré dans chacune des 4 directions) et calcule leur duplicata
-   * symétrique (même distance, direction opposée, de l'autre côté du
-   * neurone). Retourne la liste des clés "r,c" à dupliquer, ou `null` si
-   * au moins une duplication est impossible — dans ce cas l'appelant doit
-   * annuler tout le mouvement, pas seulement la duplication en échec.
+   * neurones miroirs présents sur sa ligne ou sa colonne (dans chacune des
+   * 4 directions) — SANS exigence de ligne de vue: on balaie jusqu'au
+   * premier neurone miroir rencontré, quels que soient la distance et les
+   * obstacles traversés en chemin (mur, void, une autre case, même une
+   * autre lumière) — et calcule leur duplicata symétrique (même distance,
+   * direction opposée, de l'autre côté du neurone ; seule la case CIBLE du
+   * duplicata doit rester légale, voir en tête de fichier). Retourne la
+   * liste des clés "r,c" à dupliquer, ou `null` si au moins une
+   * duplication est impossible — dans ce cas l'appelant doit annuler tout
+   * le mouvement, pas seulement la duplication en échec.
    */
   _computeMirrorDuplicates(r, c) {
     // Parcours en largeur: chaque nouveau duplicata est lui-même vérifié
@@ -431,34 +439,34 @@ export class LightUpGrid {
       for (const [dr, dc] of DIRECTIONS) {
         let nr = pr + dr;
         let nc = pc + dc;
-        while (this.inBounds(nr, nc)) {
-          const nCell = this.cells[nr][nc];
-          if (nCell.type !== CellType.EMPTY) {
-            if (nCell.type === CellType.MIRROR_NEURON) {
-              const tr = 2 * nr - pr;
-              const tc = 2 * nc - pc;
-              const tk = this.key(tr, tc);
-              if (!seen.has(tk)) {
-                const target = this.cellAt(tr, tc);
-                if (!target || target.type !== CellType.EMPTY || this.hasLight(tr, tc) || target._illuminated) {
-                  // Case déjà éclairée/occupée, vide (void) ou mur: cette
-                  // duplication précise est impossible, donc tout le
-                  // mouvement l'est aussi. On garde de quoi animer l'échec
-                  // (voir render.js: playMirrorFailure) avant d'abandonner.
-                  this._lastMirrorFailure = { neuron: [nr, nc], from: [pr, pc], attempted: [tr, tc] };
-                  return null;
-                }
-                seen.add(tk);
-                duplicates.push(tk);
-                links.push({ from: [pr, pc], neuron: [nr, nc], to: [tr, tc] });
-                queue.push([tr, tc]);
-              }
-            }
-            break; // premier obstacle rencontré dans cette direction
-          }
+        // Ignore tout ce qui n'est pas un neurone miroir en chemin (mur,
+        // void, autre case vide, autre lumière...) — seule sa présence
+        // quelque part sur cette ligne/colonne compte, pas ce qu'il y a
+        // entre les deux.
+        while (this.inBounds(nr, nc) && this.cells[nr][nc].type !== CellType.MIRROR_NEURON) {
           nr += dr;
           nc += dc;
         }
+        if (!this.inBounds(nr, nc)) continue; // aucun neurone miroir dans cette direction
+
+        const tr = 2 * nr - pr;
+        const tc = 2 * nc - pc;
+        const tk = this.key(tr, tc);
+        if (seen.has(tk)) continue;
+
+        const target = this.cellAt(tr, tc);
+        if (!target || target.type !== CellType.EMPTY || this.hasLight(tr, tc) || target._illuminated) {
+          // Case déjà éclairée/occupée, vide (void) ou mur: cette
+          // duplication précise est impossible, donc tout le mouvement
+          // l'est aussi. On garde de quoi animer l'échec (voir render.js:
+          // playMirrorFailure) avant d'abandonner.
+          this._lastMirrorFailure = { neuron: [nr, nc], from: [pr, pc], attempted: [tr, tc] };
+          return null;
+        }
+        seen.add(tk);
+        duplicates.push(tk);
+        links.push({ from: [pr, pc], neuron: [nr, nc], to: [tr, tc] });
+        queue.push([tr, tc]);
       }
     }
     this._lastMirrorLinks = links;

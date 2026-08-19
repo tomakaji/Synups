@@ -289,6 +289,22 @@ export const levels = [
     ],
   },
   {
+    name: "prisme",
+    rows: 9,
+    cols: 5,
+    cells: [
+      "X X . X X",
+      "X b . X X",
+      "X X . X X",
+      "X X . X X",
+      ". . Pr X .",
+      "X . X X .",
+      "X . X X .",
+      "X . X X .",
+      "r w . . y",
+    ],
+  },
+  {
     name: "Neurone mirroir",
     rows: 9,
     cols: 7,
