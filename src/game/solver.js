@@ -766,3 +766,118 @@ export function analyzeSolve(level, maxNodes = 2_000_000) {
     tier,
   };
 }
+
+/**
+ * Fusion de `countSolutions` et `analyzeSolve` en UNE seule recherche —
+ * ajoutée pour le mode Infini (generator.js), qui pour chaque candidat
+ * accepté payait deux arbres de recherche complets sur le même plateau :
+ * un pour prouver l'unicité, un second (relancé de zéro) juste pour
+ * mesurer la difficulté. Sur les plateaux 3★ (peu denses, arbre large),
+ * c'était la moitié du temps de génération perdue en travail redondant.
+ *
+ * Le tour de passe-passe qui rend ça sûr : `stage2Used`/`stage2Count`/
+ * `branchCount` ne doivent refléter QUE le chemin nécessaire pour *trouver*
+ * une solution (pas l'exploration supplémentaire nécessaire pour *prouver*
+ * qu'il n'y en a pas d'autre) — sinon les seuils de tier calibrés contre
+ * l'ancien `analyzeSolve` (qui s'arrêtait à la première solution trouvée)
+ * ne voudraient plus rien dire. Cette recherche explore exactement dans le
+ * même ordre que `countSolutions`/`findSolution` (branche "exclue" toujours
+ * tentée avant "posée", même heuristique de branchement) — donc la séquence
+ * de noeuds visités jusqu'à la PREMIÈRE solution trouvée est rigoureusement
+ * identique à ce que ferait `analyzeSolve` seul. On "gèle" donc les stats
+ * dès cette première solution (on arrête de les incrémenter, sans arrêter
+ * la recherche elle-même) : tout ce qui est visité ENSUITE pour vérifier
+ * l'absence d'une 2e solution ne pollue plus les stats — le résultat est
+ * numériquement identique à l'ancien `countSolutions(...)` +
+ * `analyzeSolve(...)` séparés, pour un seul arbre parcouru au lieu de deux.
+ *
+ * Retourne `{ count, exhausted, solution, moves, stage2Used, stage2Count,
+ * branchCount, tier }` — `solution`/`stage2*`/`branchCount`/`tier` valent
+ * `null` si aucune solution n'a été trouvée du tout (mêmes conditions que
+ * `countSolutions`/`analyzeSolve` pris séparément).
+ */
+export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = {}) {
+  const grid = new LightUpGrid(level);
+  const excluded = new Set();
+  const mirrorReachable = computeMirrorReachable(grid);
+  const stats = { stage2Used: false, stage2Count: 0, branchCount: 0 };
+  let frozen = false; // true dès qu'une 1re solution a été trouvée: stats figées
+  let firstSolution = null;
+  let count = 0;
+  let nodes = 0;
+
+  function currentLights() {
+    return grid.getPlacedLights();
+  }
+
+  function search() {
+    if (count >= cap) return;
+    if (++nodes > maxNodes) throw new NodeBudgetExceeded();
+
+    const prop = propagate(grid, excluded, mirrorReachable, frozen ? undefined : stats);
+    if (!prop.ok) return;
+
+    const undecided = getUndecided(grid, excluded);
+
+    if (undecided.length === 0) {
+      if (grid.isWon(options)) {
+        count++;
+        if (!frozen) {
+          firstSolution = currentLights();
+          frozen = true;
+        }
+      }
+    } else {
+      if (!frozen) stats.branchCount++;
+      const [r, c] = pickBranchCell(grid, undecided, excluded);
+      const key = keyOf(r, c);
+
+      excluded.add(key);
+      search();
+      excluded.delete(key);
+
+      if (count < cap) {
+        const result = grid.toggleLight(r, c);
+        if (result === "placed") {
+          if (!anyClueError(grid)) search();
+          grid.toggleLight(r, c);
+        }
+      }
+    }
+
+    for (let i = prop.litAdded.length - 1; i >= 0; i--) {
+      grid.toggleLight(prop.litAdded[i][0], prop.litAdded[i][1]);
+    }
+    for (const k of prop.excludedAdded) excluded.delete(k);
+  }
+
+  let exhausted;
+  try {
+    search();
+    exhausted = true;
+  } catch (e) {
+    if (e instanceof NodeBudgetExceeded) exhausted = false;
+    else throw e;
+  }
+
+  const tier = firstSolution
+    ? !stats.stage2Used
+      ? stats.branchCount <= 25
+        ? 1
+        : 2
+      : stats.branchCount <= 250
+        ? 2
+        : 3
+    : null;
+
+  return {
+    count,
+    exhausted,
+    solution: firstSolution,
+    moves: firstSolution ? firstSolution.length : null,
+    stage2Used: firstSolution ? stats.stage2Used : null,
+    stage2Count: firstSolution ? stats.stage2Count : null,
+    branchCount: firstSolution ? stats.branchCount : null,
+    tier,
+  };
+}

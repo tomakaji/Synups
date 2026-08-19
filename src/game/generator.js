@@ -17,7 +17,7 @@
 // placement (Phase B, section 4.2 du doc) n'est pas écrite.
 
 import { LightUpGrid, CellType } from "./grid.js";
-import { countSolutions, analyzeSolve } from "./solver.js";
+import { analyzeAndCount } from "./solver.js";
 
 const DIRECTIONS = [
   [0, 1],
@@ -95,6 +95,24 @@ const DIFFICULTY_PRESETS = {
 // jusqu'à ~11s dans le pire cas observé.
 const DEFAULT_MAX_ATTEMPTS_BY_TIER = { 1: 40, 2: 40, 3: 100 };
 const DEFAULT_MAX_TIME_MS_BY_TIER = { 1: 2000, 2: 3000, 3: 10000 };
+
+/** Ramène une difficulté quelconque au palier valide le plus proche (1 par défaut). */
+export function clampTier(difficulty) {
+  return [1, 2, 3].includes(difficulty) ? difficulty : 1;
+}
+
+/**
+ * Budget de génération par défaut pour un palier (voir commentaire
+ * ci-dessus) — exporté pour que `infiniteClient.js` puisse répartir ce même
+ * budget total entre plusieurs Workers en parallèle (voir section 8 du doc)
+ * sans dupliquer ces chiffres.
+ */
+export function getGenerationBudget(tier) {
+  return {
+    maxAttempts: DEFAULT_MAX_ATTEMPTS_BY_TIER[tier],
+    maxTimeMs: DEFAULT_MAX_TIME_MS_BY_TIER[tier],
+  };
+}
 
 function pickInt(rand, [lo, hi]) {
   return lo + Math.floor(rand() * (hi - lo + 1));
@@ -232,7 +250,7 @@ function tryGenerate(seed, tier, enabledFeatureKeys) {
  * "ratait" sa cible dans ~40% des tirages faute de départager entre
  * candidats tier 2 de justesse et tier 2 très proche du seuil tier 3).
  */
-function isBetterCandidate(a, b, requestedTier) {
+export function isBetterCandidate(a, b, requestedTier) {
   if (!a) return true;
   const aUnique = a.solutionCount === 1;
   const bUnique = b.solutionCount === 1;
@@ -270,10 +288,11 @@ export function generateLevel({
   maxAttempts,
   maxTimeMs,
 } = {}) {
-  const tier = [1, 2, 3].includes(difficulty) ? difficulty : 1;
+  const tier = clampTier(difficulty);
   const preset = DIFFICULTY_PRESETS[tier];
-  const timeBudgetMs = maxTimeMs ?? DEFAULT_MAX_TIME_MS_BY_TIER[tier];
-  const attemptsBudget = maxAttempts ?? DEFAULT_MAX_ATTEMPTS_BY_TIER[tier];
+  const defaultBudget = getGenerationBudget(tier);
+  const timeBudgetMs = maxTimeMs ?? defaultBudget.maxTimeMs;
+  const attemptsBudget = maxAttempts ?? defaultBudget.maxAttempts;
 
   const start = Date.now();
   let best = null;
@@ -286,29 +305,27 @@ export function generateLevel({
     if (!raw) continue;
 
     const level = { name: "Infini", rows: raw.rows, cols: raw.cols, cells: raw.cells };
-    const { count, exhausted } = countSolutions(level, 2, preset.nodeBudget);
+    // Un seul arbre de recherche pour prouver l'unicité ET mesurer la
+    // difficulté (au lieu de countSolutions + analyzeSolve séparés, qui
+    // relançaient deux fois la même résolution) — voir solver.js,
+    // analyzeAndCount. Résultat numériquement identique, ~2x plus rapide
+    // sur les candidats acceptés.
+    const { count, exhausted, tier: measuredTierRaw, branchCount: branchCountRaw, solution: analyzedSolution } =
+      analyzeAndCount(level, 2, preset.nodeBudget);
     if (count === 0 && exhausted) continue; // vraiment 0 solution: jamais servi (Phase D)
     if (count === 0 && !exhausted) continue; // inconclusif SANS avoir vu de solution: pas assez fiable pour être un candidat
 
-    // `count` est plafonné à 2 par countSolutions (juste assez pour distinguer
-    // aucune/unique/plusieurs). L'unicité n'est confirmée QUE si le budget de
-    // noeuds n'a PAS été dépassé avant de conclure (`exhausted`) — un
-    // `count === 1` avec `!exhausted` veut juste dire "on n'a pas encore
-    // trouvé de 2e solution", pas "il n'y en a pas" : on le traite comme
+    // `count` est plafonné à 2 (juste assez pour distinguer aucune/unique/
+    // plusieurs). L'unicité n'est confirmée QUE si le budget de noeuds n'a
+    // PAS été dépassé avant de conclure (`exhausted`) — un `count === 1`
+    // avec `!exhausted` veut juste dire "on n'a pas encore trouvé de 2e
+    // solution", pas "il n'y en a pas" : on le traite comme
     // "plusieurs/incertain" par prudence plutôt que de mentir sur l'unicité.
     const confirmedUnique = exhausted && count === 1;
 
-    let measuredTier = null;
-    let branchCount = null;
-    let solution = raw.referenceSolution;
-    if (confirmedUnique) {
-      const analysis = analyzeSolve(level, preset.nodeBudget);
-      if (analysis) {
-        measuredTier = analysis.tier;
-        branchCount = analysis.branchCount;
-        solution = analysis.solution;
-      }
-    }
+    const measuredTier = confirmedUnique ? measuredTierRaw : null;
+    const branchCount = confirmedUnique ? branchCountRaw : null;
+    const solution = confirmedUnique && analyzedSolution ? analyzedSolution : raw.referenceSolution;
 
     const candidate = {
       level,
