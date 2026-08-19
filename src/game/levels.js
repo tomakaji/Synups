@@ -305,6 +305,29 @@ export const levels = [
     ],
   },
   {
+    name: "intro neurone miroir",
+    rows: 2,
+    cols: 5,
+    cells: [
+      "1 X X X 1",
+      ". . M . .",
+    ],
+  },
+  {
+    name: "Neumir",
+    rows: 7,
+    cols: 5,
+    cells: [
+      ". . M . .",
+      "X X X X M",
+      ". . M . .",
+      "M X X X X",
+      ". X X X X",
+      "2 X X X X",
+      ". X X X X",
+    ],
+  },
+  {
     name: "Neurone mirroir",
     rows: 9,
     cols: 7,

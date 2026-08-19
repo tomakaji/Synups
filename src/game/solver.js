@@ -38,6 +38,25 @@
 // effets si elle découvre une contradiction, et le backtracking annule les
 // siens en sortant de chaque noeud — donc à tout moment, l'état de `grid`
 // correspond exactement au chemin actuellement exploré.
+//
+// Neurone miroir [expérimental] et solidité des déductions: `excluded`
+// représente une HYPOTHÈSE DE BRANCHEMENT ("on essaie sans lumière ici"),
+// PAS une certitude absolue — pour la plupart des cases c'est équivalent,
+// mais pas pour une case qui se trouve sur la ligne/colonne d'un neurone
+// miroir: elle peut très bien s'allumer plus tard MALGRÉ cette hypothèse,
+// via un duplicata automatique déclenché par une lumière posée ailleurs
+// (voir grid.js: `_computeMirrorDuplicates`, qui ignore la ligne de vue).
+// Les déductions stage 1/2 qui s'appuient sur "cette case exclue restera
+// forcément noire" pour en déduire que D'AUTRES cases libres du même
+// indice doivent forcément être allumées (ou que le compte est
+// impossible) seraient donc INCORRECTES pour un indice dont au moins un
+// voisin exclu est sur la ligne/colonne d'un neurone miroir — voir
+// `computeMirrorReachable` et son usage (paramètre `mirrorReachable`) dans
+// `propagate`/`pairDeductions`. La direction inverse (compte déjà atteint
+// ⇒ exclure les cases libres restantes) reste sûre dans tous les cas: si
+// l'une d'elles s'allume quand même plus tard via un duplicata, la
+// prochaine passe de `propagate` le détecte immédiatement (adjacentLights
+// recalculé sur l'état réel de la grille) et remonte la contradiction.
 
 import { LightUpGrid, CellType } from "./grid.js";
 
@@ -89,6 +108,57 @@ function freeUndecidedNeighbors(grid, r, c, excluded) {
   return result;
 }
 
+/**
+ * Vrai si (r,c) a au moins un voisin EMPTY non allumé, EXCLU par le
+ * backtracking (hypothèse "pas de lumière ici"), ET atteignable par un
+ * neurone miroir [expérimental] (`mirrorReachable`) — dans ce cas cette
+ * exclusion n'est pas une certitude (voir commentaire en tête de fichier),
+ * donc aucune déduction ne doit s'appuyer sur "ce voisin restera noir".
+ */
+function hasRiskyExcludedNeighbor(grid, r, c, excluded, mirrorReachable) {
+  if (!mirrorReachable || mirrorReachable.size === 0) return false;
+  for (const [dr, dc] of DIRECTIONS) {
+    const nr = r + dr;
+    const nc = c + dc;
+    const cell = grid.cellAt(nr, nc);
+    if (!cell || cell.type !== CellType.EMPTY) continue;
+    if (grid.hasLight(nr, nc)) continue;
+    const k = keyOf(nr, nc);
+    if (excluded.has(k) && mirrorReachable.has(k)) return true;
+  }
+  return false;
+}
+
+/**
+ * Cases EMPTY "atteignables" par au moins un neurone miroir [expérimental]:
+ * situées sur la même ligne OU colonne qu'une case MIRROR_NEURON — donc
+ * susceptibles de recevoir une lumière via duplicata automatique, MÊME si
+ * le backtracking les a provisoirement "exclues" (voir commentaire en tête
+ * de fichier). Calculé une seule fois par résolution (la géométrie de la
+ * grille ne change pas), passé ensuite à `propagate`/`pairDeductions`.
+ */
+function computeMirrorReachable(grid) {
+  const reachable = new Set();
+  const neuronRows = new Set();
+  const neuronCols = new Set();
+  for (let r = 0; r < grid.rows; r++) {
+    for (let c = 0; c < grid.cols; c++) {
+      if (grid.cellAt(r, c).type === CellType.MIRROR_NEURON) {
+        neuronRows.add(r);
+        neuronCols.add(c);
+      }
+    }
+  }
+  if (neuronRows.size === 0 && neuronCols.size === 0) return reachable;
+  for (let r = 0; r < grid.rows; r++) {
+    for (let c = 0; c < grid.cols; c++) {
+      if (grid.cellAt(r, c).type !== CellType.EMPTY) continue;
+      if (neuronRows.has(r) || neuronCols.has(c)) reachable.add(keyOf(r, c));
+    }
+  }
+  return reachable;
+}
+
 /** Toutes les cases EMPTY ni allumées, ni exclues: ce qui reste à décider. */
 function getUndecided(grid, excluded) {
   const result = [];
@@ -137,7 +207,7 @@ function mutuallyVisible(grid, [r1, c1], [r2, c2]) {
  * `{ ok:true, forcedLit, forcedDark }` avec les cases qui prennent la même
  * valeur dans TOUTES les combinaisons valides (donc certaines).
  */
-function pairDeductions(grid, clueA, clueB, excluded) {
+function pairDeductions(grid, clueA, clueB, excluded, mirrorReachable) {
   const [ar, ac, aNumber] = clueA;
   const [br, bc, bNumber] = clueB;
 
@@ -146,7 +216,18 @@ function pairDeductions(grid, clueA, clueB, excluded) {
   const freeA = freeUndecidedNeighbors(grid, ar, ac, excluded);
   const freeB = freeUndecidedNeighbors(grid, br, bc, excluded);
   if (freeA.length === 0 || freeB.length === 0) return null;
-  if (neededA < 0 || neededA > freeA.length || neededB < 0 || neededB > freeB.length) {
+  if (neededA < 0 || neededB < 0) return { ok: false };
+
+  // Voir le commentaire en tête de fichier: si l'un des deux indices a un
+  // voisin exclu par hypothèse de branchement mais atteignable par un
+  // neurone miroir, on ne peut se fier ni à `freeA.length`/`freeB.length`
+  // (une case "exclue" peut encore s'allumer plus tard), ni donc à aucune
+  // déduction qui en dépend — on s'abstient plutôt que de risquer une
+  // fausse certitude.
+  if (hasRiskyExcludedNeighbor(grid, ar, ac, excluded, mirrorReachable)) return null;
+  if (hasRiskyExcludedNeighbor(grid, br, bc, excluded, mirrorReachable)) return null;
+
+  if (neededA > freeA.length || neededB > freeB.length) {
     return { ok: false };
   }
 
@@ -211,7 +292,7 @@ function pairDeductions(grid, clueA, clueB, excluded) {
  * ou `{ ok:true, litAdded, excludedAdded }` sinon — l'appelant doit annuler
  * `litAdded`/`excludedAdded` lui-même une fois le noeud terminé.
  */
-function propagate(grid, excluded) {
+function propagate(grid, excluded, mirrorReachable) {
   const litAdded = [];
   const excludedAdded = [];
 
@@ -253,14 +334,29 @@ function propagate(grid, excluded) {
         const needed = number - litNeighborCount(grid, r, c);
         const free = freeUndecidedNeighbors(grid, r, c, excluded);
 
-        if (needed < 0 || needed > free.length) {
+        if (needed < 0) {
           undo();
           return { ok: false };
         }
+        // Voir le commentaire en tête de fichier: un voisin exclu mais
+        // atteignable par un neurone miroir peut encore s'allumer plus
+        // tard — ni la contradiction "besoin > cases libres" ni la
+        // déduction "besoin === cases libres ⇒ toutes allumées" ne sont
+        // fiables dans ce cas, on s'abstient des deux pour cet indice. La
+        // direction inverse (besoin déjà comblé ⇒ exclure le reste) reste
+        // sûre dans tous les cas (auto-corrigée à la prochaine passe si un
+        // duplicata prouve le contraire), donc jamais gardée.
         if (needed === 0 && free.length > 0) {
           for (const [fr, fc] of free) forceExcluded(fr, fc);
           changed = true;
-        } else if (needed > 0 && needed === free.length) {
+          continue;
+        }
+        if (hasRiskyExcludedNeighbor(grid, r, c, excluded, mirrorReachable)) continue;
+        if (needed > free.length) {
+          undo();
+          return { ok: false };
+        }
+        if (needed > 0 && needed === free.length) {
           for (const [fr, fc] of free) {
             if (!forceLit(fr, fc)) {
               undo();
@@ -283,7 +379,7 @@ function propagate(grid, excluded) {
     }
     outer: for (let i = 0; i < clues.length; i++) {
       for (let j = i + 1; j < clues.length; j++) {
-        const result = pairDeductions(grid, clues[i], clues[j], excluded);
+        const result = pairDeductions(grid, clues[i], clues[j], excluded, mirrorReachable);
         if (!result) continue;
         if (!result.ok) {
           undo();
@@ -358,6 +454,7 @@ function pickBranchCell(grid, undecided, excluded) {
 export function countSolutions(level, cap = 2, maxNodes = 2_000_000, options = {}) {
   const grid = new LightUpGrid(level);
   const excluded = new Set();
+  const mirrorReachable = computeMirrorReachable(grid);
   let count = 0;
   let nodes = 0;
 
@@ -365,7 +462,7 @@ export function countSolutions(level, cap = 2, maxNodes = 2_000_000, options = {
     if (count >= cap) return;
     if (++nodes > maxNodes) throw new NodeBudgetExceeded();
 
-    const prop = propagate(grid, excluded);
+    const prop = propagate(grid, excluded, mirrorReachable);
     if (!prop.ok) return;
 
     const undecided = getUndecided(grid, excluded);
@@ -412,6 +509,7 @@ export function countSolutions(level, cap = 2, maxNodes = 2_000_000, options = {
 export function enumerateSolutions(level, cap = 5, maxNodes = 3_000_000, options = {}) {
   const grid = new LightUpGrid(level);
   const excluded = new Set();
+  const mirrorReachable = computeMirrorReachable(grid);
   const found = [];
   let nodes = 0;
 
@@ -427,7 +525,7 @@ export function enumerateSolutions(level, cap = 5, maxNodes = 3_000_000, options
     if (found.length >= cap) return;
     if (++nodes > maxNodes) throw new NodeBudgetExceeded();
 
-    const prop = propagate(grid, excluded);
+    const prop = propagate(grid, excluded, mirrorReachable);
     if (!prop.ok) return;
 
     const undecided = getUndecided(grid, excluded);
@@ -470,6 +568,7 @@ export function enumerateSolutions(level, cap = 5, maxNodes = 3_000_000, options
 export function findSolution(level, maxNodes = 2_000_000) {
   const grid = new LightUpGrid(level);
   const excluded = new Set();
+  const mirrorReachable = computeMirrorReachable(grid);
   let nodes = 0;
   let solution = null;
 
@@ -484,7 +583,7 @@ export function findSolution(level, maxNodes = 2_000_000) {
   function search() {
     if (++nodes > maxNodes) throw new NodeBudgetExceeded();
 
-    const prop = propagate(grid, excluded);
+    const prop = propagate(grid, excluded, mirrorReachable);
     let found = false;
 
     if (prop.ok) {
