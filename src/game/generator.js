@@ -94,6 +94,13 @@ export const FEATURES = {
  * reste corrélée au palier : plus de cellules = plus de marge pour retirer
  * des indices et atteindre un palier réellement difficile. Plafonné à 9×9
  * (voir plus bas, latence solveur).
+ *
+ * `cornerVoidRange` (variété de silhouette, coins coupés) est resté modeste
+ * ET volontairement réduit par rapport à une première version : maintenant
+ * que `resolveAndDeriveClues`/`stripToTargetTier` transforment les cases
+ * sans contrainte en VOID plutôt qu'en WALL (voir plus bas), la minimisation
+ * ajoute déjà naturellement pas mal de VOID au plateau — cumuler ça avec un
+ * cornerVoid généreux donnait une proportion de cases mortes trop élevée.
  */
 const DIFFICULTY_PRESETS = {
   1: {
@@ -107,7 +114,7 @@ const DIFFICULTY_PRESETS = {
   2: {
     sizeRange: [7, 8],
     initialClueDensity: [0.34, 0.42],
-    cornerVoidRange: [0, 2],
+    cornerVoidRange: [0, 1],
     budget: 8,
     nodeBudget: 300_000,
     repairNodeBudget: 120_000,
@@ -115,7 +122,7 @@ const DIFFICULTY_PRESETS = {
   3: {
     sizeRange: [8, 9],
     initialClueDensity: [0.32, 0.4],
-    cornerVoidRange: [0, 2],
+    cornerVoidRange: [0, 1],
     budget: 12,
     nodeBudget: 450_000,
     repairNodeBudget: 150_000,
@@ -254,12 +261,17 @@ function greedySolve(cells, rows, cols) {
  * FRAÎCHE, puis redérive EN PLACE le nombre de CHAQUE case pleine à partir du
  * compte RÉEL de lumières adjacentes dans cette solution — jamais deviné.
  * `useForbidden` distingue une case dont le compte réel est 0 : case
- * interdite ("0", un vrai indice "0 lumière adjacente") si activé, sinon mur
- * neutre sans aucune contrainte ("W") — c'est ce qui donne enfin un effet
- * réel à la feature "Cases interdites" (dans la v1, les deux chemins
- * produisaient accidentellement le même token, donc la case à cocher n'avait
- * aucun effet observable).  Retourne la solution utilisée, ou `null` si la
- * forme est dégénérée (rien à éclairer).
+ * interdite ("0", un vrai indice "0 lumière adjacente") si activé, sinon
+ * VOID ("X") — c'est ce qui donne enfin un effet réel à la feature "Cases
+ * interdites" (dans la v1, les deux chemins produisaient accidentellement
+ * le même token, donc la case à cocher n'avait aucun effet observable).
+ * VOID plutôt que WALL délibérément: tant qu'aucune mécanique laser n'est
+ * générée (couleur/miroir/filtre/prisme — Phase 2+), WALL et VOID sont
+ * mécaniquement identiques (tous deux opaques à la lumière blanche), donc
+ * autant garder WALL réservé à son futur rôle utile (bloquer/induire en
+ * erreur un laser) plutôt que de l'utiliser ici comme un void déguisé.
+ * Retourne la solution utilisée, ou `null` si la forme est dégénérée (rien
+ * à éclairer).
  */
 function resolveAndDeriveClues(layout, rows, cols, useForbidden) {
   const { grid, lights } = greedySolve(layoutToRows(layout), rows, cols);
@@ -274,7 +286,7 @@ function resolveAndDeriveClues(layout, rows, cols, useForbidden) {
         const nCell = grid.cellAt(r + dr, c + dc);
         if (nCell && nCell.type === CellType.EMPTY && grid.hasLight(r + dr, c + dc)) count++;
       }
-      layout[r][c] = count === 0 ? (useForbidden ? "0" : "W") : String(count);
+      layout[r][c] = count === 0 ? (useForbidden ? "0" : "X") : String(count);
     }
   }
   return lights;
@@ -342,7 +354,8 @@ function repairToUnique(layout, rows, cols, useForbidden, rand, repairNodeBudget
 
 /**
  * Phase de minimisation (voir commentaire d'en-tête) : retire des indices un
- * par un (ordre aléatoire), ne gardant chaque retrait QUE s'il préserve
+ * par un (ordre aléatoire, chaque retrait devient un VOID neutre — voir
+ * resolveAndDeriveClues), ne gardant chaque retrait QUE s'il préserve
  * l'unicité ET que le palier mesuré ne dépasse pas le palier demandé.
  * S'arrête dès que le palier demandé est atteint OU que `deadline` (même
  * timestamp partagé qu'ailleurs, voir `repairToUnique`) est dépassée — sans
@@ -372,7 +385,7 @@ function stripToTargetTier(layout, rows, cols, targetTier, nodeBudget, rand, dea
   for (const [r, c] of candidates) {
     if (Date.now() > deadline) break; // budget de temps global dépassé: on sert le meilleur trouvé jusqu'ici
     const prevToken = layout[r][c];
-    layout[r][c] = "W"; // retrait tentatif: mur neutre, sans contrainte
+    layout[r][c] = "X"; // retrait tentatif: VOID (voir resolveAndDeriveClues, WALL réservé aux lasers)
     const level = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
     const result = analyzeAndCount(level, 2, nodeBudget);
     const stillUnique = result.exhausted && result.count === 1;
