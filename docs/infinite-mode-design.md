@@ -247,11 +247,11 @@ pour contrôler la difficulté — plutôt que d'espérer qu'une densité aléat
 tombe dans la bonne fourchette. `generator.js` implémente maintenant cette
 approche (`repairToUnique` + `stripToTargetTier`) :
 
-| Palier | Taille   | Densité initiale (dense = rapide à unifier) | Budget poids feature | Budget noeuds (minimisation) | Budget noeuds (réparation) |
-|--------|----------|:---:|:---:|:---:|:---:|
-| 1★     | 6×6 – 7×7 | ~0.38 – 0.46 | ≤6  | 200k | 120k |
-| 2★     | 7×7 – 8×8 | ~0.34 – 0.42 | ≤8  | 300k | 120k |
-| 3★     | 8×8 – 9×9 | ~0.32 – 0.40 | ≤12 | 450k | 150k |
+| Étoile | Taille   | Densité initiale (dense = rapide à unifier) | Budget poids feature | Budget noeuds (minimisation) | Budget noeuds (réparation) | Palier solveur visé |
+|--------|----------|:---:|:---:|:---:|:---:|:---:|
+| 1★     | 7×7 – 8×8 | ~0.34 – 0.42 | ≤8  | 300k | 120k | 2 |
+| 2★     | 8×8 – 9×9 | ~0.32 – 0.40 | ≤12 | 450k | 150k | 3 |
+| 3★     | 8×8 – 9×9 | ~0.32 – 0.40 | ≤12 | 700k | 150k | 4 (nouveau) |
 
 Contrairement à la v1, la densité de départ n'est plus le levier principal
 de difficulté (elle est volontairement DENSE pour tous les paliers, pour que
@@ -263,7 +263,29 @@ peut jamais rendre un puzzle plus facile (seulement égal ou plus dur), cette
 minimisation est monotone — beaucoup plus fiable qu'un tirage de densité au
 hasard. Le palier 3★ reste plafonné à 9×9 (pic de latence jusqu'à ~50s
 mesuré sur du 10×10 clairsemé pour une seule analyse solveur, bien au-delà
-de ce qu'un budget de génération peut absorber).
+de ce qu'un budget de génération peut absorber) — un sweep empirique a
+montré que la difficulté supplémentaire du nouveau palier solveur 4
+s'obtient très bien par une minimisation plus poussée sur la même taille,
+pas besoin d'agrandir encore la grille.
+
+**Décalage des étoiles (retour utilisateur ultérieur)** : un troisième retour a
+demandé de décaler les paliers plutôt que de garder la correspondance 1:1
+étoile↔palier solveur : « l'intermédiaire actuel devient le facile, le
+difficile actuel devient l'intermédiaire, et on ajoute un difficile encore
+plus dur ». `solver.js` définit maintenant 4 paliers solveur (au lieu de 3,
+via `computeTier(stage2Used, branchCount)`, seuils 25/250/400) et
+`generator.js` mappe `SOLVER_TIER_FOR_STARS = {1: 2, 2: 3, 3: 4}` — voir la
+colonne « Palier solveur visé » ci-dessus. Le nouveau seuil 400 (palier
+solveur 3→4) a été calibré empiriquement : sur des plateaux 8×8-9×9 minimisés
+jusqu'à leur limite naturelle (pas d'arrêt anticipé), le `branchCount` médian
+observé est ~450-456, p75 ~1330-1450, p90 ~5700-6300 — largement au-dessus de
+l'ancien seuil 250, donc une marge confortable pour un palier réellement plus
+dur. Le taux de réussite par tentative isolée au palier solveur 4 est
+mesurément plus bas (~30%, limité par la topologie du plateau tiré plutôt que
+par le temps disponible) — compensé par un budget de tentatives/temps 3★
+nettement plus généreux (40 tentatives / 9s au lieu de 25/5s), validé
+empiriquement : ~96% de candidats parfaits sur un échantillon de 25 tirages,
+latence moyenne ~1.5s, pire cas ~9s (dans le budget).
 
 Chaque tentative (`tryGenerate`) est bornée par une deadline wall-clock
 PARTAGÉE entre la réparation et la minimisation (pas seulement un budget de

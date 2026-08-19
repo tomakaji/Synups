@@ -413,6 +413,32 @@ function propagate(grid, excluded, mirrorReachable, stats) {
   return { ok: true, litAdded, excludedAdded };
 }
 
+/**
+ * Palier de difficulté RÉEL (1 à 4) déduit des statistiques de résolution —
+ * partagé par `analyzeSolve`/`analyzeAndCount`. Le palier 2+ exige une
+ * déduction Stage 2 (voir commentaire en tête de fichier) : sans ça, aucune
+ * grille ne dépasse le palier 1, même avec un `branchCount` élevé (grande
+ * zone ouverte, mais aucun "lieu de doute" réel). Les seuils sont calibrés
+ * empiriquement (voir docs/infinite-mode-design.md §10) et n'ont pas de
+ * signification physique — seule leur ORDRE relatif compte.
+ *
+ * Le palier 4 a été ajouté après un second retour utilisateur : le mode
+ * Infini v2 (génération par réparation + minimisation, voir generator.js)
+ * convergeant de façon fiable, l'ancien palier 3 (`branchCount > 250`)
+ * s'atteignait presque toujours en 1-2 tentatives — trop facilement pour
+ * rester le palier "3 étoiles". Un sweep empirique sur des plateaux 8×9/9×9
+ * en poussant la minimisation au maximum (au lieu de s'arrêter au premier
+ * seuil atteint) a montré une distribution de `branchCount` bien plus large
+ * que prévu (médiane ~450, jusqu'à plusieurs milliers) — largement de quoi
+ * définir un palier nettement plus dur au-dessus de l'ancien palier 3.
+ */
+function computeTier(stage2Used, branchCount) {
+  if (!stage2Used) return branchCount <= 25 ? 1 : 2;
+  if (branchCount <= 250) return 2;
+  if (branchCount <= 400) return 3;
+  return 4;
+}
+
 function binom(n, k) {
   if (k < 0 || k > n) return Infinity;
   let r = 1;
@@ -667,18 +693,11 @@ export function findSolution(level, maxNodes = 2_000_000) {
  *   recherche exploré, pas seulement le chemin gagnant — un niveau mal
  *   contraint qui force beaucoup de tâtonnement, même sur des impasses,
  *   n'est pas un niveau "évident").
- * - `tier`: la taille de grille seule ne fait PAS la difficulté — un grand
- *   plateau avec une zone ouverte non couverte par des indices peut avoir un
- *   `branchCount` élevé sans jamais nécessiter de déduction Stage 2 (aucun
- *   "lieu de doute", juste du tâtonnement dans du vide). Le tier reflète donc
- *   d'abord `stage2Used` :
- *     - tier 1 : jamais de Stage 2, et peu de branchement (`branchCount<=25`).
- *     - tier 2 : soit du branchement sans Stage 2 (grille ouverte mais pas
- *       vraiment "piégeuse"), soit du Stage 2 avec branchement modéré
- *       (`<=250`).
- *     - tier 3 : Stage 2 nécessaire ET branchement important (`>250`) — la
- *       résolution demande de repérer des lieux de doute ET de creuser
- *       dedans, pas juste un enchaînement de déductions lisibles.
+ * - `tier`: voir `computeTier` — la taille de grille seule ne fait PAS la
+ *   difficulté, c'est `stage2Used`/`branchCount` qui décident (4 paliers:
+ *   1 = Stage 1 seul, 2 = Stage 2 modéré, 3 = Stage 2 + branchement >250,
+ *   4 = Stage 2 + branchement >400 — voir generator.js pour le mapping
+ *   palier solveur ↔ étoiles affichées, ils ne sont PAS égaux 1:1).
  *   Seuils calibrés empiriquement sur des plateaux 5x5 à 9x9 (voir
  *   docs/infinite-mode-design.md, section 10) — pas des lois figées, à
  *   réajuster à l'usage.
@@ -747,16 +766,7 @@ export function analyzeSolve(level, maxNodes = 2_000_000) {
   }
   if (!solved) return null;
 
-  // Le tier 2 et le tier 3 exigent tous les deux qu'au moins une déduction
-  // Stage 2 (paire d'indices) ait été NÉCESSAIRE pendant la résolution — pas
-  // seulement une grille de grande taille. Un niveau qui se résout entièrement
-  // par Stage 1 (chaîne de déductions "évidentes", case par case) reste tier 1
-  // même s'il génère un branchCount élevé (grande zone non couverte par des
-  // indices, mais sans "lieu de doute" réel : aucune paire d'indices n'a dû
-  // être croisée pour progresser). Voir docs/infinite-mode-design.md §10.
-  const tier = !stats.stage2Used
-    ? (stats.branchCount <= 25 ? 1 : 2)
-    : (stats.branchCount <= 250 ? 2 : 3);
+  const tier = computeTier(stats.stage2Used, stats.branchCount);
   return {
     solution,
     moves: solution.length,
@@ -860,15 +870,7 @@ export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = 
     else throw e;
   }
 
-  const tier = firstSolution
-    ? !stats.stage2Used
-      ? stats.branchCount <= 25
-        ? 1
-        : 2
-      : stats.branchCount <= 250
-        ? 2
-        : 3
-    : null;
+  const tier = firstSolution ? computeTier(stats.stage2Used, stats.branchCount) : null;
 
   return {
     count,

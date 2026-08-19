@@ -86,32 +86,42 @@ export const FEATURES = {
 };
 
 /**
- * Plages de génération par palier. Contrairement à la v1, la densité de
- * départ n'est plus le levier principal de difficulté (`stripToTargetTier`
+ * Palier SOLVEUR (voir `computeTier` dans solver.js, 1 à 4) visé par chaque
+ * étoile affichée à l'écran (1 à 3). PAS une correspondance 1:1: un second
+ * retour utilisateur a demandé un nouveau décalage ("l'intermédiaire actuel
+ * devient le facile, le difficile actuel devient l'intermédiaire, et on
+ * ajoute un difficile encore plus dur") — donc 1★ vise maintenant l'ancien
+ * palier solveur "intermédiaire" (2), 2★ vise l'ancien "difficile" (3), et
+ * 3★ vise un TOUT NOUVEAU palier solveur (4), plus dur que tout ce qui
+ * existait avant. Le palier solveur 1 (Stage 1 seul, quasi trivial) n'est
+ * plus jamais visé par aucune étoile — voir `DIFFICULTY_PRESETS` ci-dessous,
+ * dont les clés 1/2/3 réfèrent aux ÉTOILES, pas aux paliers solveur.
+ */
+const SOLVER_TIER_FOR_STARS = { 1: 2, 2: 3, 3: 4 };
+
+/**
+ * Plages de génération par étoile (clés = étoiles affichées, PAS paliers
+ * solveur — voir `SOLVER_TIER_FOR_STARS`). Contrairement à la v1, la densité
+ * de départ n'est plus le levier principal de difficulté (`stripToTargetTier`
  * s'en charge) — elle est choisie DENSE pour tous les paliers, juste assez
  * pour que la réparation converge vite (plateau dense = rapide à résoudre,
  * cf. lien densité/facilité déjà mesuré empiriquement). La taille de grille
- * reste corrélée au palier : plus de cellules = plus de marge pour retirer
+ * reste corrélée à l'étoile : plus de cellules = plus de marge pour retirer
  * des indices et atteindre un palier réellement difficile. Plafonné à 9×9
- * (voir plus bas, latence solveur).
+ * (voir plus bas, latence solveur) — y compris pour 3★/palier solveur 4 : un
+ * sweep empirique a montré que la difficulté supplémentaire s'obtient très
+ * bien par une minimisation plus poussée sur la MÊME taille, pas besoin
+ * d'agrandir encore la grille (et donc pas besoin de rouvrir le risque de
+ * latence ~50s mesuré sur du 10×10 clairsemé).
  *
- * `cornerVoidRange` (variété de silhouette, coins coupés) est resté modeste
- * ET volontairement réduit par rapport à une première version : maintenant
- * que `resolveAndDeriveClues`/`stripToTargetTier` transforment les cases
- * sans contrainte en VOID plutôt qu'en WALL (voir plus bas), la minimisation
+ * `cornerVoidRange` (variété de silhouette, coins coupés) est resté modeste :
+ * `resolveAndDeriveClues`/`stripToTargetTier` transforment les cases sans
+ * contrainte en VOID plutôt qu'en WALL (voir plus bas), donc la minimisation
  * ajoute déjà naturellement pas mal de VOID au plateau — cumuler ça avec un
- * cornerVoid généreux donnait une proportion de cases mortes trop élevée.
+ * cornerVoid généreux donnerait une proportion de cases mortes trop élevée.
  */
 const DIFFICULTY_PRESETS = {
   1: {
-    sizeRange: [6, 7],
-    initialClueDensity: [0.38, 0.46],
-    cornerVoidRange: [0, 1],
-    budget: 6,
-    nodeBudget: 200_000,
-    repairNodeBudget: 120_000,
-  },
-  2: {
     sizeRange: [7, 8],
     initialClueDensity: [0.34, 0.42],
     cornerVoidRange: [0, 1],
@@ -119,12 +129,20 @@ const DIFFICULTY_PRESETS = {
     nodeBudget: 300_000,
     repairNodeBudget: 120_000,
   },
-  3: {
+  2: {
     sizeRange: [8, 9],
     initialClueDensity: [0.32, 0.4],
     cornerVoidRange: [0, 1],
     budget: 12,
     nodeBudget: 450_000,
+    repairNodeBudget: 150_000,
+  },
+  3: {
+    sizeRange: [8, 9],
+    initialClueDensity: [0.32, 0.4],
+    cornerVoidRange: [0, 1],
+    budget: 12,
+    nodeBudget: 700_000,
     repairNodeBudget: 150_000,
   },
 };
@@ -136,16 +154,21 @@ const DIFFICULTY_PRESETS = {
 // sans risquer de s'éterniser sur une forme fondamentalement dégénérée.
 const MAX_REPAIR_ITERATIONS = 15;
 
-// Budget global d'une génération (Phase F du doc) : le premier des deux
-// atteint arrête la boucle et on sert le meilleur candidat rencontré. Cette
-// boucle est maintenant un FILET DE SÉCURITÉ (réparation qui ne converge
-// pas, forme dégénérée) plutôt que le mécanisme principal de recherche d'un
-// candidat correct — la v1 avait besoin de générer/rejeter des dizaines de
-// plateaux sparse au hasard pour le palier 3 ; la v2 converge normalement en
-// un seul essai (repairToUnique + stripToTargetTier), donc ces budgets
-// peuvent rester modestes. À réajuster une fois mesuré en usage réel.
-const DEFAULT_MAX_ATTEMPTS_BY_TIER = { 1: 15, 2: 15, 3: 25 };
-const DEFAULT_MAX_TIME_MS_BY_TIER = { 1: 1500, 2: 2000, 3: 5000 };
+// Budget global d'une génération (Phase F du doc), CLÉS = ÉTOILES affichées
+// (voir SOLVER_TIER_FOR_STARS) : le premier des deux atteint arrête la
+// boucle et on sert le meilleur candidat rencontré. Cette boucle est un
+// FILET DE SÉCURITÉ (réparation qui ne converge pas, forme dégénérée, ou —
+// pour 3★/palier solveur 4 — un plateau dont le "plafond" naturel de
+// difficulté est trop bas pour cette forme précise, voir stripToTargetTier)
+// plutôt que le mécanisme principal de recherche d'un candidat correct.
+// 3★ reçoit un budget nettement plus généreux que les autres : atteindre le
+// palier solveur 4 demande souvent d'épuiser presque tous les indices
+// retirables d'un plateau, ce qui n'est pas toujours possible sur un seul
+// essai (mesuré empiriquement : ~30% de réussite par essai isolé) — c'est
+// la boucle de tentatives multiples (+ le pool de Workers, voir
+// infiniteClient.js) qui compense.
+const DEFAULT_MAX_ATTEMPTS_BY_TIER = { 1: 15, 2: 20, 3: 40 };
+const DEFAULT_MAX_TIME_MS_BY_TIER = { 1: 1500, 2: 2500, 3: 9000 };
 
 /** Ramène une difficulté quelconque au palier valide le plus proche (1 par défaut). */
 export function clampTier(difficulty) {
@@ -163,6 +186,18 @@ export function getGenerationBudget(tier) {
     maxAttempts: DEFAULT_MAX_ATTEMPTS_BY_TIER[tier],
     maxTimeMs: DEFAULT_MAX_TIME_MS_BY_TIER[tier],
   };
+}
+
+/** Convertit un palier SOLVEUR (1-4, voir solver.js/computeTier) en étoiles
+ * affichées (1-3) — inverse de `SOLVER_TIER_FOR_STARS`. Le palier solveur 1
+ * (quasi trivial) n'est visé par aucune étoile mais peut apparaître comme
+ * résultat best-effort (réparation qui n'a pas eu la marge de durcir le
+ * plateau) — dans ce cas il s'affiche comme 1★, au même titre qu'un palier
+ * solveur 2 (la cible réelle du 1★) : les deux sont "aussi facile que
+ * possible d'afficher". */
+function starsForSolverTier(solverTier) {
+  if (solverTier == null) return null;
+  return Math.max(1, solverTier - 1);
 }
 
 function pickInt(rand, [lo, hi]) {
@@ -402,16 +437,19 @@ function stripToTargetTier(layout, rows, cols, targetTier, nodeBudget, rand, dea
 
 /**
  * Une tentative de génération complète : forme dense + réparation ciblée
- * vers l'unicité + minimisation vers le palier demandé (voir commentaire
- * d'en-tête). `deadline` (timestamp absolu) borne le temps total de CET
- * essai, y compris à travers plusieurs appels solveur internes (voir
- * `repairToUnique`/`stripToTargetTier`). Retourne `null` si la forme était
- * dégénérée ou si la réparation n'a pas convergé — `generateLevel` retente
- * alors avec un nouveau seed. Un résultat non-null est TOUJOURS confirmé
- * unique (chaque étape ne commite un changement qu'après l'avoir vérifié).
+ * vers l'unicité + minimisation vers le palier SOLVEUR correspondant à
+ * `stars` (1 à 3, voir `SOLVER_TIER_FOR_STARS`). `deadline` (timestamp
+ * absolu) borne le temps total de CET essai, y compris à travers plusieurs
+ * appels solveur internes (voir `repairToUnique`/`stripToTargetTier`).
+ * Retourne `null` si la forme était dégénérée ou si la réparation n'a pas
+ * convergé — `generateLevel` retente alors avec un nouveau seed. Un
+ * résultat non-null est TOUJOURS confirmé unique (chaque étape ne commite
+ * un changement qu'après l'avoir vérifié). `analysis.tier` est un palier
+ * SOLVEUR (1-4), pas encore converti en étoiles — voir `generateLevel`.
  */
-function tryGenerate(seed, tier, enabledFeatureKeys, deadline) {
-  const preset = DIFFICULTY_PRESETS[tier];
+function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
+  const preset = DIFFICULTY_PRESETS[stars];
+  const solverTarget = SOLVER_TIER_FOR_STARS[stars];
   const rand = seededRandom(seed);
 
   const rows = pickInt(rand, preset.sizeRange);
@@ -425,7 +463,7 @@ function tryGenerate(seed, tier, enabledFeatureKeys, deadline) {
   const layout = buildInitialLayout({ rows, cols, clueDensity, cornerVoid, rand });
   if (!repairToUnique(layout, rows, cols, useForbidden, rand, preset.repairNodeBudget, deadline)) return null;
 
-  const analysis = stripToTargetTier(layout, rows, cols, tier, preset.nodeBudget, rand, deadline);
+  const analysis = stripToTargetTier(layout, rows, cols, solverTarget, preset.nodeBudget, rand, deadline);
   if (!analysis) return null;
 
   return { rows, cols, cells: layoutToRows(layout), analysis, featureSubset };
@@ -473,8 +511,9 @@ export function generateLevel({
   maxAttempts,
   maxTimeMs,
 } = {}) {
-  const tier = clampTier(difficulty);
-  const defaultBudget = getGenerationBudget(tier);
+  const stars = clampTier(difficulty);
+  const solverTarget = SOLVER_TIER_FOR_STARS[stars]; // voir SOLVER_TIER_FOR_STARS: 1★→2, 2★→3, 3★→4
+  const defaultBudget = getGenerationBudget(stars);
   const timeBudgetMs = maxTimeMs ?? defaultBudget.maxTimeMs;
   const attemptsBudget = maxAttempts ?? defaultBudget.maxAttempts;
 
@@ -483,10 +522,14 @@ export function generateLevel({
   let best = null;
   let attempts = 0;
 
+  // Toute la boucle ci-dessous travaille en palier SOLVEUR (1-4, voir
+  // solver.js/computeTier), pas en étoiles — la conversion vers les étoiles
+  // affichées (1-3) n'a lieu qu'à la toute fin, sur `best` uniquement (voir
+  // `starsForSolverTier`).
   while (attempts < attemptsBudget && Date.now() - start < timeBudgetMs) {
     attempts++;
     const candidateSeed = Math.floor(seed) + attempts * 7919; // grand premier: étale les seeds
-    const raw = tryGenerate(candidateSeed, tier, enabledFeatureKeys, deadline);
+    const raw = tryGenerate(candidateSeed, stars, enabledFeatureKeys, deadline);
     if (!raw) continue; // forme dégénérée ou réparation non convergée: on retente ailleurs
 
     const level = { name: "Infini", rows: raw.rows, cols: raw.cols, cells: raw.cells };
@@ -497,22 +540,24 @@ export function generateLevel({
       solution,
       solutionCount: 1, // garanti unique par construction (repair+strip ne commitent jamais un état ambigu)
       confirmedUnique: true,
-      measuredTier,
+      measuredTier, // palier SOLVEUR (1-4) à ce stade
       branchCount,
-      requestedTier: tier,
+      requestedTier: solverTarget,
       featureSubset: raw.featureSubset,
       attempts,
     };
 
-    if (measuredTier === tier) {
+    if (measuredTier === solverTarget) {
       best = candidate;
       break; // candidat parfait: inutile de continuer
     }
-    if (isBetterCandidate(best, candidate, tier)) best = candidate;
+    if (isBetterCandidate(best, candidate, solverTarget)) best = candidate;
   }
 
   if (!best) return null; // n'arrive que si même le fallback échoue à générer une forme jouable
 
+  best.measuredTier = starsForSolverTier(best.measuredTier); // palier solveur -> étoiles affichées
+  best.requestedTier = stars;
   best.level.starThresholds = [best.solution.length, Math.ceil(best.solution.length * 1.5)];
   best.attemptsUsed = attempts;
   best.timeMs = Date.now() - start;
