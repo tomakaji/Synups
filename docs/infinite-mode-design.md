@@ -310,6 +310,67 @@ produisait en v1 aucun effet observable (bug latent — les deux branches du
 `resolveAndDeriveClues` : décoché, un mur à 0 lumière adjacente devient
 maintenant un mur neutre sans contrainte plutôt qu'une case interdite.
 
+### Phase 2 — Couleur (charges colorées + cibles)
+
+Contrairement au plan v1 (section 4, Phase B/C : couleur posée AVANT résolution,
+dérivée après coup), la couleur en v2 est ajoutée en tout dernier, une fois le
+plateau déjà réparé + minimisé au palier cible en lumière blanche — parce que
+`solver.js` n'a besoin d'AUCUNE modification pour rester correct avec la
+couleur : le branchement/`propagate` ne raisonnent que sur les indices
+numériques, la couleur n'intervient qu'à la toute fin via `isWon`/
+`ignoreColor` (déjà threadé partout depuis la vérification d'unicité colorée
+manuelle des niveaux 21-25). `repairToUnique`/`stripToTargetTier` restent donc
+strictement inchangés et gardent exactement la même perf.
+
+**Décision de design (retour utilisateur explicite)** : la couleur ne doit
+JAMAIS être purement décorative. Quand un niveau généré utilise la couleur,
+son usage doit être **nécessaire** à la résolution — le niveau doit avoir
+plusieurs solutions en lumière blanche seule mais une seule une fois la
+couleur prise en compte (pas chaque charge colorée individuellement, mais
+l'usage global de la couleur sur ce niveau). C'est le même principe que les
+niveaux faits main "Éclat"/"Mixes"/"Sleep" (`levels.js`), pas une simple
+décoration ajoutée à un niveau déjà unique en blanc.
+
+Pipeline (`tryColorizeForNecessity` dans `generator.js`), une fois le plateau
+blanc déjà unique/minimisé :
+
+1. **Réintroduire une ambiguïté contrôlée** : retirer UNE charge numérique
+   parmi les survivantes (candidate au hasard, jusqu'à
+   `MAX_COLOR_REMOVAL_CANDIDATES`), vérifier via `enumerateSolutions(cap=3,
+   ignoreColor:true)` — on ne garde que les retraits qui produisent EXACTEMENT
+   2-3 solutions blanches (pas "beaucoup", pour rester rapide à discriminer).
+   La solution de référence déjà validée par la minimisation est toujours
+   parmi elles (retirer une contrainte ne peut jamais l'invalider).
+2. **Colorier et discriminer** (`tryDiscriminatingColoring`) : colorier un
+   sous-ensemble aléatoire des charges restantes (tailles 1, 2, 3, puis toutes
+   — jusqu'à `MAX_COLOR_ATTEMPTS_PER_SIZE` essais chacune), simuler la grille
+   séparément avec CHAQUE solution candidate (la gagnante + les alternatives),
+   et chercher pour CHAQUE alternative au moins une case vide dont la teinte
+   réelle diffère de celle de la solution gagnante sous ce coloriage précis —
+   cette case devient une case-cible, sa couleur lue directement dans la
+   simulation gagnante (jamais devinée, même principe que la dérivation des
+   indices numériques). Un ensemble glouton minimise le nombre de cibles
+   ajoutées (une case qui discrimine plusieurs alternatives à la fois compte
+   pour toutes).
+3. **Vérification finale** (une seule fois, pas cher) : `count===1` avec
+   couleur ET `count>=2` sans — sinon la couleur est abandonnée pour cette
+   tentative plutôt que de risquer un niveau mal formé.
+
+Si aucune combinaison retrait+coloriage n'aboutit dans le budget, le plateau
+non colorié (déjà confirmé unique) est servi tel quel — la couleur reste
+**probabiliste**, jamais forcée, cohérent avec la philosophie déjà en place
+("tout coché ne veut pas dire présent à chaque génération", voir section 5).
+`featureSubset` reflète fidèlement le résultat réel (retire "color" si
+l'usage n'a pas pu être rendu nécessaire), pas ce qui a simplement été tenté.
+
+Validé empiriquement (30 tirages/palier, `enabledFeatureKeys: ["forbidden",
+"color"]`) : la couleur est effectivement utilisée dans ~35-60% des niveaux
+générés selon le palier, et dans TOUS les cas observés (0 échec sur ~40
+niveaux coloriés), la propriété "nécessaire" est vérifiée (ambigu en blanc,
+unique en couleur). Latence inchangée par rapport à la Phase 1 (le coloriage
+lui-même ne fait que des constructions de grille + `recompute()`, jamais de
+recherche — seul le coût déjà existant de `stripToTargetTier` domine).
+
 Pour les étoiles **en jeu** (1-3 étoiles selon le nombre de coups du joueur, système
 déjà existant via `starThresholds`/`computeStars`), le générateur doit remplir
 explicitement `starThresholds: [solution.length, Math.ceil(solution.length * 1.5)]`

@@ -1,4 +1,4 @@
-// Mode Infini [Phase 1 / MVP] — générateur de niveau à la volée.
+// Mode Infini [Phase 1+2] — générateur de niveau à la volée.
 //
 // Voir docs/infinite-mode-design.md pour la conception complète. Ce fichier
 // n'a AUCUNE dépendance au DOM : il tourne aussi bien dans un Web Worker
@@ -9,12 +9,13 @@
 // via `LightUpGrid`/`solver.js` — le même moteur que n'importe quel niveau
 // de `levels.js`.
 //
-// Portée de cette Phase 1 : formes (murs/void) + cases interdites (FORBIDDEN)
-// + indices numériques (CLUE) dérivés d'une solution de référence. Pas de
-// couleur ni de mécaniques spéciales (miroir/filtre/prisme/pyra/neurone
-// miroir) — voir FEATURES ci-dessous, elles sont déjà répertoriées (poids,
-// dépendances) mais marquées `implemented:false` tant que leur logique de
-// placement (Phase B, section 4.2 du doc) n'est pas écrite.
+// Portée : Phase 1 (formes/murs/void + cases interdites FORBIDDEN + indices
+// numériques CLUE dérivés d'une solution de référence) + Phase 2 (charges
+// colorées + cibles, voir plus bas). Pas encore de mécaniques spéciales
+// (miroir/filtre/prisme/pyra/neurone miroir) — voir FEATURES ci-dessous,
+// déjà répertoriées (poids, dépendances) mais marquées `implemented:false`
+// tant que leur logique de placement (Phase B, section 4.2 du doc) n'est pas
+// écrite.
 //
 // -- Stratégie de génération (v2, "réparation ciblée" au lieu de "générer et
 // prier") --------------------------------------------------------------
@@ -52,6 +53,52 @@
 import { LightUpGrid, CellType } from "./grid.js";
 import { analyzeAndCount, enumerateSolutions } from "./solver.js";
 
+// -- Phase 2 (Couleur) : la couleur doit toujours être NÉCESSAIRE quand elle
+// est présente, jamais purement décorative (retour utilisateur explicite:
+// "l'utilisation de la couleur dans le niveau doit être nécessaire, toujours
+// — pas chaque couleur individuellement, mais l'usage global"). Concrètement:
+// un niveau qui utilise la couleur doit avoir PLUSIEURS solutions en lumière
+// blanche seule (`enumerateSolutions(..., {ignoreColor:true})`) mais UNE
+// SEULE une fois la couleur prise en compte — jamais l'inverse (couleur
+// ajoutée sur un niveau déjà unique en blanc, qui ne ferait alors que
+// décorer une solution déjà connue).
+//
+// `solver.js` n'a besoin d'AUCUNE modification pour ça: `propagate`/le
+// branchement ne raisonnent QUE sur les indices numériques (jamais la
+// couleur), la couleur n'intervient qu'à la toute fin via `isWon`/
+// `ignoreColor` — déjà threadé partout (voir countSolutions/
+// enumerateSolutions/analyzeAndCount, paramètre `options`). Ça veut dire que
+// `repairToUnique`/`stripToTargetTier` (les étapes coûteuses, appelées des
+// dizaines de fois par tentative) restent INCHANGÉES et gardent exactement
+// la même perf qu'avant — la couleur n'est ajoutée qu'après coup, une seule
+// fois par tentative de génération.
+//
+// Stratégie (voir `tryColorizeForNecessity` ci-dessous), une fois le plateau
+// déjà réparé + minimisé au palier cible EN BLANC (comme avant) :
+//   1. Retirer UNE charge numérique parmi les survivantes (candidate au
+//      hasard) pour réintroduire une ambiguïté CONTRÔLÉE — vérifiée via
+//      `enumerateSolutions(cap=3, ignoreColor:true)`: on ne garde que les
+//      cas à 2-3 solutions blanches exactement (pas "beaucoup", pour rester
+//      rapide à discriminer), en s'assurant que la solution DE RÉFÉRENCE
+//      (celle déjà validée par la minimisation) en fait toujours partie —
+//      retirer une contrainte ne peut jamais l'invalider, seulement en
+//      ajouter d'autres.
+//   2. Colorier un sous-ensemble aléatoire des charges restantes, simuler la
+//      grille (recompute()) séparément avec CHAQUE solution candidate
+//      (celle de référence = "gagnante" + les alternatives), et chercher au
+//      moins une case vide dont la teinte réelle DIFFÈRE entre la solution
+//      gagnante et CHAQUE alternative — c'est cette case qui devient une
+//      cible colorée (couleur lue directement dans la simulation gagnante,
+//      jamais devinée). Si une alternative ne peut être discriminée par
+//      aucune case sous ce coloriage, on réessaie (nouveau sous-ensemble de
+//      charges coloriées, ou nouvelle charge retirée à l'étape 1).
+//   3. Vérification finale au solveur (une seule fois, pas cher): le niveau
+//      colorié doit être `count===1` avec couleur ET `count>=2` sans — sinon
+//      on abandonne la couleur pour cette tentative plutôt que de risquer un
+//      niveau mal formé (voir philosophie déjà en place: "tout coché
+//      n'implique pas présent à chaque génération" — la couleur reste
+//      probabiliste, jamais forcée si elle ne peut être rendue nécessaire).
+
 const DIRECTIONS = [
   [0, 1],
   [0, -1],
@@ -77,7 +124,7 @@ function seededRandom(seed) {
  */
 export const FEATURES = {
   forbidden: { label: "Cases interdites", weight: 1, implemented: true },
-  color: { label: "Couleur (charges + cibles)", weight: 3, implemented: false },
+  color: { label: "Couleur (charges + cibles)", weight: 3, implemented: true },
   mirror: { label: "Miroir dévieur", weight: 2, implemented: false, requires: "color" },
   filter: { label: "Filtre", weight: 2, implemented: false, requires: "color" },
   prism: { label: "Prisme", weight: 3, implemented: false, requires: "color" },
@@ -153,6 +200,17 @@ const DIFFICULTY_PRESETS = {
 // itérations en pratique ; 15 est une marge large pour les cas malchanceux
 // sans risquer de s'éterniser sur une forme fondamentalement dégénérée.
 const MAX_REPAIR_ITERATIONS = 15;
+
+// Phase 2 (Couleur) : bornes de la recherche "réintroduire une ambiguïté
+// contrôlée puis la discriminer par la couleur" (voir tryColorizeForNecessity/
+// tryDiscriminatingColoring). Chaque combinaison (charge retirée × sous-
+// ensemble colorié) est bon marché (une construction de grille + recompute,
+// pas une recherche) — ces bornes limitent le nombre de combinaisons
+// essayées, pas leur coût individuel. `deadline` (partagé, voir plus haut)
+// reste le vrai garde-fou wall-clock.
+const MAX_COLOR_REMOVAL_CANDIDATES = 12;
+const MAX_COLOR_ATTEMPTS_PER_SIZE = 6;
+const CLUE_COLOR_LETTERS = ["r", "g", "b"];
 
 // Budget global d'une génération (Phase F du doc), CLÉS = ÉTOILES affichées
 // (voir SOLVER_TIER_FOR_STARS) : le premier des deux atteint arrête la
@@ -269,8 +327,15 @@ function buildInitialLayout({ rows, cols, clueDensity, cornerVoid, rand }) {
   return layout;
 }
 
+// Toujours joint par des espaces (jamais concaténé): depuis la Phase 2, une
+// case peut porter un token à 2 caractères ("2r" = charge 2 rouge) — voir
+// grid.js/parseCellToken, qui découpe par espaces dès qu'il en trouve un
+// dans la rangée. Fonctionnellement identique à une concaténation directe
+// pour les tokens à 1 caractère (le découpage par espaces ou par caractère
+// donne alors exactement les mêmes tokens), donc aucun changement de
+// comportement pour les plateaux sans couleur.
 function layoutToRows(layout) {
-  return layout.map((row) => row.join(""));
+  return layout.map((row) => row.join(" "));
 }
 
 /** Remplissage glouton : garantit une solution complète et valide pour la
@@ -435,6 +500,218 @@ function stripToTargetTier(layout, rows, cols, targetTier, nodeBudget, rand, dea
   return best;
 }
 
+// -- Phase 2 (Couleur) : helpers -------------------------------------------
+
+// Table inverse de TARGET_CODES (grid.js) : combinaison de canaux -> lettre
+// de case-cible. Dupliquée ici plutôt qu'exportée depuis grid.js, pour
+// garder grid.js focalisé sur les règles de jeu (pas la génération).
+const RGB_TO_TARGET_LETTER = new Map([
+  ["100", "r"],
+  ["010", "g"],
+  ["001", "b"],
+  ["110", "y"],
+  ["011", "c"],
+  ["101", "m"],
+  ["111", "w"],
+]);
+
+function targetLetterFor(lit) {
+  const key = `${lit.r ? 1 : 0}${lit.g ? 1 : 0}${lit.b ? 1 : 0}`;
+  return RGB_TO_TARGET_LETTER.get(key) || null; // null: case jamais éclairée (défensif, ne devrait pas arriver)
+}
+
+function sameLitColor(a, b) {
+  return a.r === b.r && a.g === b.g && a.b === b.b;
+}
+
+/** Cases actuellement charge numérique SANS couleur ("1"-"4" seuls, pas
+ * encore "2r" etc.) — candidates à la fois pour le retrait ciblé (étape 1)
+ * et le coloriage (étape 2) de tryColorizeForNecessity. */
+function collectPlainClueCells(layout, rows, cols) {
+  const cells = [];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (/^[1-4]$/.test(layout[r][c])) cells.push([r, c]);
+    }
+  return cells;
+}
+
+function sameLightSet(a, b) {
+  if (a.length !== b.length) return false;
+  const setB = new Set(b.map(([r, c]) => `${r},${c}`));
+  return a.every(([r, c]) => setB.has(`${r},${c}`));
+}
+
+/** Retrouve, parmi plusieurs solutions blanches trouvées après un retrait de
+ * charge, celle qui correspond à la solution de référence déjà validée —
+ * elle en fait TOUJOURS partie (retirer une contrainte ne peut jamais
+ * invalider une solution déjà valide, voir commentaire d'en-tête). Filet de
+ * sécurité défensif: si jamais introuvable (ne devrait pas arriver), on
+ * retombe sur la première trouvée plutôt que de planter. */
+function findReferenceSolutionIndex(solutions, reference) {
+  const idx = solutions.findIndex((s) => sameLightSet(s, reference));
+  return idx >= 0 ? idx : 0;
+}
+
+/** Construit une grille à partir du plateau actuel (déjà coloré ou non) et y
+ * pose directement un jeu de lumières donné (une solution déjà connue,
+ * jamais rejouée via toggleLight — pas besoin de revalider un placement déjà
+ * prouvé légal), puis recalcule l'état complet (lasers, teintes...). Utilisé
+ * pour COMPARER comment une même charge colorée illuminerait chaque case
+ * selon la solution retenue. */
+function buildGridWithLights(layout, rows, cols, lights) {
+  const grid = new LightUpGrid({ name: "Infini", rows, cols, cells: layoutToRows(layout) });
+  for (const [r, c] of lights) grid.lights.add(grid.key(r, c));
+  grid.recompute();
+  return grid;
+}
+
+/**
+ * Étape 2 (voir commentaire d'en-tête) : essaie de colorier un sous-ensemble
+ * des charges numériques restantes puis de désigner des cases-cibles dont la
+ * teinte, sous ce coloriage, DIFFÈRE entre `winner` (la solution qu'on veut
+ * rendre gagnante) et CHACUNE des `alternates` (les autres solutions
+ * blanches valides, qui doivent donc échouer une fois la couleur prise en
+ * compte). Modifie `layout` EN PLACE en cas de succès (charges coloriées +
+ * cases-cibles) et retourne la liste des mutations appliquées (pour
+ * permettre à l'appelant de tout annuler si la vérification finale échoue
+ * malgré tout) ; retourne `null` si aucune combinaison essayée dans le
+ * budget n'a discriminé toutes les alternatives (layout déjà remis dans son
+ * état d'origine dans ce cas).
+ */
+function tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand, deadline) {
+  const clueCells = collectPlainClueCells(layout, rows, cols);
+  if (clueCells.length === 0) return null;
+
+  const sizes = [...new Set([1, 2, 3, clueCells.length].filter((n) => n <= clueCells.length))];
+
+  for (const size of sizes) {
+    for (let attempt = 0; attempt < MAX_COLOR_ATTEMPTS_PER_SIZE; attempt++) {
+      if (Date.now() > deadline) return null;
+
+      const chosen = shuffle([...clueCells], rand).slice(0, size);
+      const applied = []; // [r, c, prevToken] — dans l'ordre d'application, pour un revert LIFO propre
+      for (const [r, c] of chosen) {
+        applied.push([r, c, layout[r][c]]);
+        layout[r][c] = layout[r][c] + CLUE_COLOR_LETTERS[Math.floor(rand() * CLUE_COLOR_LETTERS.length)];
+      }
+
+      const winnerGrid = buildGridWithLights(layout, rows, cols, winner);
+      const altGrids = alternates.map((alt) => buildGridWithLights(layout, rows, cols, alt));
+
+      // Pour chaque alternative: quelles cases vides (encore "." — pas déjà
+      // charge/interdite/void/cible) ont une teinte différente entre winner
+      // et cette alternative, sous CE coloriage précis ?
+      const perAlternateDiffs = altGrids.map((altGrid) => {
+        const diffs = [];
+        for (let r = 0; r < rows; r++)
+          for (let c = 0; c < cols; c++) {
+            if (layout[r][c] !== ".") continue;
+            const wLit = winnerGrid.cellAt(r, c)._lit;
+            const aLit = altGrid.cellAt(r, c)._lit;
+            if (!sameLitColor(wLit, aLit)) diffs.push([r, c]);
+          }
+        return diffs;
+      });
+
+      if (perAlternateDiffs.some((diffs) => diffs.length === 0)) {
+        // Au moins une alternative reste indiscernable de winner sous ce
+        // coloriage: annule et réessaie une autre combinaison.
+        for (let i = applied.length - 1; i >= 0; i--) layout[applied[i][0]][applied[i][1]] = applied[i][2];
+        continue;
+      }
+
+      // Choisit un ensemble de cases-cibles couvrant TOUTES les
+      // alternatives (glouton: une case qui discrimine plusieurs
+      // alternatives à la fois compte pour toutes, minimise le nombre de
+      // cibles ajoutées).
+      const covered = new Array(alternates.length).fill(false);
+      const targets = [];
+      for (let i = 0; i < alternates.length; i++) {
+        if (covered[i]) continue;
+        const pool = perAlternateDiffs[i];
+        const [tr, tc] = pool[Math.floor(rand() * pool.length)];
+        targets.push([tr, tc]);
+        for (let j = 0; j < alternates.length; j++) {
+          if (covered[j]) continue;
+          const wLit = winnerGrid.cellAt(tr, tc)._lit;
+          const ajLit = altGrids[j].cellAt(tr, tc)._lit;
+          if (!sameLitColor(wLit, ajLit)) covered[j] = true;
+        }
+      }
+
+      for (const [tr, tc] of targets) {
+        const letter = targetLetterFor(winnerGrid.cellAt(tr, tc)._lit);
+        if (!letter) continue; // défensif: ne devrait jamais arriver (winner illumine toujours ses cases vides)
+        applied.push([tr, tc, layout[tr][tc]]);
+        layout[tr][tc] = letter;
+      }
+
+      return applied;
+    }
+  }
+  return null;
+}
+
+/**
+ * Étape 1 + orchestration (voir commentaire d'en-tête) : essaie de rendre la
+ * couleur NÉCESSAIRE sur le plateau déjà unique/minimisé `layout`. Modifie
+ * `layout` EN PLACE seulement en cas de succès complet (retrait de charge +
+ * coloriage discriminant + vérification finale au solveur, les trois
+ * validés) ; le restaure fidèlement à son état d'entrée sinon. Retourne le
+ * résultat `analyzeAndCount` du plateau colorié final (avec couleur prise en
+ * compte) en cas de succès, `null` sinon — dans ce cas l'appelant garde le
+ * plateau non colorié tel quel (la couleur reste probabiliste, jamais
+ * forcée: voir commentaire d'en-tête).
+ */
+function tryColorizeForNecessity(layout, rows, cols, referenceSolution, rand, preset, deadline) {
+  const candidates = shuffle(collectPlainClueCells(layout, rows, cols), rand).slice(
+    0,
+    MAX_COLOR_REMOVAL_CANDIDATES
+  );
+
+  for (const [r, c] of candidates) {
+    if (Date.now() > deadline) return null;
+
+    const prevToken = layout[r][c];
+    layout[r][c] = "X"; // retrait tentatif: réintroduit potentiellement une ambiguïté blanche contrôlée
+
+    const level = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
+    const { solutions, exhausted } = enumerateSolutions(level, 3, preset.repairNodeBudget, { ignoreColor: true });
+
+    // On ne garde que les cas à ambiguïté CONTRÔLÉE (2-3 solutions
+    // blanches exactes, cap=3 atteint et épuisé) — "beaucoup" de solutions
+    // serait coûteux à discriminer entièrement et signale une forme trop
+    // relâchée pour ce retrait précis.
+    if (!exhausted || solutions.length < 2) {
+      layout[r][c] = prevToken;
+      continue;
+    }
+
+    const winnerIdx = findReferenceSolutionIndex(solutions, referenceSolution);
+    const winner = solutions[winnerIdx];
+    const alternates = solutions.filter((_, idx) => idx !== winnerIdx);
+
+    const applied = tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand, deadline);
+    if (applied) {
+      const finalLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
+      const verify = analyzeAndCount(finalLevel, 2, preset.nodeBudget);
+      const whiteCheck = enumerateSolutions(finalLevel, 2, preset.repairNodeBudget, { ignoreColor: true });
+
+      if (verify && verify.exhausted && verify.count === 1 && whiteCheck.exhausted && whiteCheck.solutions.length >= 2) {
+        return verify; // succès: layout garde son retrait + coloriage, c'est le résultat final
+      }
+      // Vérification finale ratée malgré un coloriage a priori discriminant
+      // (garde-fou défensif, ex. interaction imprévue) : annule le
+      // coloriage avant de restaurer aussi la charge retirée ci-dessous.
+      for (let i = applied.length - 1; i >= 0; i--) layout[applied[i][0]][applied[i][1]] = applied[i][2];
+    }
+
+    layout[r][c] = prevToken; // ce retrait n'a mené à rien d'exploitable: on essaie un autre candidat
+  }
+  return null;
+}
+
 /**
  * Une tentative de génération complète : forme dense + réparation ciblée
  * vers l'unicité + minimisation vers le palier SOLVEUR correspondant à
@@ -459,6 +736,7 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
 
   const featureSubset = pickFeatureSubset(rand, enabledFeatureKeys, preset.budget);
   const useForbidden = featureSubset.includes("forbidden");
+  const wantsColor = featureSubset.includes("color");
 
   const layout = buildInitialLayout({ rows, cols, clueDensity, cornerVoid, rand });
   if (!repairToUnique(layout, rows, cols, useForbidden, rand, preset.repairNodeBudget, deadline)) return null;
@@ -466,7 +744,23 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
   const analysis = stripToTargetTier(layout, rows, cols, solverTarget, preset.nodeBudget, rand, deadline);
   if (!analysis) return null;
 
-  return { rows, cols, cells: layoutToRows(layout), analysis, featureSubset };
+  // Phase 2 (Couleur, voir commentaire d'en-tête) : tentative best-effort,
+  // JAMAIS forcée — si aucune combinaison retrait+coloriage n'a pu être
+  // rendue nécessaire dans le budget, on sert le plateau non colorié tel
+  // quel (déjà confirmé unique par stripToTargetTier ci-dessus) plutôt que
+  // d'ajouter une couleur purement décorative.
+  let finalAnalysis = analysis;
+  let colorApplied = false;
+  if (wantsColor) {
+    const colorAnalysis = tryColorizeForNecessity(layout, rows, cols, analysis.solution, rand, preset, deadline);
+    if (colorAnalysis) {
+      finalAnalysis = colorAnalysis;
+      colorApplied = true;
+    }
+  }
+  const actualFeatureSubset = colorApplied ? featureSubset : featureSubset.filter((k) => k !== "color");
+
+  return { rows, cols, cells: layoutToRows(layout), analysis: finalAnalysis, featureSubset: actualFeatureSubset };
 }
 
 /**
