@@ -632,3 +632,97 @@ Validation : `npm run check-unique` (mêmes résultats de référence qu'avant c
 changement — aucune régression sur les 26 niveaux statiques, ce qui est
 attendu puisque ce changement ne touche que du flux UI/mode Infini, jamais la
 génération ni la résolution) et `npm run build` passent tous les deux.
+
+## 13. Cases isolées mortes + grilles portrait (mobile)
+
+Deux retours utilisateur traités ensemble (générateur uniquement, aucun
+changement UI/flux).
+
+### Cases isolées mortes
+
+Constat : `buildInitialLayout` tire chaque case indépendamment ("W" ou "."),
+ce qui peut par pur hasard entourer une case vide sur ses 4 côtés — elle doit
+alors recevoir sa propre lumière sans la moindre ambiguïté possible. Ce n'est
+un problème QUE si aucun voisin n'est un indice : sinon, la lumière forcée
+compte dans le calcul de ce voisin et rejoint la logique du puzzle (cas
+"utile", laissé tel quel — l'utilisateur l'a explicitement validé). Le cas
+gênant est la case isolée SANS aucun voisin indice ("morte" : forcée et sans
+le moindre effet sur le puzzle), et plus largement "trop" de cases isolées
+même utiles.
+
+Trois sources identifiées, à trois étapes différentes du pipeline :
+
+1. **Le remplissage aléatoire initial** (`buildInitialLayout`) : tirage i.i.d.
+   par case, source la plus évidente.
+2. **`stripToTargetTier`** (minimisation vers le palier cible) : convertit des
+   indices en VOID pour augmenter la difficulté — peut priver un voisin isolé
+   de son seul voisin indice.
+3. **`resolveAndDeriveClues`** (rappelée à chaque itération de
+   `repairToUnique`) : dérive chaque case-indice depuis un compte réel de
+   lumières et la convertit elle-même en VOID dès que ce compte tombe à 0 (si
+   les cases interdites ne sont pas activées) — la source la plus difficile à
+   anticiper, car elle peut arriver à répétition, y compris sur des indices
+   ajoutés dynamiquement par la réparation.
+
+Trois correctifs, chacun au bon endroit du pipeline pour rester **sans le
+moindre coût solveur supplémentaire** :
+
+- `relaxIsolatedCells` (nouveau, appelé juste après `buildInitialLayout`,
+  AVANT tout appel solveur — donc sans aucun risque pour une unicité qui
+  n'existe pas encore à ce stade) : répare toute case morte en rouvrant un de
+  ses voisins opaques (préférence pour un voisin "W" plutôt qu'un "X" de coin,
+  pour préserver le découpage de silhouette), et plafonne le nombre de cases
+  isolées "utiles" tolérées (~`rows*cols/35`, donc 1-2 sur ces tailles de
+  grille) pour éviter l'effet "il y en a trop".
+- `wouldCreateDeadIsolation`/`wouldCreateDeadIsolationForSet` (garde-fous
+  PRÉVENTIFS) : avant de tenter un retrait dans `stripToTargetTier` ou dans
+  `tryColorizeForNecessity` (qui retire aussi des indices, parfois plusieurs à
+  la fois — la version "Set" gère ce cas groupé), un test O(1) sur les
+  voisins du candidat vérifie qu'aucun voisin isolé ne perdrait son dernier
+  voisin indice ; si c'est le cas, le candidat est simplement ignoré, SANS
+  jamais appeler le solveur pour lui — donc zéro coût, juste un candidat en
+  moins dans un pool qui en compte des dizaines.
+- `neutralizeDeadIsolatedCells` (filet de sécurité final, appelé juste avant
+  de retourner le plateau, après la Phase Couleur) : les deux garde-fous
+  ci-dessus sont préventifs mais pas exhaustifs (cas 3 ci-dessus, la
+  ré-dérivation en cascade pendant `repairToUnique`, leur échappe). Cette
+  dernière passe convertit toute case morte survivante en VOID directement —
+  ce qui est **prouvé sûr sans re-vérification solveur** : une case isolée
+  morte n'a par définition aucun voisin indice (rien n'en dépend) et ne peut
+  illuminer ni être illuminée par aucune autre case (tous ses voisins sont
+  opaques), donc la retirer ne change ni la validité ni l'unicité de la
+  solution pour le reste de la grille.
+
+Validé (script jetable, 3 tirages de tier, cf. méthode habituelle) : 0 case
+morte sur 45 niveaux générés (20×1★, 15×2★, 10×3★) toutes étoiles confondues,
+cases "utiles" restantes toujours dans la fourchette attendue (0-2 par
+niveau), et **aucun changement de latence mesurable** (1★ ~130-150ms, 2★
+~5.7s, 3★ ~6.6s, comparable aux mesures précédentes) — confirmant que les
+trois correctifs restent bien de simples vérifications locales, jamais des
+appels solveur additionnels.
+
+### Grilles portrait (mobile)
+
+Retour utilisateur : le jeu est destiné au mobile en orientation portrait,
+les grilles générées doivent donc être plus hautes que larges plutôt que
+carrées, à difficulté comparable.
+
+`DIFFICULTY_PRESETS` remplace l'ancien `sizeRange` unique (carré) par
+`rowsRange`/`colsRange` distincts, décalés d'environ un cran chacun (lignes
+vers le haut, colonnes vers le bas) :
+
+- 1★ : lignes [8,9], colonnes [6,7] (était [7,8]×[7,8])
+- 2★/3★ : lignes [9,10], colonnes [7,8] (était [8,9]×[8,9])
+
+Résultat : ratio lignes/colonnes ~1.1 à ~1.5 selon le tirage (biais portrait
+net, sans grille filiforme), surface totale (nombre de cellules) gardée
+quasiment identique à l'ancien carré (à 1 cellule près sur les bornes) — donc
+ni la difficulté ni la perf ne devraient bouger, seule la forme change.
+Toujours plafonné à ~80 cellules max (le seuil de latence solveur déjà établi
+empiriquement, voir section 6), même si une dimension individuelle (10)
+dépasse légèrement l'ancien maximum par ligne — compensé par une colonne plus
+étroite, donc sans dépasser la surface totale déjà validée comme sûre.
+
+Validé avec le même script : dimensions échantillon `8x6`, `9x7`, `9x8`,
+`10x7`, `10x8` — toujours portrait, jamais carré ni paysage ; latence et taux
+de couleur inchangés (voir chiffres ci-dessus).

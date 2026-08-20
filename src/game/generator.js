@@ -161,14 +161,25 @@ const SOLVER_TIER_FOR_STARS = { 1: 2, 2: 3, 3: 4 };
  * de départ n'est plus le levier principal de difficulté (`stripToTargetTier`
  * s'en charge) — elle est choisie DENSE pour tous les paliers, juste assez
  * pour que la réparation converge vite (plateau dense = rapide à résoudre,
- * cf. lien densité/facilité déjà mesuré empiriquement). La taille de grille
- * reste corrélée à l'étoile : plus de cellules = plus de marge pour retirer
- * des indices et atteindre un palier réellement difficile. Plafonné à 9×9
- * (voir plus bas, latence solveur) — y compris pour 3★/palier solveur 4 : un
- * sweep empirique a montré que la difficulté supplémentaire s'obtient très
- * bien par une minimisation plus poussée sur la MÊME taille, pas besoin
+ * cf. lien densité/facilité déjà mesuré empiriquement). Le NOMBRE de cellules
+ * reste corrélé à l'étoile : plus de cellules = plus de marge pour retirer
+ * des indices et atteindre un palier réellement difficile.
+ *
+ * `rowsRange`/`colsRange` (plutôt qu'un seul `sizeRange` carré comme avant) :
+ * retour utilisateur — le jeu est destiné au mobile en orientation portrait,
+ * donc les grilles générées doivent être plus hautes que larges plutôt que
+ * carrées. `rowsRange` est décalé vers le haut et `colsRange` vers le bas
+ * d'environ un cran chacun par rapport à l'ancien `sizeRange` commun, ce qui
+ * donne un ratio lignes/colonnes ~1.1 à ~1.5 selon le tirage — un biais
+ * portrait net sans grille filiforme. La surface totale (lignes×colonnes)
+ * est gardée quasiment identique à l'ancien `sizeRange` carré (à 1 cellule
+ * près sur les bornes) : ni la difficulté ni la perf ne devraient bouger,
+ * seule la FORME change. Toujours plafonné à ~80 cellules max (voir plus
+ * bas, latence solveur) — y compris pour 3★/palier solveur 4 : un sweep
+ * empirique a montré que la difficulté supplémentaire s'obtient très bien
+ * par une minimisation plus poussée sur la MÊME surface, pas besoin
  * d'agrandir encore la grille (et donc pas besoin de rouvrir le risque de
- * latence ~50s mesuré sur du 10×10 clairsemé).
+ * latence ~50s mesuré sur du 10×10 clairsemé, 100 cellules).
  *
  * `cornerVoidRange` (variété de silhouette, coins coupés) est resté modeste :
  * `resolveAndDeriveClues`/`stripToTargetTier` transforment les cases sans
@@ -178,7 +189,8 @@ const SOLVER_TIER_FOR_STARS = { 1: 2, 2: 3, 3: 4 };
  */
 const DIFFICULTY_PRESETS = {
   1: {
-    sizeRange: [7, 8],
+    rowsRange: [8, 9],
+    colsRange: [6, 7],
     initialClueDensity: [0.34, 0.42],
     cornerVoidRange: [0, 1],
     budget: 8,
@@ -186,7 +198,8 @@ const DIFFICULTY_PRESETS = {
     repairNodeBudget: 120_000,
   },
   2: {
-    sizeRange: [8, 9],
+    rowsRange: [9, 10],
+    colsRange: [7, 8],
     initialClueDensity: [0.32, 0.4],
     cornerVoidRange: [0, 1],
     budget: 12,
@@ -194,7 +207,8 @@ const DIFFICULTY_PRESETS = {
     repairNodeBudget: 150_000,
   },
   3: {
-    sizeRange: [8, 9],
+    rowsRange: [9, 10],
+    colsRange: [7, 8],
     initialClueDensity: [0.32, 0.4],
     cornerVoidRange: [0, 1],
     budget: 12,
@@ -385,7 +399,124 @@ function buildInitialLayout({ rows, cols, clueDensity, cornerVoid, rand }) {
     }
     layout.push(row);
   }
+  // Voir relaxIsolatedCells : le remplissage ci-dessus tire chaque case
+  // indépendamment, ce qui peut par pur hasard entourer une case vide sur
+  // ses 4 côtés — cette passe répare les cas vraiment inutiles et plafonne
+  // les autres, AVANT tout appel solveur (donc sans risque pour l'unicité
+  // et sans coût de recalcul).
+  relaxIsolatedCells(layout, rows, cols, rand);
   return layout;
+}
+
+// Distance 1 (orthogonale) uniquement : c'est la seule qui compte pour
+// l'isolement d'une case vide — un rayon lumineux posé sur une case '.' ne
+// peut illuminer une AUTRE case '.' que si rien d'opaque ne s'interpose
+// directement entre les deux, donc tout se décide sur les 4 voisins
+// immédiats (le bord de grille ferme tout autant qu'un obstacle).
+const ORTHOGONAL_DIRS = [
+  [-1, 0],
+  [1, 0],
+  [0, -1],
+  [0, 1],
+];
+
+function orthogonalNeighbors(r, c, rows, cols) {
+  const result = [];
+  for (const [dr, dc] of ORTHOGONAL_DIRS) {
+    const nr = r + dr;
+    const nc = c + dc;
+    if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) result.push([nr, nc]);
+  }
+  return result;
+}
+
+/** Vrai si la case vide (r,c) n'a AUCUN voisin orthogonal vide : aucune
+ * lumière posée ailleurs ne peut jamais l'atteindre, elle DOIT recevoir sa
+ * propre lumière sans la moindre ambiguïté possible — voir
+ * relaxIsolatedCells pour pourquoi ce n'est un problème que dans certains
+ * cas. */
+function isIsolatedEmptyCell(layout, r, c, rows, cols) {
+  return orthogonalNeighbors(r, c, rows, cols).every(([nr, nc]) => layout[nr][nc] !== ".");
+}
+
+/** Vrai si (r,c) a au moins un voisin orthogonal "W" (futur indice) : une
+ * case isolée MAIS adjacente à un indice reste utile, sa lumière forcée
+ * contribue au compte réel de ce voisin une fois `resolveAndDeriveClues`
+ * passé — elle a donc un impact réel sur la logique du puzzle, contrairement
+ * à une case isolée entourée uniquement de vide ("X")/bord. */
+function hasClueNeighbor(layout, r, c, rows, cols) {
+  return orthogonalNeighbors(r, c, rows, cols).some(([nr, nc]) => layout[nr][nc] === "W");
+}
+
+/** Vrai si `t` est un token d'indice DÉJÀ dérivé (numéro "1"-"4" ou case
+ * interdite "0") — c'est-à-dire ni vide, ni void, ni "W" (candidat pas
+ * encore résolu). Utilisé après `resolveAndDeriveClues`, quand les cases
+ * indice ne portent plus "W" mais leur vraie valeur — voir
+ * `wouldCreateDeadIsolation`, le pendant de `hasClueNeighbor` pour cette
+ * phase-là. */
+function isClueToken(t) {
+  return t !== "X" && t !== "." && t !== "W";
+}
+
+/**
+ * Répare EN PLACE, juste après le remplissage aléatoire initial et avant
+ * tout appel solveur, les cases isolées "mortes" — une case vide sans aucun
+ * voisin vide ET sans voisin indice, qui est donc à la fois forcément
+ * éclairée (aucune ambiguïté possible) ET sans le moindre effet sur le reste
+ * du puzzle : pur bruit. On la reconnecte en rouvrant un de ses voisins
+ * opaques (redevenu '.'), ce qui la fait rejoindre un vrai segment d'au
+ * moins 2 cases. Plafonne aussi le nombre total de cases isolées tolérées
+ * sur le plateau (même celles adjacentes à un indice, donc "utiles"), pour
+ * éviter l'effet "il y en a trop" même quand chacune prise séparément est
+ * défendable.
+ *
+ * Volontairement fait ici et nulle part ailleurs dans le pipeline : c'est le
+ * SEUL moment où la grille n'a encore aucune garantie d'unicité à préserver
+ * (repairToUnique/stripToTargetTier n'ont pas encore tourné), donc rouvrir
+ * une case ne risque jamais de casser une propriété déjà validée par le
+ * solveur — pas besoin de re-solveur pour re-vérifier quoi que ce soit après
+ * coup. Note : une case isolée créée PENDANT repairToUnique (qui pose des
+ * murs pour casser une ambiguïté) est automatiquement du côté "utile" — le
+ * mur qui vient de l'isoler est lui-même son voisin indice — donc jamais
+ * "morte" ; inutile de dupliquer cette passe là-bas.
+ * Coût : une seule passe O(lignes×colonnes) sur un tableau déjà en mémoire,
+ * négligeable face aux dizaines/centaines d'appels solveur du reste du
+ * pipeline.
+ */
+function relaxIsolatedCells(layout, rows, cols, rand) {
+  const isolated = [];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (layout[r][c] === "." && isIsolatedEmptyCell(layout, r, c, rows, cols)) isolated.push([r, c]);
+    }
+  if (isolated.length === 0) return;
+
+  const reconnect = (r, c) => {
+    const opaque = orthogonalNeighbors(r, c, rows, cols).filter(([nr, nc]) => layout[nr][nc] !== ".");
+    if (opaque.length === 0) return; // grille dégénérée (1x1) : rien à faire
+    // Préfère rouvrir un voisin "W" plutôt qu'un "X" de coin, pour garder le
+    // découpage de silhouette (cornerVoid) intact autant que possible.
+    const wNeighbors = opaque.filter(([nr, nc]) => layout[nr][nc] === "W");
+    const pool = wNeighbors.length > 0 ? wNeighbors : opaque;
+    const [nr, nc] = pool[Math.floor(rand() * pool.length)];
+    layout[nr][nc] = ".";
+  };
+
+  // 1) Cases mortes (aucun voisin indice) : toujours réparées.
+  const stillIsolated = [];
+  for (const [r, c] of isolated) {
+    if (layout[r][c] !== "." || !isIsolatedEmptyCell(layout, r, c, rows, cols)) continue; // déjà reconnectée en chaîne
+    if (!hasClueNeighbor(layout, r, c, rows, cols)) reconnect(r, c);
+    else stillIsolated.push([r, c]);
+  }
+
+  // 2) Cases isolées "utiles" restantes : plafonnées pour éviter l'effet
+  // "il y en a trop", même si chacune prise séparément est défendable.
+  const cap = Math.max(1, Math.round((rows * cols) / 35));
+  if (stillIsolated.length > cap) {
+    shuffle(stillIsolated, rand);
+    for (let i = cap; i < stillIsolated.length; i++) reconnect(stillIsolated[i][0], stillIsolated[i][1]);
+  }
 }
 
 // Toujours joint par des espaces (jamais concaténé): depuis la Phase 2, une
@@ -529,6 +660,44 @@ function repairToUnique(layout, rows, cols, useForbidden, rand, repairNodeBudget
  * `null` seulement si l'état de départ n'était déjà pas mesurable (ne
  * devrait pas arriver après `repairToUnique`, garde-fou défensif).
  */
+/**
+ * Vrai si convertir TOUTES les cases-indice de `cells` en VOID (en une seule
+ * fois — voir Phase 2 Couleur, qui en retire plusieurs à la fois pour un
+ * même essai) ferait perdre à un voisin vide déjà isolé (voir
+ * isIsolatedEmptyCell) son SEUL voisin indice restant EN DEHORS de l'ensemble
+ * retiré — ce voisin, jusque-là "utile" (sa lumière forcée comptait dans un
+ * des indices retirés), deviendrait alors une case morte au sens de
+ * `relaxIsolatedCells` : forcée ET sans le moindre impact sur la logique du
+ * puzzle. Appelée comme garde-fou AVANT de tenter le retrait (donc avant
+ * tout appel solveur pour ces candidats) — coût O(1) par ensemble déjà
+ * choisi, aucun appel solveur en plus. Ne modifie rien : simple test, les
+ * candidats sont juste ignorés si vrai, la logique de retrait/vérification
+ * reste inchangée sinon. `wouldCreateDeadIsolation` (cas à une seule case,
+ * utilisé par `stripToTargetTier`) est un raccourci vers cette même logique.
+ */
+function wouldCreateDeadIsolationForSet(layout, cells, rows, cols) {
+  const isRemoved = (r, c) => cells.some(([cr, cc]) => cr === r && cc === c);
+  const checked = new Set();
+  for (const [r, c] of cells) {
+    for (const [nr, nc] of orthogonalNeighbors(r, c, rows, cols)) {
+      const key = `${nr},${nc}`;
+      if (checked.has(key)) continue;
+      checked.add(key);
+      if (layout[nr][nc] !== ".") continue;
+      if (!isIsolatedEmptyCell(layout, nr, nc, rows, cols)) continue;
+      const stillHasClueNeighbor = orthogonalNeighbors(nr, nc, rows, cols).some(
+        ([or, oc]) => !isRemoved(or, oc) && isClueToken(layout[or][oc])
+      );
+      if (!stillHasClueNeighbor) return true;
+    }
+  }
+  return false;
+}
+
+function wouldCreateDeadIsolation(layout, r, c, rows, cols) {
+  return wouldCreateDeadIsolationForSet(layout, [[r, c]], rows, cols);
+}
+
 function stripToTargetTier(layout, rows, cols, targetTier, nodeBudget, rand, deadline) {
   const startLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
   let best = analyzeAndCount(startLevel, 2, nodeBudget);
@@ -545,6 +714,7 @@ function stripToTargetTier(layout, rows, cols, targetTier, nodeBudget, rand, dea
 
   for (const [r, c] of candidates) {
     if (Date.now() > deadline) break; // budget de temps global dépassé: on sert le meilleur trouvé jusqu'ici
+    if (wouldCreateDeadIsolation(layout, r, c, rows, cols)) continue; // voir commentaire dédié, aucun appel solveur gaspillé
     const prevToken = layout[r][c];
     layout[r][c] = "X"; // retrait tentatif: VOID (voir resolveAndDeriveClues, WALL réservé aux lasers)
     const level = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
@@ -804,6 +974,7 @@ function tryColorizeForNecessity(layout, rows, cols, referenceSolution, rand, pr
       if (Date.now() > deadline) return null;
 
       const subset = shuffle([...clueCells], rand).slice(0, k);
+      if (wouldCreateDeadIsolationForSet(layout, subset, rows, cols)) continue; // voir commentaire dédié, aucun appel solveur gaspillé
       const prevTokens = subset.map(([r, c]) => layout[r][c]);
       for (const [r, c] of subset) layout[r][c] = "X"; // retrait tentatif: réintroduit potentiellement une ambiguïté blanche contrôlée
 
@@ -864,13 +1035,45 @@ function tryColorizeForNecessity(layout, rows, cols, referenceSolution, rand, pr
  * un changement qu'après l'avoir vérifié). `analysis.tier` est un palier
  * SOLVEUR (1-4), pas encore converti en étoiles — voir `generateLevel`.
  */
+/**
+ * Dernière passe, juste avant de retourner le plateau final (après
+ * `stripToTargetTier` ET la Phase Couleur) : neutralise toute case isolée
+ * "morte" qui aurait malgré tout survécu. `wouldCreateDeadIsolation`/
+ * `wouldCreateDeadIsolationForSet` sont des garde-fous PRÉVENTIFS mais pas
+ * exhaustifs : `resolveAndDeriveClues` (rappelée à chaque itération de
+ * `repairToUnique`) dérive elle-même chaque case-indice depuis un compte
+ * réel de lumières et la convertit en VOID dès que ce compte tombe à 0 (si
+ * les cases interdites ne sont pas activées) — ce qui peut priver un voisin
+ * isolé de son seul voisin indice sans passer par les deux garde-fous
+ * ci-dessus, potentiellement à répétition à chaque itération de réparation.
+ * Converti en VOID ("X") plutôt que rouvert : contrairement à
+ * `relaxIsolatedCells` (avant tout appel solveur), le plateau ici est déjà
+ * confirmé unique — hors de question de rouvrir une case, ça changerait
+ * l'espace des solutions et invaliderait la preuve d'unicité déjà obtenue.
+ * Convertir en VOID, à l'inverse, est prouvé sûr SANS re-vérification
+ * solveur : une case isolée morte n'a par définition aucun voisin indice
+ * (rien ne dépend de sa lumière) et ne peut illuminer ni être illuminée par
+ * aucune autre case (tous ses voisins sont opaques) — la retirer du plateau
+ * ne change ni la validité ni l'unicité de la solution pour le reste de la
+ * grille. Coût : une seule passe O(lignes×colonnes), aucun appel solveur.
+ */
+function neutralizeDeadIsolatedCells(layout, rows, cols) {
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (layout[r][c] !== ".") continue;
+      if (!isIsolatedEmptyCell(layout, r, c, rows, cols)) continue;
+      const hasClue = orthogonalNeighbors(r, c, rows, cols).some(([nr, nc]) => isClueToken(layout[nr][nc]));
+      if (!hasClue) layout[r][c] = "X";
+    }
+}
+
 function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
   const preset = DIFFICULTY_PRESETS[stars];
   const solverTarget = SOLVER_TIER_FOR_STARS[stars];
   const rand = seededRandom(seed);
 
-  const rows = pickInt(rand, preset.sizeRange);
-  const cols = pickInt(rand, preset.sizeRange);
+  const rows = pickInt(rand, preset.rowsRange);
+  const cols = pickInt(rand, preset.colsRange);
   const clueDensity = pickFloat(rand, preset.initialClueDensity);
   const cornerVoid = pickInt(rand, preset.cornerVoidRange);
 
@@ -899,6 +1102,8 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
     }
   }
   const actualFeatureSubset = colorApplied ? featureSubset : featureSubset.filter((k) => k !== "color");
+
+  neutralizeDeadIsolatedCells(layout, rows, cols);
 
   return { rows, cols, cells: layoutToRows(layout), analysis: finalAnalysis, featureSubset: actualFeatureSubset };
 }
