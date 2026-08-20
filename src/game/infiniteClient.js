@@ -134,12 +134,13 @@ export function raceForBest(taskPromises, { isPerfect, isBetter }) {
  */
 function generateOnce({ difficulty, enabledFeatureKeys, seed, maxAttempts, maxTimeMs } = {}) {
   const tier = clampTier(difficulty);
-  // Voir generator.js/generateLevel: quand la couleur est demandée, un
-  // résultat n'est "parfait" que s'il l'a AUSSI obtenue — sinon on continue
-  // à comparer les candidats de tous les Workers (isBetterCandidate,
-  // préférence couleur) plutôt que de s'arrêter sur le premier bon palier
-  // trouvé sans couleur.
+  // Voir generator.js/generateLevel: quand la couleur (et/ou le miroir) est
+  // demandée, un résultat n'est "parfait" que s'il l'a AUSSI obtenue —
+  // sinon on continue à comparer les candidats de tous les Workers
+  // (isBetterCandidate, préférence couleur/miroir) plutôt que de s'arrêter
+  // sur le premier bon palier trouvé sans elle.
   const colorRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("color");
+  const mirrorRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("mirror");
   const defaultBudget = getGenerationBudget(tier);
   const totalAttempts = maxAttempts ?? defaultBudget.maxAttempts;
   const totalTimeMs = maxTimeMs ?? defaultBudget.maxTimeMs;
@@ -159,8 +160,12 @@ function generateOnce({ difficulty, enabledFeatureKeys, seed, maxAttempts, maxTi
   );
 
   return raceForBest(tasks, {
-    isPerfect: (r) => r.confirmedUnique && r.measuredTier === tier && (!colorRequested || r.featureSubset?.includes("color")),
-    isBetter: (best, candidate) => isBetterCandidate(best, candidate, tier, colorRequested),
+    isPerfect: (r) =>
+      r.confirmedUnique &&
+      r.measuredTier === tier &&
+      (!colorRequested || r.featureSubset?.includes("color")) &&
+      (!mirrorRequested || r.featureSubset?.includes("mirror")),
+    isBetter: (best, candidate) => isBetterCandidate(best, candidate, tier, colorRequested, mirrorRequested),
   });
 }
 

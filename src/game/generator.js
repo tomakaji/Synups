@@ -134,7 +134,7 @@ function seededRandom(seed) {
 export const FEATURES = {
   forbidden: { label: "Cases interdites", weight: 1, implemented: true },
   color: { label: "Couleur (charges + cibles)", weight: 3, implemented: true, pickProbability: 0.95 },
-  mirror: { label: "Miroir dévieur", weight: 2, implemented: false, requires: "color" },
+  mirror: { label: "Miroir dévieur", weight: 2, implemented: true, requires: "color" },
   filter: { label: "Filtre", weight: 2, implemented: false, requires: "color" },
   prism: { label: "Prisme", weight: 3, implemented: false, requires: "color" },
   pyra: { label: "Pyra", weight: 3, implemented: false },
@@ -287,6 +287,37 @@ const COLOR_AMBIGUITY_NODE_BUDGET = 40_000;
 // marge pour y arriver presque toujours plutôt que d'abandonner tôt.
 const COLOR_BUDGET_MULTIPLIER = 2.2;
 
+// Phase 3 (Miroir dévieur, "une feature à la fois" — retour utilisateur:
+// pas de mix avec Filtre pour l'instant, contrairement au plan initial).
+// Placés directement dans buildInitialLayout comme des obstacles opaques
+// génériques (voir plus haut) — aucun changement de solveur nécessaire, un
+// miroir ne se distingue de "X" que pour les lasers colorés (voir
+// grid.js/recompute), jamais pour la propagation blanche qui pilote tout le
+// pipeline repair/strip.
+//
+// Calibrage mesuré à l'usage : un miroir n'est utile QUE s'il se trouve être
+// le premier obstacle sur le trajet d'un laser de charge colorée, ce qui
+// reste assez rare avec un placement purement aléatoire — une première
+// tentative avec une densité modeste (0.07) donnait ~4% de niveaux avec un
+// miroir vraiment utilisé. Densité relevée à 0.16 (compense côté
+// PROBABILITÉ, gratuit) + miroir exigé dans le critère "parfait" comme la
+// couleur (voir isPerfect plus bas, compense côté RECHERCHE) : ~100% en 1★
+// (quasi gratuit, <1s), mais la combinaison palier+couleur+miroir devient
+// rare en 2★/3★ (mesuré : ~15-24s par génération contre ~6-14s pour la
+// couleur seule à ces paliers, ~50-80% de réussite miroir selon le budget)
+// — jugé acceptable pour une génération en ARRIÈRE-PLAN (buffer 3 niveaux
+// d'avance, voir infiniteClient.js) : le joueur ne le perçoit que si le
+// buffer est vide ET que la config vient de changer, cas déjà accepté pour
+// la couleur seule au même palier.
+const MIRROR_DENSITY = 0.16;
+// Voir COLOR_BUDGET_MULTIPLIER (même principe et mêmes raisons) : combiné
+// multiplicativement avec lui (le miroir REQUIERT déjà la couleur, donc les
+// deux s'appliquent presque toujours ensemble en pratique). Volontairement
+// plus modeste que COLOR_BUDGET_MULTIPLIER (1.3 contre 2.2) — le miroir vient
+// s'ajouter PAR-DESSUS un budget déjà élargi par la couleur, pas besoin de le
+// multiplier aussi agressivement.
+const MIRROR_BUDGET_MULTIPLIER = 1.3;
+
 // Budget global d'une génération (Phase F du doc), CLÉS = ÉTOILES affichées
 // (voir SOLVER_TIER_FOR_STARS) : le premier des deux atteint arrête la
 // boucle et on sert le meilleur candidat rencontré. Cette boucle est un
@@ -354,6 +385,17 @@ function shuffle(arr, rand) {
  * leurs dépendances et un budget de poids — voir section 5 du doc : "tout
  * coché" autorise, ça ne force pas la présence de tout à chaque génération
  * (probabilité d'inclusion < 1 même quand le budget le permettrait).
+ *
+ * `f.requires` est vérifié DEUX fois, à deux niveaux différents : d'abord
+ * contre `enabled` (coché dans l'UI — filtre juste les candidats à considérer
+ * du tout), puis à la fin contre `chosen` (RÉELLEMENT piochée pour CET essai
+ * précis). Le premier ne suffit pas : "color" a une probabilité de pioche
+ * élevée mais pas 1, donc rien ne garantit qu'elle finisse dans `chosen`
+ * même si elle est cochée — sans la seconde vérification, une feature
+ * dépendante (Miroir, Filtre, Prisme) pourrait être piochée SEULE, ce qui
+ * la rendrait purement décorative (un miroir ne dévie QUE les lasers de
+ * charge colorée, voir grid.js — sans couleur nulle part, aucun effet
+ * observable).
  */
 function pickFeatureSubset(rand, enabledKeys, budget) {
   const enabled = new Set(enabledKeys);
@@ -376,26 +418,43 @@ function pickFeatureSubset(rand, enabledKeys, budget) {
       remaining -= w;
     }
   }
-  return chosen;
+  return chosen.filter((k) => !FEATURES[k].requires || chosen.includes(FEATURES[k].requires));
 }
 
 /**
  * Représentation de travail d'un plateau en cours de génération: tableau 2D
- * de tokens à un caractère — 'X' (void, hors-grille), '.' (case vide) ou un
- * obstacle plein qui sera (re)dérivé depuis une solution fraîche à chaque
+ * de tokens à un caractère — 'X' (void, hors-grille), '.' (case vide), '/'
+ * ou '\' (miroir dévieur, case FIXE jamais dérivée — voir isMirrorToken) ou
+ * un obstacle plein qui sera (re)dérivé depuis une solution fraîche à chaque
  * appel de `resolveAndDeriveClues` : 'W' (mur sans contrainte, pas encore
  * dérivé OU volontairement dépouillé de son indice — voir stripToTargetTier),
  * '0' (case interdite) ou un chiffre '1'-'4' (indice numéroté). Converti en
  * chaînes de lignes uniquement pour appeler grid.js/solver.js.
+ *
+ * `mirrorDensity` (0 si la feature Miroir n'est pas demandée pour cet essai)
+ * : probabilité, pour chaque case qui aurait sinon été vide, de devenir un
+ * miroir plutôt — orientation "/"("\\" tirée 50/50. Un miroir ne dévie QUE
+ * les lasers de charge colorée (voir grid.js) : placé ici, AVANT tout appel
+ * solveur, il est ensuite traité comme un obstacle opaque générique par tout
+ * le pipeline blanc (repair/strip/isolement), exactement comme "X" — aucune
+ * case indice ne peut donc jamais s'y dériver (voir resolveAndDeriveClues).
+ * La légitimité ("au moins un miroir réellement traversé par un laser") est
+ * vérifiée a posteriori dans `tryGenerate` (voir `mirrorGenuinelyUsed`), pas
+ * ici : à ce stade, aucune charge n'a encore de couleur.
  */
-function buildInitialLayout({ rows, cols, clueDensity, cornerVoid, rand }) {
+function buildInitialLayout({ rows, cols, clueDensity, cornerVoid, mirrorDensity, rand }) {
   const layout = [];
   for (let r = 0; r < rows; r++) {
     const row = [];
     for (let c = 0; c < cols; c++) {
       const inCorner =
         cornerVoid > 0 && (r < cornerVoid || r >= rows - cornerVoid) && (c < cornerVoid || c >= cols - cornerVoid);
-      row.push(inCorner ? "X" : rand() < clueDensity ? "W" : ".");
+      let token;
+      if (inCorner) token = "X";
+      else if (rand() < clueDensity) token = "W";
+      else if (mirrorDensity > 0 && rand() < mirrorDensity) token = rand() < 0.5 ? "/" : "\\";
+      else token = ".";
+      row.push(token);
     }
     layout.push(row);
   }
@@ -448,14 +507,24 @@ function hasClueNeighbor(layout, r, c, rows, cols) {
   return orthogonalNeighbors(r, c, rows, cols).some(([nr, nc]) => layout[nr][nc] === "W");
 }
 
+/** Vrai si `t` est un token de miroir dévieur ("/" ou "\\") — voir grid.js:
+ * un miroir ne dévie QUE les lasers de charge colorée, la lumière blanche de
+ * base le traverse comme n'importe quel obstacle opaque (bloque, sans
+ * dévier). Ce n'est donc PAS un indice: il ne compte aucune lumière
+ * adjacente et ne doit jamais être traité comme tel (dérivation de charge,
+ * retrait de charge, adjacence "utile" pour une case isolée...). */
+function isMirrorToken(t) {
+  return t === "/" || t === "\\";
+}
+
 /** Vrai si `t` est un token d'indice DÉJÀ dérivé (numéro "1"-"4" ou case
  * interdite "0") — c'est-à-dire ni vide, ni void, ni "W" (candidat pas
- * encore résolu). Utilisé après `resolveAndDeriveClues`, quand les cases
- * indice ne portent plus "W" mais leur vraie valeur — voir
- * `wouldCreateDeadIsolation`, le pendant de `hasClueNeighbor` pour cette
- * phase-là. */
+ * encore résolu), ni miroir (voir `isMirrorToken`, un miroir n'est jamais un
+ * indice). Utilisé après `resolveAndDeriveClues`, quand les cases indice ne
+ * portent plus "W" mais leur vraie valeur — voir `wouldCreateDeadIsolation`,
+ * le pendant de `hasClueNeighbor` pour cette phase-là. */
 function isClueToken(t) {
-  return t !== "X" && t !== "." && t !== "W";
+  return t !== "X" && t !== "." && t !== "W" && !isMirrorToken(t);
 }
 
 /**
@@ -492,8 +561,13 @@ function relaxIsolatedCells(layout, rows, cols, rand) {
   if (isolated.length === 0) return;
 
   const reconnect = (r, c) => {
-    const opaque = orthogonalNeighbors(r, c, rows, cols).filter(([nr, nc]) => layout[nr][nc] !== ".");
-    if (opaque.length === 0) return; // grille dégénérée (1x1) : rien à faire
+    // Jamais un miroir dans le pool: contrairement à "W"/"X" (candidats sans
+    // conséquence à rouvrir ici), un miroir a été placé intentionnellement
+    // (voir buildInitialLayout) — le rouvrir le détruirait silencieusement.
+    const opaque = orthogonalNeighbors(r, c, rows, cols).filter(
+      ([nr, nc]) => layout[nr][nc] !== "." && !isMirrorToken(layout[nr][nc])
+    );
+    if (opaque.length === 0) return; // plus aucun voisin réparable (ex: entouré uniquement de miroirs) : rien à faire
     // Préfère rouvrir un voisin "W" plutôt qu'un "X" de coin, pour garder le
     // découpage de silhouette (cornerVoid) intact autant que possible.
     const wNeighbors = opaque.filter(([nr, nc]) => layout[nr][nc] === "W");
@@ -572,7 +646,12 @@ function resolveAndDeriveClues(layout, rows, cols, useForbidden) {
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const token = layout[r][c];
-      if (token === "X" || token === ".") continue;
+      // Miroir: jamais dérivé en indice (voir isMirrorToken) — un miroir ne
+      // compte aucune lumière adjacente, c'est une case fixe du niveau, pas
+      // une charge. Sans cette exclusion, cette boucle écraserait
+      // silencieusement chaque miroir placé par un chiffre/VOID dérivé de
+      // son compte de lumières, comme n'importe quelle charge classique.
+      if (token === "X" || token === "." || isMirrorToken(token)) continue;
       let count = 0;
       for (const [dr, dc] of DIRECTIONS) {
         const nCell = grid.cellAt(r + dr, c + dc);
@@ -707,8 +786,7 @@ function stripToTargetTier(layout, rows, cols, targetTier, nodeBudget, rand, dea
   const candidates = [];
   for (let r = 0; r < rows; r++)
     for (let c = 0; c < cols; c++) {
-      const t = layout[r][c];
-      if (t !== "X" && t !== "." && t !== "W") candidates.push([r, c]); // indice (1-4) ou interdite ("0")
+      if (isClueToken(layout[r][c])) candidates.push([r, c]); // indice (1-4) ou interdite ("0"), jamais un miroir
     }
   shuffle(candidates, rand);
 
@@ -808,6 +886,31 @@ function buildGridWithLights(layout, rows, cols, lights) {
 function isGenuinelyColored(grid, r, c) {
   const tint = grid.cellAt(r, c)._litColor;
   return !!(tint && (tint.r || tint.g || tint.b));
+}
+
+/**
+ * Vrai si AU MOINS UN miroir du plateau est réellement traversé par un laser
+ * de charge colorée dans la solution gagnante `solution` — c'est le pendant
+ * de `isGenuinelyColored`/la passe de nettoyage de `tryDiscriminatingColoring`
+ * pour le Miroir : la feature ne doit jamais rester purement décorative
+ * (retour utilisateur déjà appliqué à la Couleur, même philosophie ici).
+ * Lit `_mirrorColor` (union des couleurs qui ont traversé ce miroir précis,
+ * voir grid.js recompute()) plutôt que de deviner géométriquement — aucun
+ * nouvel appel solveur, juste une simulation locale (`buildGridWithLights`,
+ * déjà utilisée ailleurs pour la même raison). Si aucune charge n'a de
+ * couleur (Couleur pas obtenue pour cet essai), aucun laser n'existe jamais
+ * et cette fonction retourne naturellement `false` sans cas particulier à
+ * gérer côté appelant.
+ */
+function mirrorGenuinelyUsed(layout, rows, cols, solution) {
+  const grid = buildGridWithLights(layout, rows, cols, solution);
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (!isMirrorToken(layout[r][c])) continue;
+      const mc = grid.cellAt(r, c)._mirrorColor;
+      if (mc && (mc.r || mc.g || mc.b)) return true;
+    }
+  return false;
 }
 
 /**
@@ -1080,8 +1183,19 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
   const featureSubset = pickFeatureSubset(rand, enabledFeatureKeys, preset.budget);
   const useForbidden = featureSubset.includes("forbidden");
   const wantsColor = featureSubset.includes("color");
+  // `pickFeatureSubset` garantit déjà que "mirror" n'est retenu que si
+  // "color" l'est AUSSI pour CET essai précis (voir son commentaire) — un
+  // miroir sans aucune charge colorée ne dévierait jamais rien.
+  const wantsMirror = featureSubset.includes("mirror");
 
-  const layout = buildInitialLayout({ rows, cols, clueDensity, cornerVoid, rand });
+  const layout = buildInitialLayout({
+    rows,
+    cols,
+    clueDensity,
+    cornerVoid,
+    mirrorDensity: wantsMirror ? MIRROR_DENSITY : 0,
+    rand,
+  });
   if (!repairToUnique(layout, rows, cols, useForbidden, rand, preset.repairNodeBudget, deadline)) return null;
 
   const analysis = stripToTargetTier(layout, rows, cols, solverTarget, preset.nodeBudget, rand, deadline);
@@ -1101,7 +1215,20 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
       colorApplied = true;
     }
   }
-  const actualFeatureSubset = colorApplied ? featureSubset : featureSubset.filter((k) => k !== "color");
+
+  // Phase 3 (Miroir dévieur) : aucune tentative supplémentaire à faire ici —
+  // les miroirs sont déjà posés (buildInitialLayout) et déjà pris en compte
+  // par la Phase 2 (recompute() les traite nativement). Reste seulement à
+  // vérifier, en best-effort comme la couleur, qu'au moins un a VRAIMENT été
+  // traversé par un laser dans la solution gagnante — sinon la feature n'est
+  // pas honnêtement "obtenue" pour cet essai (voir mirrorGenuinelyUsed).
+  const mirrorApplied = wantsMirror && colorApplied && mirrorGenuinelyUsed(layout, rows, cols, finalAnalysis.solution);
+
+  const actualFeatureSubset = featureSubset.filter((k) => {
+    if (k === "color") return colorApplied;
+    if (k === "mirror") return mirrorApplied;
+    return true;
+  });
 
   neutralizeDeadIsolatedCells(layout, rows, cols);
 
@@ -1113,11 +1240,12 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
  * de préférence de la Phase F (section 4/10 du doc) : solution unique avant
  * tout, puis palier de difficulté mesuré aussi proche que possible du palier
  * demandé, puis — si `preferColor` (voir `generateLevel`, la couleur a été
- * cochée par le joueur) — la présence de couleur à palier égal, puis (à
- * palier ET couleur égaux, imparfait) un `branchCount` qui pousse dans la
- * direction demandée.
+ * cochée par le joueur) — la présence de couleur à palier égal, puis — si
+ * `preferMirror` (même principe, voir Phase 3 Miroir) — la présence d'un
+ * miroir RÉELLEMENT utilisé à palier ET couleur égaux, puis (à tout le reste
+ * égal, imparfait) un `branchCount` qui pousse dans la direction demandée.
  */
-export function isBetterCandidate(a, b, requestedTier, preferColor = false) {
+export function isBetterCandidate(a, b, requestedTier, preferColor = false, preferMirror = false) {
   if (!a) return true;
   const aUnique = a.solutionCount === 1;
   const bUnique = b.solutionCount === 1;
@@ -1131,6 +1259,12 @@ export function isBetterCandidate(a, b, requestedTier, preferColor = false) {
     const aColor = a.featureSubset?.includes("color") ?? false;
     const bColor = b.featureSubset?.includes("color") ?? false;
     if (aColor !== bColor) return bColor;
+  }
+
+  if (preferMirror) {
+    const aMirror = a.featureSubset?.includes("mirror") ?? false;
+    const bMirror = b.featureSubset?.includes("mirror") ?? false;
+    if (aMirror !== bMirror) return bMirror;
   }
 
   if (a.measuredTier != null && b.measuredTier != null && a.measuredTier === b.measuredTier) {
@@ -1161,13 +1295,17 @@ export function generateLevel({
   const stars = clampTier(difficulty);
   const solverTarget = SOLVER_TIER_FOR_STARS[stars]; // voir SOLVER_TIER_FOR_STARS: 1★→2, 2★→3, 3★→4
   const colorRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("color");
+  const mirrorRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("mirror");
   const defaultBudget = getGenerationBudget(stars);
   // Voir COLOR_BUDGET_MULTIPLIER: viser À LA FOIS le bon palier ET une
   // couleur nécessaire est un objectif combiné plus dur qu'un seul des deux
   // (voir le critère `isPerfect` ci-dessous, qui n'accepte plus l'un sans
   // l'autre quand la couleur est demandée) — élargi pour que ça reste rare
   // d'échouer sur la couleur plutôt que de réduire le budget effectif.
-  const budgetMultiplier = colorRequested ? COLOR_BUDGET_MULTIPLIER : 1;
+  // MIRROR_BUDGET_MULTIPLIER vaut 1 (aucun effet) par choix : voir son
+  // commentaire — le miroir n'entre PAS dans `isPerfect`, la fréquence
+  // visée passe par MIRROR_DENSITY plutôt que par un budget de temps élargi.
+  const budgetMultiplier = (colorRequested ? COLOR_BUDGET_MULTIPLIER : 1) * (mirrorRequested ? MIRROR_BUDGET_MULTIPLIER : 1);
   const timeBudgetMs = Math.round((maxTimeMs ?? defaultBudget.maxTimeMs) * budgetMultiplier);
   const attemptsBudget = Math.round((maxAttempts ?? defaultBudget.maxAttempts) * budgetMultiplier);
 
@@ -1201,18 +1339,22 @@ export function generateLevel({
       attempts,
     };
 
-    // "Parfait" (arrêt immédiat) exige désormais AUSSI la couleur quand elle
-    // a été demandée par le joueur (voir commentaire ci-dessus) — un
-    // candidat au bon palier mais sans couleur reste un excellent filet de
-    // sécurité (via isBetterCandidate juste en dessous), mais ne coupe plus
-    // la boucle : on continue à retenter, dans le budget élargi, jusqu'à
-    // trouver mieux ou épuiser le budget.
-    const isPerfect = measuredTier === solverTarget && (!colorRequested || candidate.featureSubset.includes("color"));
+    // "Parfait" (arrêt immédiat) exige désormais AUSSI la couleur ET (si
+    // demandé) un miroir réellement traversé (voir commentaire ci-dessus) —
+    // un candidat au bon palier mais sans l'un des deux reste un excellent
+    // filet de sécurité (via isBetterCandidate juste en dessous), mais ne
+    // coupe plus la boucle : on continue à retenter, dans le budget élargi,
+    // jusqu'à trouver mieux ou épuiser le budget. Voir MIRROR_DENSITY pour
+    // le calibrage mesuré (fréquence/latence par palier) de cette exigence.
+    const isPerfect =
+      measuredTier === solverTarget &&
+      (!colorRequested || candidate.featureSubset.includes("color")) &&
+      (!mirrorRequested || candidate.featureSubset.includes("mirror"));
     if (isPerfect) {
       best = candidate;
       break;
     }
-    if (isBetterCandidate(best, candidate, solverTarget, colorRequested)) best = candidate;
+    if (isBetterCandidate(best, candidate, solverTarget, colorRequested, mirrorRequested)) best = candidate;
   }
 
   if (!best) return null; // n'arrive que si même le fallback échoue à générer une forme jouable

@@ -726,3 +726,84 @@ dépasse légèrement l'ancien maximum par ligne — compensé par une colonne p
 Validé avec le même script : dimensions échantillon `8x6`, `9x7`, `9x8`,
 `10x7`, `10x8` — toujours portrait, jamais carré ni paysage ; latence et taux
 de couleur inchangés (voir chiffres ci-dessus).
+
+## 14. Phase 3 — Miroir dévieur
+
+Retour utilisateur : passage à la mécanique suivante de la roadmap Phase 2
+(section 5), une feature à la fois plutôt que le mix Miroir+Filtre
+initialement envisagé.
+
+Le Miroir dévieur (`MIRROR`, token `/` ou `\`) existe déjà côté moteur de jeu
+(niveaux statiques `Mirror`/`reflect`) : dévie de 90° un laser de charge
+colorée, mais bloque la lumière blanche de base comme n'importe quel
+obstacle opaque (ne dévie jamais le blanc) — voir grid.js. Ça implique deux
+choses pour le générateur : (1) **aucun changement de solveur** n'est
+nécessaire (même raisonnement que pour la Couleur — `propagate`/le
+branchement ignorent totalement les miroirs, ils ne comptent que comme
+"opaque, pas EMPTY"), et (2) un miroir n'a **aucun effet observable sans
+couleur** (rien à dévier), donc la feature dépend strictement de Couleur
+(`requires: "color"`, déjà déclaré) — cohérent avec la philosophie déjà
+appliquée à la Couleur elle-même : la présence de la feature dans un niveau
+doit toujours être nécessaire, jamais décorative.
+
+**Placement** : les miroirs sont posés directement dans `buildInitialLayout`
+(nouveau paramètre `mirrorDensity`), comme des obstacles opaques génériques
+au même titre que "X" — traités identiquement par tout le pipeline blanc
+(repair/strip/isolement) sans aucune modification de leur logique interne.
+Un audit complet des endroits qui manipulaient déjà les tokens de case par
+une heuristique implicite ("tout ce qui n'est ni X ni . ni W est un indice")
+a été nécessaire pour ne jamais confondre un miroir avec un indice :
+`resolveAndDeriveClues` (aurait sinon écrasé le miroir par un chiffre dérivé
+de son compte de lumières adjacentes), `stripToTargetTier`/
+`collectPlainClueCells` (auraient pu tenter de le "retirer" comme une
+charge), et `relaxIsolatedCells` (aurait pu le rouvrir en case vide en
+réparant une case isolée voisine). Un nouveau `isMirrorToken`/`isClueToken`
+mis à jour centralise cette distinction.
+
+**Nécessité vérifiée a posteriori** (`mirrorGenuinelyUsed`), même principe
+que `isGenuinelyColored` pour la Couleur : après la Phase 2 (Couleur), on
+simule la grille avec la solution gagnante et on vérifie qu'AU MOINS un
+miroir a `_mirrorColor` non-vide (un vrai laser l'a traversé) — sinon
+`"mirror"` est retiré de `featureSubset` pour cet essai, exactement comme la
+Couleur quand `tryColorizeForNecessity` échoue. Aucun appel solveur
+supplémentaire : uniquement une simulation locale déjà utilisée ailleurs.
+
+**Bug découvert en cours de route** : `pickFeatureSubset` ne vérifiait la
+dépendance `requires` que contre les features COCHÉES dans l'UI, pas contre
+celles RÉELLEMENT piochées pour un essai donné — un miroir aurait pu être
+piochée seule (couleur cochée mais pas piochée pour cet essai précis, sa
+probabilité de pioche étant élevée mais jamais 1), donc purement décorative.
+Corrigé par un filtre final sur le sous-ensemble choisi.
+
+**Calibrage fréquence/latence** (mesuré, script jetable) : une première
+tentative avec une densité modeste (0.07) et le miroir seulement "préféré"
+(pas exigé) donnait un taux d'usage réel très faible (~4-15% selon le
+palier) — le simple hasard du placement tombe rarement sur le trajet d'un
+laser. Exiger le miroir dans le critère "parfait" (comme la Couleur, avec un
+`MIRROR_BUDGET_MULTIPLIER` dédié combiné à `COLOR_BUDGET_MULTIPLIER`) corrige
+bien le taux mais coûte cher en 2★/3★ (mesuré jusqu'à ~20-26s par essai avec
+un multiplicateur agressif). Réglage final retenu : densité relevée à 0.16
+(compense côté probabilité, gratuit) + exigence dans `isPerfect` maintenue
+avec un multiplicateur plus modeste (1.3, contre 2.2 pour la couleur) :
+
+| Palier | Couleur obtenue | Miroir obtenu | Latence moy. | Latence max |
+|---|---|---|---|---|
+| 1★ | 20/20 | 20/20 | ~0.24s | ~0.76s |
+| 2★ | 11/15 | 10/15 | ~7.4s | ~7.9s |
+| 3★ | 7/7 | 5/7 | ~13.6s | ~25.8s |
+
+Le taux de couleur en 2★ (73%, contre ~80-87% en l'absence de Miroir coché)
+baisse légèrement : la présence de miroirs dans le plateau consomme une
+partie de l'espace de cases vides/indices, rendant le retrait+coloriage
+marginalement plus dur à réussir. Jugé acceptable pour un v1 (feature
+optionnelle, cochée explicitement) — génération en ARRIÈRE-PLAN via le
+buffer 3 niveaux d'avance (section 11), donc la latence en 2★/3★ n'est
+perçue par le joueur que si le buffer est vide ET que la config vient de
+changer, un cas déjà accepté pour la Couleur seule à ces mêmes paliers. À
+ajuster si l'usage réel montre que c'est trop fréquent ou trop lent.
+
+Validation : `npm run check-unique` (mêmes résultats de référence, aucune
+régression sur les 26 niveaux statiques — y compris `Mirror`/`reflect`, qui
+utilisent déjà la mécanique miroir statiquement) et `npm run build` passent
+tous les deux. Aucune case isolée morte observée sur l'ensemble des essais
+(le garde-fou de la section 13 reste valide en présence de miroirs).
