@@ -83,6 +83,56 @@ const sounds = {
   chargeOverload: playChargeOverload,
 };
 
+// ---------- Points Infini ----------
+// Le mode Infini n'a plus de notation par étoiles basée sur le nombre de
+// coups (voir le retrait de computeStars/winOverlay dans handleCellClick
+// plus bas) : à la place, terminer un niveau rapporte un nombre fixe de
+// points selon SON palier de difficulté mesuré (measuredTier), cumulés dans
+// un total persistant (localStorage, même approche que STORAGE_KEY dans
+// editor.js). L'utilité de ce total reste à définir (voir discussion) — pour
+// l'instant, seuls le gain et l'affichage permanent sont câblés.
+const INFINITE_POINTS_BY_TIER = { 1: 1, 2: 3, 3: 5 };
+const POINTS_STORAGE_KEY = "lightup-infinite-points";
+
+function loadInfinitePoints() {
+  try {
+    const raw = localStorage.getItem(POINTS_STORAGE_KEY);
+    const n = raw ? Number(raw) : 0;
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+let infinitePoints = loadInfinitePoints();
+const infinitePointsEl = document.getElementById("infinite-points");
+
+function renderInfinitePoints() {
+  infinitePointsEl.textContent = `${infinitePoints} pt`;
+}
+
+function awardInfinitePoints(tier) {
+  const gain = INFINITE_POINTS_BY_TIER[tier] ?? 1;
+  infinitePoints += gain;
+  try {
+    localStorage.setItem(POINTS_STORAGE_KEY, String(infinitePoints));
+  } catch {
+    // Stockage indisponible (navigation privée, quota...) : le total reste
+    // correct en mémoire pour la session en cours, simplement pas persisté.
+  }
+  renderInfinitePoints();
+  // Retire puis rajoute la classe d'animation pour pouvoir la relancer même
+  // si un gain précédent est encore en cours (un simple ajout ne rejouerait
+  // pas le keyframe si la classe est déjà présente) — le reflow forcé entre
+  // les deux garantit que le navigateur voit bien les deux mutations comme
+  // séparées plutôt que de les fusionner dans la même frame.
+  infinitePointsEl.classList.remove("points-gain");
+  void infinitePointsEl.offsetWidth;
+  infinitePointsEl.classList.add("points-gain");
+}
+
+renderInfinitePoints();
+
 // Le compteur affiché (et l'entrée du système d'étoiles) doit baisser
 // quand on retire une lumière, pas monter: l'objectif est de résoudre le
 // puzzle avec le moins de lumières posées possible, pas juste d'y arriver
@@ -130,6 +180,7 @@ function loadLevel(index) {
 }
 
 function handleCellClick(r, c) {
+  if (mode === "infinite" && infiniteAdvancePending) return;
   const result = grid.toggleLight(r, c);
   if (result === "placed" || result === "removed") {
     // Un seul clic peut affecter PLUSIEURS cases à la fois (neurone
@@ -160,8 +211,22 @@ function handleCellClick(r, c) {
 
   if (grid.isWon()) {
     playWin();
-    renderStars(computeStars(grid.getPlacedLightCount(), currentLevel));
-    winOverlay.classList.remove("hidden");
+    if (mode === "infinite") {
+      // Mode Infini: plus de notation par étoiles basée sur les coups ni
+      // d'écran de victoire bloquant (retrait demandé — voir
+      // docs/infinite-mode-design.md) : gain de points selon le palier
+      // mesuré du niveau, puis enchaînement direct sur le suivant (servi
+      // instantanément depuis le buffer dans le cas courant — voir
+      // runGeneration/infiniteClient.js). Le petit délai laisse le temps de
+      // percevoir le son de victoire et l'animation de gain avant la
+      // transition, plutôt qu'un changement de plateau instantané et brutal.
+      infiniteAdvancePending = true;
+      awardInfinitePoints(lastInfiniteResult?.measuredTier ?? lastInfiniteResult?.requestedTier ?? 1);
+      setTimeout(() => runGeneration({ intoBoard: true }), 500);
+    } else {
+      renderStars(computeStars(grid.getPlacedLightCount(), currentLevel));
+      winOverlay.classList.remove("hidden");
+    }
   }
 }
 
@@ -222,6 +287,16 @@ let infiniteDifficulty = 1;
 let infiniteEnabledFeatures = new Set(Object.keys(FEATURES).filter((k) => FEATURES[k].implemented));
 let lastInfiniteResult = null; // dernier niveau généré (pour "Réglages" -> retour au jeu sans perdre la partie)
 let infiniteRequestInFlight = false;
+// Vrai entre le moment où un niveau Infini vient d'être résolu et celui où
+// le niveau suivant est effectivement chargé (voir le court délai dans
+// handleCellClick) : sans overlay bloquant pour couvrir le plateau pendant
+// ce court délai (retiré avec le compteur de coups), le joueur pourrait
+// continuer à cliquer sur la grille déjà résolue — ce garde-fou ignore ces
+// clics et empêche surtout un double gain de points si `isWon()` reste vrai
+// et qu'un nouveau clic redéclenche la branche de victoire avant la
+// transition. Remis à `false` dans loadInfiniteLevel, point de passage commun
+// à chaque (re)chargement d'un niveau Infini.
+let infiniteAdvancePending = false;
 
 /** Config courante, telle que passée à requestLevel/ensureLevelBuffer/
  * takeBufferedLevel — un seul endroit pour construire cet objet, pour ne
@@ -309,6 +384,7 @@ function starsLabel(tier) {
 }
 
 function loadInfiniteLevel(result) {
+  infiniteAdvancePending = false;
   lastInfiniteResult = result;
   currentLevelIndex = -1;
   currentLevel = result.level;
@@ -412,6 +488,12 @@ let mode = "play";
 function setMode(next) {
   mode = next;
   document.querySelectorAll(".mode-switch-btn").forEach((b) => b.classList.toggle("active", b.dataset.mode === next));
+
+  // Le compteur de coups (et la notation par étoiles qui en dépend) n'existe
+  // plus qu'en mode Jouer statique — voir handleCellClick. Basculé ici
+  // plutôt que dans startBoard: syncMoveUi (partagée) continue de mettre à
+  // jour son texte en Infini aussi (inoffensif), seul l'AFFICHAGE change.
+  moveCountEl.classList.toggle("hidden", next === "infinite");
 
   editorView.classList.toggle("hidden", next !== "editor");
   if (next === "editor") {

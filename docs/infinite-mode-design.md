@@ -576,3 +576,59 @@ Ce qui reste ouvert, à affiner en implémentant plutôt qu'en discutant dans l'
 
 Prochaine étape : implémentation de la Phase 1 (MVP) — la partie la plus proche de
 code déjà existant et testé.
+
+## 12. Retrait du compteur de coups + système de points (Infini uniquement)
+
+Retour utilisateur : le compteur de coups et la notation par étoiles qui en
+découle (voir `computeStars` dans `main.js`) sont jugés inutiles et polluants
+en mode Infini — l'écran de victoire bloquant (clic requis sur « Niveau
+suivant ») n'a plus lieu d'être maintenant que le buffer de 3 niveaux d'avance
+(section 11) permet de servir le niveau suivant instantanément.
+
+Portée confirmée par l'utilisateur : **Infini uniquement**. Les niveaux
+statiques (campagne, `levels.js`) conservent intégralement le compteur de
+coups, la notation par étoiles et l'écran de victoire existants — aucun
+changement de comportement pour eux.
+
+**Changements côté Infini** (`main.js`, `handleCellClick`) :
+
+- Le branchement sur `grid.isWon()` se scinde désormais selon `mode` : la
+  branche statique (`else`) est un copier-coller inchangé de l'ancien
+  comportement ; la branche `mode === "infinite"` ne calcule plus
+  `computeStars`/n'affiche plus `winOverlay` — elle attribue des points (voir
+  ci-dessous), puis enchaîne automatiquement sur le niveau suivant après un
+  court délai (500 ms, le temps de percevoir le son de victoire et
+  l'animation de gain) via `runGeneration({ intoBoard: true })`, qui sert
+  quasi toujours le niveau instantanément depuis le buffer.
+- `#move-count` reste fonctionnel en interne (aucun changement à
+  `syncMoveUi`/`grid.getPlacedLightCount`, pour ne pas toucher au code partagé
+  avec le mode statique) mais est simplement **masqué visuellement**
+  (`.hidden`) dès qu'on bascule sur `mode === "infinite"`, et réaffiché en
+  revenant sur `"play"` — géré dans `setMode`.
+- Garde-fou `infiniteAdvancePending` : sans overlay bloquant pour couvrir le
+  plateau pendant le court délai avant transition, un joueur pourrait continuer
+  à cliquer sur la grille déjà résolue — ce qui redéclencherait la branche de
+  victoire (`grid.isWon()` reste vrai) et doublerait le gain de points. Ce
+  booléen, mis à `true` dès la victoire et remis à `false` dans
+  `loadInfiniteLevel` (point de passage commun à tout chargement de niveau
+  Infini, buffer ou génération fraîche), fait ignorer tout clic pendant cette
+  fenêtre.
+
+**Système de points** (`INFINITE_POINTS_BY_TIER`) : terminer un niveau Infini
+rapporte 1 / 3 / 5 points selon son palier mesuré (`measuredTier`, 1★/2★/3★ —
+fallback sur `requestedTier` si absent). Le total cumulé est persisté dans
+`localStorage` (clé `lightup-infinite-points`, même principe que `STORAGE_KEY`
+dans `editor.js`) et affiché en permanence dans la barre du haut
+(`#infinite-points`, entre le réglage de volume et le sélecteur de mode), avec
+une brève animation d'échelle/couleur (`.points-gain`, keyframe
+`points-pulse`) à chaque gain pour le rendre perceptible sans être intrusif.
+
+Utilité des points : **non définie pour l'instant**, discussion ouverte avec
+l'utilisateur (collection de cartes/boosters achetables, méta-jeu type
+clicker/idle lié au thème neurones/mémoire, ou autre piste à explorer plus
+tard). Seuls le gain, le stockage et l'affichage sont câblés à ce stade.
+
+Validation : `npm run check-unique` (mêmes résultats de référence qu'avant ce
+changement — aucune régression sur les 26 niveaux statiques, ce qui est
+attendu puisque ce changement ne touche que du flux UI/mode Infini, jamais la
+génération ni la résolution) et `npm run build` passent tous les deux.

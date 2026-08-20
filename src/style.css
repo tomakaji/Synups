@@ -111,6 +111,10 @@ body {
   color: var(--text-dim);
 }
 
+.move-count.hidden {
+  display: none;
+}
+
 #level-name {
   min-width: 1.5em;
   text-align: center;
@@ -666,6 +670,41 @@ body {
 
 .infinite-badge.hidden {
   display: none;
+}
+
+.infinite-points {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: var(--panel);
+  border: 1px solid #3a3550;
+  border-radius: 999px;
+  padding: 3px 11px;
+  white-space: nowrap;
+}
+
+.infinite-points.hidden {
+  display: none;
+}
+
+.infinite-points.points-gain {
+  animation: points-pulse 0.5s ease-out;
+}
+
+@keyframes points-pulse {
+  0% {
+    transform: scale(1);
+    color: var(--accent);
+  }
+  35% {
+    transform: scale(1.18);
+    color: #ffe08a;
+  }
+  100% {
+    transform: scale(1);
+    color: var(--accent);
+  }
 }
 
 #btn-infinite-settings,
