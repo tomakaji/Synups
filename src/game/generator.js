@@ -212,14 +212,58 @@ const MAX_REPAIR_ITERATIONS = 15;
 
 // Phase 2 (Couleur) : bornes de la recherche "réintroduire une ambiguïté
 // contrôlée puis la discriminer par la couleur" (voir tryColorizeForNecessity/
-// tryDiscriminatingColoring). Chaque combinaison (charge retirée × sous-
-// ensemble colorié) est bon marché (une construction de grille + recompute,
-// pas une recherche) — ces bornes limitent le nombre de combinaisons
-// essayées, pas leur coût individuel. `deadline` (partagé, voir plus haut)
-// reste le vrai garde-fou wall-clock.
-const MAX_COLOR_REMOVAL_CANDIDATES = 24;
+// tryDiscriminatingColoring). Le nombre de combinaisons de RETRAIT essayées
+// est défini par étoile dans COLOR_REMOVAL_PLAN_BY_STAR (plus bas) ; celle-ci
+// borne le nombre de sous-ensembles de charges COLORIÉES essayés une fois
+// l'ambiguïté trouvée. `deadline` (partagé, voir plus haut) reste le vrai
+// garde-fou wall-clock dans les deux cas.
 const MAX_COLOR_ATTEMPTS_PER_SIZE = 10;
 const CLUE_COLOR_LETTERS = ["r", "g", "b"];
+
+// Retour utilisateur : la couleur ne doit pas se rabattre sur un
+// renforcement numérique pour paraître plus difficile — au contraire, plus
+// le palier visé est élevé, plus on retire d'indices SIMULTANÉMENT pour
+// ouvrir une ambiguïté plus riche (plusieurs alternatives à discriminer,
+// donc potentiellement plusieurs charges/cibles nécessaires) que la couleur
+// vient trancher. Essayé du plus grand nombre au plus petit (repli
+// progressif si le plus ambitieux échoue sur ce plateau précis) — clés =
+// ÉTOILES. 1★ reste à un seul retrait (déjà jugé satisfaisant).
+// K=3 mesuré à l'usage: sur un plateau 3★ déjà très épuré (peu de charges
+// survivantes), retirer 3 charges à la fois peut ouvrir une ambiguïté
+// massive (bien au-delà de COLOR_AMBIGUITY_CAP), rendant CHAQUE tentative
+// d'énumération coûteuse — jusqu'à ~30s cumulés mesurés sur un essai
+// malchanceux malgré le garde-fou deadline (le même type de dépassement que
+// le bug corrigé plus tôt sur stripToTargetTier: le budget de nœuds borne
+// chaque appel individuellement, pas leur somme). Plafonné à 2 partout.
+// `candidates` est VOLONTAIREMENT réduit pour un retrait multiple (plus
+// cher par tentative que le retrait unique) — mesuré: passer autant de
+// tentatives sur k=2 qu'aujourd'hui sur k=1 consommait presque tout le
+// budget de temps avant même d'atteindre le repli k=1 (pourtant bien plus
+// fiable), faisant chuter la fréquence globale de la couleur. Un budget k=2
+// plus court laisse plus de marge au repli fiable si k=2 ne marche pas vite.
+const COLOR_REMOVAL_PLAN_BY_STAR = {
+  1: [{ count: 1, candidates: 24 }],
+  2: [
+    { count: 2, candidates: 10 },
+    { count: 1, candidates: 24 },
+  ],
+  3: [
+    { count: 2, candidates: 10 },
+    { count: 1, candidates: 24 },
+  ],
+};
+// Cap d'énumération pour la détection d'ambiguïté (voir
+// tryColorizeForNecessity) : plus large que du temps du retrait unique (qui
+// se contentait de 3) car retirer 2 indices à la fois peut légitimement
+// ouvrir plus de 2-3 solutions blanches — `tryDiscriminatingColoring` gère
+// nativement un nombre arbitraire d'alternatives.
+const COLOR_AMBIGUITY_CAP = 5;
+// Budget de nœuds DÉDIÉ (pas preset.repairNodeBudget, potentiellement 150k)
+// pour la détection d'ambiguïté: chaque tentative doit rester bon marché
+// puisqu'il y en a potentiellement des dizaines par génération — un budget
+// plus généreux ferait juste explorer plus longtemps une forme déjà trop
+// relâchée pour ce retrait précis, sans plus de chances utiles d'exhaustivité.
+const COLOR_AMBIGUITY_NODE_BUDGET = 40_000;
 
 // Multiplicateur appliqué au budget de tentatives/temps (voir
 // DEFAULT_MAX_ATTEMPTS_BY_TIER/DEFAULT_MAX_TIME_MS_BY_TIER) quand la Couleur
@@ -736,59 +780,74 @@ function tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand,
 
 /**
  * Étape 1 + orchestration (voir commentaire d'en-tête) : essaie de rendre la
- * couleur NÉCESSAIRE sur le plateau déjà unique/minimisé `layout`. Modifie
- * `layout` EN PLACE seulement en cas de succès complet (retrait de charge +
- * coloriage discriminant + vérification finale au solveur, les trois
- * validés) ; le restaure fidèlement à son état d'entrée sinon. Retourne le
- * résultat `analyzeAndCount` du plateau colorié final (avec couleur prise en
+ * couleur NÉCESSAIRE sur le plateau déjà unique/minimisé `layout`. Retire
+ * PLUSIEURS charges à la fois selon `stars` (voir COLOR_REMOVAL_COUNTS_BY_STAR
+ * — plus le palier est élevé, plus l'ambiguïté ouverte est riche, avec repli
+ * progressif vers un retrait plus modeste si le plus ambitieux échoue sur ce
+ * plateau précis). Modifie `layout` EN PLACE seulement en cas de succès
+ * complet (retrait + coloriage discriminant + vérification finale au
+ * solveur, les trois validés) ; le restaure fidèlement à son état d'entrée
+ * sinon. Retourne le résultat `analyzeAndCount` du plateau colorié final
+ * (avec couleur prise en
  * compte) en cas de succès, `null` sinon — dans ce cas l'appelant garde le
  * plateau non colorié tel quel (la couleur reste probabiliste, jamais
  * forcée: voir commentaire d'en-tête).
  */
-function tryColorizeForNecessity(layout, rows, cols, referenceSolution, rand, preset, deadline) {
-  const candidates = shuffle(collectPlainClueCells(layout, rows, cols), rand).slice(
-    0,
-    MAX_COLOR_REMOVAL_CANDIDATES
-  );
+function tryColorizeForNecessity(layout, rows, cols, referenceSolution, rand, preset, stars, deadline) {
+  const removalPlan = COLOR_REMOVAL_PLAN_BY_STAR[stars] ?? [{ count: 1, candidates: 24 }];
 
-  for (const [r, c] of candidates) {
-    if (Date.now() > deadline) return null;
+  for (const { count: k, candidates: maxCandidates } of removalPlan) {
+    const clueCells = collectPlainClueCells(layout, rows, cols);
+    if (clueCells.length < k) continue; // pas assez de charges survivantes pour retirer k à la fois
 
-    const prevToken = layout[r][c];
-    layout[r][c] = "X"; // retrait tentatif: réintroduit potentiellement une ambiguïté blanche contrôlée
+    for (let attempt = 0; attempt < maxCandidates; attempt++) {
+      if (Date.now() > deadline) return null;
 
-    const level = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
-    const { solutions, exhausted } = enumerateSolutions(level, 3, preset.repairNodeBudget, { ignoreColor: true });
+      const subset = shuffle([...clueCells], rand).slice(0, k);
+      const prevTokens = subset.map(([r, c]) => layout[r][c]);
+      for (const [r, c] of subset) layout[r][c] = "X"; // retrait tentatif: réintroduit potentiellement une ambiguïté blanche contrôlée
 
-    // On ne garde que les cas à ambiguïté CONTRÔLÉE (2-3 solutions
-    // blanches exactes, cap=3 atteint et épuisé) — "beaucoup" de solutions
-    // serait coûteux à discriminer entièrement et signale une forme trop
-    // relâchée pour ce retrait précis.
-    if (!exhausted || solutions.length < 2) {
-      layout[r][c] = prevToken;
-      continue;
-    }
+      const level = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
+      const { solutions, exhausted } = enumerateSolutions(level, COLOR_AMBIGUITY_CAP, COLOR_AMBIGUITY_NODE_BUDGET, {
+        ignoreColor: true,
+      });
 
-    const winnerIdx = findReferenceSolutionIndex(solutions, referenceSolution);
-    const winner = solutions[winnerIdx];
-    const alternates = solutions.filter((_, idx) => idx !== winnerIdx);
-
-    const applied = tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand, deadline);
-    if (applied) {
-      const finalLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
-      const verify = analyzeAndCount(finalLevel, 2, preset.nodeBudget);
-      const whiteCheck = enumerateSolutions(finalLevel, 2, preset.repairNodeBudget, { ignoreColor: true });
-
-      if (verify && verify.exhausted && verify.count === 1 && whiteCheck.exhausted && whiteCheck.solutions.length >= 2) {
-        return verify; // succès: layout garde son retrait + coloriage, c'est le résultat final
+      // On ne garde que les cas à ambiguïté CONTRÔLÉE (au moins 2 solutions
+      // blanches, cap atteint et épuisé) — "trop" de solutions (cap non
+      // épuisé) serait coûteux à discriminer entièrement et signale une
+      // forme trop relâchée pour ce retrait précis.
+      if (!exhausted || solutions.length < 2) {
+        subset.forEach(([r, c], i) => (layout[r][c] = prevTokens[i]));
+        continue;
       }
-      // Vérification finale ratée malgré un coloriage a priori discriminant
-      // (garde-fou défensif, ex. interaction imprévue) : annule le
-      // coloriage avant de restaurer aussi la charge retirée ci-dessous.
-      for (let i = applied.length - 1; i >= 0; i--) layout[applied[i][0]][applied[i][1]] = applied[i][2];
-    }
 
-    layout[r][c] = prevToken; // ce retrait n'a mené à rien d'exploitable: on essaie un autre candidat
+      const winnerIdx = findReferenceSolutionIndex(solutions, referenceSolution);
+      const winner = solutions[winnerIdx];
+      const alternates = solutions.filter((_, idx) => idx !== winnerIdx);
+
+      const applied = tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand, deadline);
+      if (applied) {
+        const finalLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
+        const verify = analyzeAndCount(finalLevel, 2, preset.nodeBudget);
+        const whiteCheck = enumerateSolutions(finalLevel, 2, preset.repairNodeBudget, { ignoreColor: true });
+
+        if (
+          verify &&
+          verify.exhausted &&
+          verify.count === 1 &&
+          whiteCheck.exhausted &&
+          whiteCheck.solutions.length >= 2
+        ) {
+          return verify; // succès: layout garde son retrait + coloriage, c'est le résultat final
+        }
+        // Vérification finale ratée malgré un coloriage a priori
+        // discriminant (garde-fou défensif, ex. interaction imprévue) :
+        // annule le coloriage avant de restaurer aussi les charges retirées.
+        for (let i = applied.length - 1; i >= 0; i--) layout[applied[i][0]][applied[i][1]] = applied[i][2];
+      }
+
+      subset.forEach(([r, c], i) => (layout[r][c] = prevTokens[i])); // ce retrait n'a mené à rien: on essaie un autre sous-ensemble
+    }
   }
   return null;
 }
@@ -833,7 +892,7 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
   let finalAnalysis = analysis;
   let colorApplied = false;
   if (wantsColor) {
-    const colorAnalysis = tryColorizeForNecessity(layout, rows, cols, analysis.solution, rand, preset, deadline);
+    const colorAnalysis = tryColorizeForNecessity(layout, rows, cols, analysis.solution, rand, preset, stars, deadline);
     if (colorAnalysis) {
       finalAnalysis = colorAnalysis;
       colorApplied = true;

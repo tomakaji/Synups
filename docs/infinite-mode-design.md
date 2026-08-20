@@ -425,6 +425,36 @@ de passe-passe "retrait ciblé + coloriage discriminant" — passé ce point,
 en 2★/3★ avec couleur cochée : ~2-4s en moyenne, pire cas observé ~6-11s
 (dans un budget déjà élargi, ne bloque jamais l'UI grâce au Worker).
 
+**Troisième retour — retrait multi-indices (pas de repli numérique)** : un
+troisième retour a signalé que les niveaux colorés paraissaient un peu plus
+faciles que leur palier statique (surtout 2★/3★) — la réaction initiale (exiger
+que le niveau reste difficile même en ignorant la couleur) a été explicitement
+rejetée : l'utilisateur voulait au contraire RENFORCER l'impact de la couleur,
+pas s'en remettre au numérique. Solution retenue : selon l'étoile, retirer
+PLUSIEURS charges à la fois (au lieu d'une seule) pour ouvrir une ambiguïté
+plus riche que la couleur doit trancher — `COLOR_REMOVAL_PLAN_BY_STAR`
+(1★: 1 charge ; 2★/3★: 2 charges essayées en premier, repli sur 1 si aucune
+combinaison n'aboutit). `tryDiscriminatingColoring` gérait déjà nativement un
+nombre arbitraire d'alternatives, donc aucun changement nécessaire là.
+
+Calibrage : un premier essai à 3 charges retirées simultanément en 3★ s'est
+avéré bien trop coûteux (jusqu'à ~30s cumulés sur un plateau déjà très épuré,
+où l'ambiguïté rouverte peut exploser bien au-delà du cap d'énumération) —
+plafonné à 2 partout, avec un budget de nœuds DÉDIÉ et volontairement modeste
+pour la détection d'ambiguïté (`COLOR_AMBIGUITY_NODE_BUDGET = 40_000`, plutôt
+que de réutiliser `preset.repairNodeBudget`) puisqu'il y a potentiellement des
+dizaines de tentatives par génération. Un premier essai à budget de tentatives
+égal entre k=2 et k=1 a aussi fait chuter la fréquence de couleur en 2★
+(~58-60%, contre ~80-87% avant) : la recherche épuisait presque tout son temps
+sur k=2 avant même d'atteindre le repli k=1, pourtant bien plus fiable —
+corrigé en réduisant le nombre de tentatives allouées à k=2 (10 au lieu de 24),
+laissant plus de marge au repli. Résultat final validé : fréquence de couleur
+retrouvée (~100% en 1★/3★, ~80% en 2★) ET niveaux plus riches quand la couleur
+est présente (moyenne ~2.0-2.2 charges coloriées / ~1.3-1.6 cibles par niveau,
+contre ~1.5-1.7 / ~1.1-1.2 avant ce changement) — latence comparable au round
+précédent (2★ ~5-6s, 3★ ~4-5s en moyenne, pire cas ponctuel ~20s sur un essai
+malchanceux en 3★, dans le budget déjà élargi).
+
 Pour les étoiles **en jeu** (1-3 étoiles selon le nombre de coups du joueur, système
 déjà existant via `starThresholds`/`computeStars`), le générateur doit remplir
 explicitement `starThresholds: [solution.length, Math.ceil(solution.length * 1.5)]`
