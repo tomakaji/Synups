@@ -371,6 +371,60 @@ unique en couleur). Latence inchangée par rapport à la Phase 1 (le coloriage
 lui-même ne fait que des constructions de grille + `recompute()`, jamais de
 recherche — seul le coût déjà existant de `stripToTargetTier` domine).
 
+**Recalibrage — lisibilité + fréquence (deux retours utilisateur ultérieurs)**
+
+Premier retour : la propriété "nécessaire" (vérifiée par le solveur) ne
+suffit pas à garantir un niveau LISIBLE — un coloriage peut discriminer une
+alternative en s'appuyant sur SA teinte à elle plutôt que sur celle de la
+vraie solution, produisant une cible affichée "blanche" sans aucun laser
+coloré visible qui l'explique, et/ou une charge coloriée qui ne contribue à
+aucune cible retenue (décorative). Deux garde-fous ajoutés dans
+`tryDiscriminatingColoring` :
+
+1. Une case-cible n'est retenue que si elle est réellement colorée dans la
+   solution GAGNANTE (pas seulement "différente" de l'alternative) — plus
+   jamais de cible blanche par défaut.
+2. Une passe de nettoyage après coup retire la couleur de toute charge qui ne
+   contribue à AUCUNE cible retenue — vérifié localement (comparaison directe
+   contre `winner`/les alternatives déjà connues, sans nouvelle recherche
+   solveur), donc sans coût perceptible. Gère nativement les mélanges de
+   couleurs : si deux charges se combinent pour produire la teinte exacte
+   d'une cible, en retirer une romprait le mélange, donc les deux sont
+   automatiquement gardées.
+
+Second retour : la couleur devait être quasi systématique quand cochée par le
+joueur (avant : ~35-60% des niveaux seulement), et privilégier plus de
+couleur visible quand c'est possible. Trois leviers, tous dans `generator.js` :
+
+- `FEATURES.color.pickProbability = 0.95` (au lieu du taux partagé 0.6 de
+  `pickFeatureSubset`) — la couleur est désormais choisie pour presque
+  chaque tentative de génération, pas seulement 60% d'entre elles.
+- Les tailles de sous-ensemble coloriées sont essayées en ordre DÉCROISSANT
+  (`clueCells.length, 5, 3, 2, 1` plutôt que `1, 2, 3, tout`) — favorise plus
+  de couleur visible quand c'est possible ; la passe de nettoyage ci-dessus
+  élimine de toute façon ce qui s'avère décoratif, donc partir large ne
+  risque jamais de laisser une charge inutile.
+- `generateLevel` : un candidat n'est plus considéré "parfait" (arrêt
+  immédiat de la boucle de tentatives) sur son seul palier de difficulté
+  quand la couleur est demandée — il doit AUSSI l'avoir obtenue, sinon la
+  boucle continue à retenter (en gardant ce candidat comme filet de sécurité
+  via `isBetterCandidate`, désormais couleur-aware) jusqu'à trouver mieux ou
+  épuiser un budget élargi de `COLOR_BUDGET_MULTIPLIER = 2.2` (trouver À LA
+  FOIS le bon palier ET une couleur nécessaire est un objectif combiné plus
+  dur qu'un seul des deux). Même logique répliquée dans
+  `infiniteClient.js`/`requestLevel` (critère `isPerfect` du pool de
+  Workers).
+
+Validé empiriquement après ce recalibrage (20-30 tirages/palier) : 0 cible
+blanche et 0 charge décorative observées sur tous les niveaux coloriés
+générés (contre le bug initialement rapporté), propriété "nécessaire" encore
+vérifiée à 100%. Fréquence d'usage de la couleur : ~100% en 1★ et 3★,
+~80-87% en 2★ (palier intermédiaire structurellement moins favorable au tour
+de passe-passe "retrait ciblé + coloriage discriminant" — passé ce point,
+élargir encore le budget a des rendements décroissants, déjà mesuré). Latence
+en 2★/3★ avec couleur cochée : ~2-4s en moyenne, pire cas observé ~6-11s
+(dans un budget déjà élargi, ne bloque jamais l'UI grâce au Worker).
+
 Pour les étoiles **en jeu** (1-3 étoiles selon le nombre de coups du joueur, système
 déjà existant via `starThresholds`/`computeStars`), le générateur doit remplir
 explicitement `starThresholds: [solution.length, Math.ceil(solution.length * 1.5)]`

@@ -121,10 +121,19 @@ function seededRandom(seed) {
  * DIFFICULTY_PRESETS) ; `requires` grise une feature tant que sa dépendance
  * n'est pas cochée ; `implemented:false` = déjà répertoriée pour l'UI et le
  * phasage futur, mais pas encore générée (voir le plan de phasage du doc).
+ * `pickProbability` (voir `pickFeatureSubset`) : probabilité qu'une feature
+ * cochée ET dans le budget soit effectivement incluse dans UNE tentative de
+ * génération donnée — 0.6 par défaut (variété, "tout coché" ne veut pas dire
+ * "présent partout"). La Couleur déroge à cette règle (retour utilisateur
+ * explicite: quand elle est cochée, il doit être RARE de tomber sur un
+ * niveau sans elle) — voir aussi `generateLevel`, qui élargit le budget de
+ * tentatives et ne s'arrête plus tôt que sur un candidat qui l'a vraiment
+ * obtenue, ce qui fait le plus gros du travail ; ce taux de pioche élevé
+ * n'est qu'un premier filtre, pas la garantie à lui seul.
  */
 export const FEATURES = {
   forbidden: { label: "Cases interdites", weight: 1, implemented: true },
-  color: { label: "Couleur (charges + cibles)", weight: 3, implemented: true },
+  color: { label: "Couleur (charges + cibles)", weight: 3, implemented: true, pickProbability: 0.95 },
   mirror: { label: "Miroir dévieur", weight: 2, implemented: false, requires: "color" },
   filter: { label: "Filtre", weight: 2, implemented: false, requires: "color" },
   prism: { label: "Prisme", weight: 3, implemented: false, requires: "color" },
@@ -208,9 +217,17 @@ const MAX_REPAIR_ITERATIONS = 15;
 // pas une recherche) — ces bornes limitent le nombre de combinaisons
 // essayées, pas leur coût individuel. `deadline` (partagé, voir plus haut)
 // reste le vrai garde-fou wall-clock.
-const MAX_COLOR_REMOVAL_CANDIDATES = 12;
-const MAX_COLOR_ATTEMPTS_PER_SIZE = 6;
+const MAX_COLOR_REMOVAL_CANDIDATES = 24;
+const MAX_COLOR_ATTEMPTS_PER_SIZE = 10;
 const CLUE_COLOR_LETTERS = ["r", "g", "b"];
+
+// Multiplicateur appliqué au budget de tentatives/temps (voir
+// DEFAULT_MAX_ATTEMPTS_BY_TIER/DEFAULT_MAX_TIME_MS_BY_TIER) quand la Couleur
+// est cochée par le joueur (voir generateLevel) — trouver un candidat à la
+// fois au bon palier ET avec une couleur nécessaire est un objectif combiné
+// plus dur qu'un seul des deux, donc la boucle a besoin d'un peu plus de
+// marge pour y arriver presque toujours plutôt que d'abandonner tôt.
+const COLOR_BUDGET_MULTIPLIER = 2.2;
 
 // Budget global d'une génération (Phase F du doc), CLÉS = ÉTOILES affichées
 // (voir SOLVER_TIER_FOR_STARS) : le premier des deux atteint arrête la
@@ -296,7 +313,7 @@ function pickFeatureSubset(rand, enabledKeys, budget) {
   for (const k of candidates) {
     const w = FEATURES[k].weight;
     if (w > remaining) continue;
-    if (rand() < 0.6) {
+    if (rand() < (FEATURES[k].pickProbability ?? 0.6)) {
       chosen.push(k);
       remaining -= w;
     }
@@ -566,6 +583,19 @@ function buildGridWithLights(layout, rows, cols, lights) {
   return grid;
 }
 
+/** Vrai si (r,c) est atteinte par un VRAI laser coloré (pas juste "blanc par
+ * défaut, faute de mieux") dans `grid` — voir grid.js recompute(): `_lit`
+ * retombe sur du blanc dès qu'AUCUNE lumière colorée n'atteint la case, donc
+ * ce n'est PAS `_lit` qu'il faut lire pour savoir si un laser a vraiment
+ * joué un rôle ici, mais `_litColor` (l'accumulation de teinte AVANT ce
+ * retombé). Utilisé pour ne jamais désigner une cible "blanche par défaut"
+ * (voir commentaire d'en-tête, bug rapporté: cible blanche sans neurone
+ * coloré visiblement connecté). */
+function isGenuinelyColored(grid, r, c) {
+  const tint = grid.cellAt(r, c)._litColor;
+  return !!(tint && (tint.r || tint.g || tint.b));
+}
+
 /**
  * Étape 2 (voir commentaire d'en-tête) : essaie de colorier un sous-ensemble
  * des charges numériques restantes puis de désigner des cases-cibles dont la
@@ -578,12 +608,34 @@ function buildGridWithLights(layout, rows, cols, lights) {
  * malgré tout) ; retourne `null` si aucune combinaison essayée dans le
  * budget n'a discriminé toutes les alternatives (layout déjà remis dans son
  * état d'origine dans ce cas).
+ *
+ * Deux garde-fous de LISIBILITÉ (retour utilisateur après un premier essai:
+ * des niveaux avaient une cible blanche sans neurone coloré visiblement en
+ * cause, ou un neurone colorié qui ne servait à rien) — au-delà de la seule
+ * propriété logique "ambigu en blanc, unique en couleur" déjà garantie par
+ * l'appelant:
+ * 1. Une case-cible n'est retenue QUE si elle est réellement colorée dans la
+ *    solution GAGNANTE (`isGenuinelyColored`, pas juste "différente de
+ *    l'alternative") — jamais de cible "blanche par défaut" qui ne
+ *    s'explique par aucun laser visible dans la vraie solution.
+ * 2. Une fois les cibles choisies, une passe de nettoyage retire la couleur
+ *    de toute charge qui ne contribue à AUCUNE cible retenue (vérifié
+ *    localement contre `winner`/`alternates`, déjà connues — pas besoin de
+ *    relancer une recherche solveur ici). Gère nativement les mélanges: si
+ *    deux charges se combinent pour produire la couleur exacte d'une cible,
+ *    retirer l'une romprait le mélange, donc la vérification les garde
+ *    toutes les deux.
+ * Les tailles de sous-ensemble sont essayées en ordre DÉCROISSANT (retour
+ * utilisateur: préférer plus de couleur visible plutôt que le minimum
+ * strict) — la passe de nettoyage élimine de toute façon ce qui s'avère
+ * décoratif, donc partir large ne risque jamais de laisser une charge
+ * inutile dans le résultat final.
  */
 function tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand, deadline) {
   const clueCells = collectPlainClueCells(layout, rows, cols);
   if (clueCells.length === 0) return null;
 
-  const sizes = [...new Set([1, 2, 3, clueCells.length].filter((n) => n <= clueCells.length))];
+  const sizes = [...new Set([clueCells.length, 5, 3, 2, 1].filter((n) => n <= clueCells.length))];
 
   for (const size of sizes) {
     for (let attempt = 0; attempt < MAX_COLOR_ATTEMPTS_PER_SIZE; attempt++) {
@@ -600,13 +652,15 @@ function tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand,
       const altGrids = alternates.map((alt) => buildGridWithLights(layout, rows, cols, alt));
 
       // Pour chaque alternative: quelles cases vides (encore "." — pas déjà
-      // charge/interdite/void/cible) ont une teinte différente entre winner
-      // et cette alternative, sous CE coloriage précis ?
+      // charge/interdite/void/cible), réellement colorées dans winner (voir
+      // garde-fou 1 ci-dessus), ont une teinte différente entre winner et
+      // cette alternative, sous CE coloriage précis ?
       const perAlternateDiffs = altGrids.map((altGrid) => {
         const diffs = [];
         for (let r = 0; r < rows; r++)
           for (let c = 0; c < cols; c++) {
             if (layout[r][c] !== ".") continue;
+            if (!isGenuinelyColored(winnerGrid, r, c)) continue;
             const wLit = winnerGrid.cellAt(r, c)._lit;
             const aLit = altGrid.cellAt(r, c)._lit;
             if (!sameLitColor(wLit, aLit)) diffs.push([r, c]);
@@ -645,6 +699,33 @@ function tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand,
         if (!letter) continue; // défensif: ne devrait jamais arriver (winner illumine toujours ses cases vides)
         applied.push([tr, tc, layout[tr][tc]]);
         layout[tr][tc] = letter;
+      }
+
+      // Garde-fou 2 (voir commentaire de la fonction): nettoie les charges
+      // coloriées décoratives. `applied[0..chosen.length-1]` correspond,
+      // dans le même ordre, aux entrées de `chosen` (poussées avant tout le
+      // reste, une par charge coloriée) — chaque test est purement local
+      // (pas de recherche solveur): winner doit toujours atteindre CHAQUE
+      // cible avec exactement sa couleur déjà figée, ET chaque alternative
+      // doit encore échouer sur AU MOINS une cible.
+      for (let i = 0; i < chosen.length; i++) {
+        const [r, c] = chosen[i];
+        const numberOnlyToken = applied[i][2];
+        const coloredToken = layout[r][c];
+        layout[r][c] = numberOnlyToken; // retrait tentatif
+
+        const testWinnerGrid = buildGridWithLights(layout, rows, cols, winner);
+        const winnerStillWins = targets.every(
+          ([tr, tc]) => targetLetterFor(testWinnerGrid.cellAt(tr, tc)._lit) === layout[tr][tc]
+        );
+        const altsStillFail =
+          winnerStillWins &&
+          alternates.every((alt) => {
+            const testAltGrid = buildGridWithLights(layout, rows, cols, alt);
+            return targets.some(([tr, tc]) => targetLetterFor(testAltGrid.cellAt(tr, tc)._lit) !== layout[tr][tc]);
+          });
+
+        if (!(winnerStillWins && altsStillFail)) layout[r][c] = coloredToken; // nécessaire: on la remet
       }
 
       return applied;
@@ -767,10 +848,12 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
  * Compare deux candidats déjà générés et retourne le meilleur selon l'ordre
  * de préférence de la Phase F (section 4/10 du doc) : solution unique avant
  * tout, puis palier de difficulté mesuré aussi proche que possible du palier
- * demandé, puis (à palier égal, imparfait) un `branchCount` qui pousse dans
- * la direction demandée.
+ * demandé, puis — si `preferColor` (voir `generateLevel`, la couleur a été
+ * cochée par le joueur) — la présence de couleur à palier égal, puis (à
+ * palier ET couleur égaux, imparfait) un `branchCount` qui pousse dans la
+ * direction demandée.
  */
-export function isBetterCandidate(a, b, requestedTier) {
+export function isBetterCandidate(a, b, requestedTier, preferColor = false) {
   if (!a) return true;
   const aUnique = a.solutionCount === 1;
   const bUnique = b.solutionCount === 1;
@@ -779,6 +862,12 @@ export function isBetterCandidate(a, b, requestedTier) {
   const aDist = a.measuredTier == null ? Infinity : Math.abs(a.measuredTier - requestedTier);
   const bDist = b.measuredTier == null ? Infinity : Math.abs(b.measuredTier - requestedTier);
   if (aDist !== bDist) return bDist < aDist;
+
+  if (preferColor) {
+    const aColor = a.featureSubset?.includes("color") ?? false;
+    const bColor = b.featureSubset?.includes("color") ?? false;
+    if (aColor !== bColor) return bColor;
+  }
 
   if (a.measuredTier != null && b.measuredTier != null && a.measuredTier === b.measuredTier) {
     const aBranch = a.branchCount ?? 0;
@@ -807,9 +896,16 @@ export function generateLevel({
 } = {}) {
   const stars = clampTier(difficulty);
   const solverTarget = SOLVER_TIER_FOR_STARS[stars]; // voir SOLVER_TIER_FOR_STARS: 1★→2, 2★→3, 3★→4
+  const colorRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("color");
   const defaultBudget = getGenerationBudget(stars);
-  const timeBudgetMs = maxTimeMs ?? defaultBudget.maxTimeMs;
-  const attemptsBudget = maxAttempts ?? defaultBudget.maxAttempts;
+  // Voir COLOR_BUDGET_MULTIPLIER: viser À LA FOIS le bon palier ET une
+  // couleur nécessaire est un objectif combiné plus dur qu'un seul des deux
+  // (voir le critère `isPerfect` ci-dessous, qui n'accepte plus l'un sans
+  // l'autre quand la couleur est demandée) — élargi pour que ça reste rare
+  // d'échouer sur la couleur plutôt que de réduire le budget effectif.
+  const budgetMultiplier = colorRequested ? COLOR_BUDGET_MULTIPLIER : 1;
+  const timeBudgetMs = Math.round((maxTimeMs ?? defaultBudget.maxTimeMs) * budgetMultiplier);
+  const attemptsBudget = Math.round((maxAttempts ?? defaultBudget.maxAttempts) * budgetMultiplier);
 
   const start = Date.now();
   const deadline = start + timeBudgetMs; // partagé jusque dans repairToUnique/stripToTargetTier (voir leurs docs)
@@ -841,11 +937,18 @@ export function generateLevel({
       attempts,
     };
 
-    if (measuredTier === solverTarget) {
+    // "Parfait" (arrêt immédiat) exige désormais AUSSI la couleur quand elle
+    // a été demandée par le joueur (voir commentaire ci-dessus) — un
+    // candidat au bon palier mais sans couleur reste un excellent filet de
+    // sécurité (via isBetterCandidate juste en dessous), mais ne coupe plus
+    // la boucle : on continue à retenter, dans le budget élargi, jusqu'à
+    // trouver mieux ou épuiser le budget.
+    const isPerfect = measuredTier === solverTarget && (!colorRequested || candidate.featureSubset.includes("color"));
+    if (isPerfect) {
       best = candidate;
-      break; // candidat parfait: inutile de continuer
+      break;
     }
-    if (isBetterCandidate(best, candidate, solverTarget)) best = candidate;
+    if (isBetterCandidate(best, candidate, solverTarget, colorRequested)) best = candidate;
   }
 
   if (!best) return null; // n'arrive que si même le fallback échoue à générer une forme jouable
