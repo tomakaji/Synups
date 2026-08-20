@@ -18,7 +18,7 @@ import { createBoardRenderer } from "./game/render.js";
 import { initEditor } from "./editor.js";
 import { findSolution } from "./game/solver.js";
 import { FEATURES } from "./game/generator.js";
-import { requestLevel } from "./game/infiniteClient.js";
+import { requestLevel, ensureLevelBuffer, takeBufferedLevel } from "./game/infiniteClient.js";
 
 let currentLevelIndex = 0;
 // Le niveau EFFECTIVEMENT en cours, statique (`levels[currentLevelIndex]`)
@@ -223,10 +223,21 @@ let infiniteEnabledFeatures = new Set(Object.keys(FEATURES).filter((k) => FEATUR
 let lastInfiniteResult = null; // dernier niveau généré (pour "Réglages" -> retour au jeu sans perdre la partie)
 let infiniteRequestInFlight = false;
 
+/** Config courante, telle que passée à requestLevel/ensureLevelBuffer/
+ * takeBufferedLevel — un seul endroit pour construire cet objet, pour ne
+ * jamais désynchroniser la signature utilisée pour lire/écrire le buffer. */
+function infiniteConfig() {
+  return { difficulty: infiniteDifficulty, enabledFeatureKeys: Array.from(infiniteEnabledFeatures) };
+}
+
 document.querySelectorAll(".infinite-star-btn").forEach((btn) => {
   btn.onclick = () => {
     infiniteDifficulty = Number(btn.dataset.difficulty);
     document.querySelectorAll(".infinite-star-btn").forEach((b) => b.classList.toggle("active", b === btn));
+    // Amorce le buffer dès le changement de réglage (pas seulement une fois
+    // en jeu) : si le joueur clique "Générer" juste après, le premier niveau
+    // a une chance d'être déjà prêt lui aussi.
+    ensureLevelBuffer(infiniteConfig());
   };
 });
 
@@ -263,6 +274,7 @@ function buildFeatureChecklist() {
       if (input.checked) infiniteEnabledFeatures.add(key);
       else infiniteEnabledFeatures.delete(key);
       refreshFeatureDependencies();
+      ensureLevelBuffer(infiniteConfig()); // voir commentaire sur le bouton étoile
     });
 
     infiniteFeaturesEl.appendChild(row);
@@ -309,6 +321,25 @@ function loadInfiniteLevel(result) {
 
 async function runGeneration({ intoBoard }) {
   if (infiniteRequestInFlight) return;
+
+  const config = infiniteConfig();
+
+  // Buffer d'abord (voir infiniteClient.js) : si un niveau pour cette config
+  // exacte est déjà prêt, on le sert INSTANTANÉMENT, sans passer par l'état
+  // "génération en cours" ni bloquer sur une Promise — c'est tout l'intérêt
+  // du buffer. On relance ensuite un remplissage (déjà fait par
+  // takeBufferedLevel) pendant que le joueur enchaîne sur ce niveau.
+  const buffered = takeBufferedLevel(config);
+  if (buffered) {
+    infiniteConfigView.classList.add("hidden");
+    navStaticEl.classList.add("hidden");
+    navInfiniteEl.classList.remove("hidden");
+    playView.classList.remove("hidden");
+    loadInfiniteLevel(buffered);
+    infiniteStatusEl.textContent = "";
+    return;
+  }
+
   infiniteRequestInFlight = true;
   btnInfiniteGenerate.disabled = true;
   btnInfiniteNext.disabled = true;
@@ -317,10 +348,7 @@ async function runGeneration({ intoBoard }) {
   statusTarget.textContent = intoBoard ? "∞ · génération…" : "Génération en cours…";
 
   try {
-    const result = await requestLevel({
-      difficulty: infiniteDifficulty,
-      enabledFeatureKeys: Array.from(infiniteEnabledFeatures),
-    });
+    const result = await requestLevel(config);
     if (!result) {
       statusTarget.textContent = intoBoard
         ? previousLabel
@@ -333,6 +361,10 @@ async function runGeneration({ intoBoard }) {
     playView.classList.remove("hidden");
     loadInfiniteLevel(result);
     infiniteStatusEl.textContent = "";
+    // Le résultat servi ici ne venait PAS du buffer (sinon on serait déjà
+    // sorti plus haut) : on lance quand même un remplissage pour préparer
+    // les prochains "Niveau suivant" pendant que le joueur résout celui-ci.
+    ensureLevelBuffer(config);
   } catch (err) {
     statusTarget.textContent = "Erreur du générateur — réessaie.";
     console.error(err);

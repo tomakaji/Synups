@@ -455,6 +455,37 @@ contre ~1.5-1.7 / ~1.1-1.2 avant ce changement) — latence comparable au round
 précédent (2★ ~5-6s, 3★ ~4-5s en moyenne, pire cas ponctuel ~20s sur un essai
 malchanceux en 3★, dans le budget déjà élargi).
 
+## 11. Buffer de pré-génération (`infiniteClient.js`)
+
+Retour utilisateur : viser 3 niveaux d'avance générés en arrière-plan pendant
+que le joueur résout le niveau courant, pour qu'aucun temps de chargement ne
+soit perçu tant que la config (difficulté/features) ne change pas.
+
+`ensureLevelBuffer(config)`/`takeBufferedLevel(config)` gèrent un petit buffer
+(FIFO, `BUFFER_SIZE = 3`) indexé par une SIGNATURE de config (difficulté +
+features triées) : dès que la config change, l'ancien buffer est abandonné et
+un nouveau se remplit pour la config actuelle (les générations déjà en vol
+pour l'ancienne config sont jetées à leur arrivée). `main.js` amorce le
+remplissage à chaque changement de réglage (étoile/checkbox) et après chaque
+niveau chargé ; `runGeneration()` essaie d'abord `takeBufferedLevel` (retour
+instantané, zéro écran de chargement) avant de retomber sur `requestLevel`
+classique si le buffer est vide pour la config actuelle.
+
+**Piège rencontré et corrigé** : `generateOnce` (l'ancien corps de
+`requestLevel`) utilise TOUS les Workers du pool à la fois, chacun avec un
+seul emplacement `.pending` — deux appels chevauchants écrasent silencieusement
+le `.pending` de l'appel précédent, orphelinant sa Promise (jamais résolue).
+Le buffer peut vouloir lancer plusieurs générations pour combler son manque,
+potentiellement PENDANT qu'une requête au premier plan est aussi en cours —
+sans garde-fou, ça aurait fait planter (geler indéfiniment) le mode Infini dès
+que le buffer et une requête active se chevauchaient. Corrigé par une file
+d'attente à deux niveaux de priorité (`enqueuePoolJob`, `highPriorityQueue`/
+`lowPriorityQueue`) : un seul job tourne sur le pool à la fois, une requête au
+premier plan passe devant les remplissages de buffer encore EN ATTENTE (mais
+n'interrompt jamais un remplissage déjà en cours, les jobs n'étant pas
+préemptibles). Comportement vérifié isolément (Promises simulées, sans
+Worker réel) : aucun chevauchement, priorité respectée.
+
 Pour les étoiles **en jeu** (1-3 étoiles selon le nombre de coups du joueur, système
 déjà existant via `starThresholds`/`computeStars`), le générateur doit remplir
 explicitement `starThresholds: [solution.length, Math.ceil(solution.length * 1.5)]`
