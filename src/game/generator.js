@@ -134,7 +134,15 @@ function seededRandom(seed) {
 export const FEATURES = {
   forbidden: { label: "Cases interdites", weight: 1, implemented: true },
   color: { label: "Couleur (charges + cibles)", weight: 3, implemented: true, pickProbability: 0.95 },
-  mirror: { label: "Miroir dévieur", weight: 2, implemented: true, requires: "color" },
+  // pickProbability élevée (comme color) : voir generateLevel/isPerfect — la
+  // boucle s'arrête dès le premier essai qui atteint le bon palier ET la
+  // couleur, SANS jamais comparer d'essais ultérieurs via isBetterCandidate
+  // (qui ne s'exécute qu'en cas d'échec de isPerfect) — donc la seule vraie
+  // façon d'augmenter la fréquence du miroir gratuitement (sans budget de
+  // recherche dédié) est de maximiser la chance qu'il soit DÉJÀ tiré sur CET
+  // essai précis, pas de compter sur une comparaison ultérieure qui
+  // n'arrive presque jamais en pratique.
+  mirror: { label: "Miroir dévieur", weight: 2, implemented: true, requires: "color", pickProbability: 0.92 },
   filter: { label: "Filtre", weight: 2, implemented: false, requires: "color" },
   prism: { label: "Prisme", weight: 3, implemented: false, requires: "color" },
   pyra: { label: "Pyra", weight: 3, implemented: false },
@@ -295,28 +303,33 @@ const COLOR_BUDGET_MULTIPLIER = 2.2;
 // grid.js/recompute), jamais pour la propagation blanche qui pilote tout le
 // pipeline repair/strip.
 //
-// Calibrage mesuré à l'usage : un miroir n'est utile QUE s'il se trouve être
-// le premier obstacle sur le trajet d'un laser de charge colorée, ce qui
-// reste assez rare avec un placement purement aléatoire — une première
-// tentative avec une densité modeste (0.07) donnait ~4% de niveaux avec un
-// miroir vraiment utilisé. Densité relevée à 0.16 (compense côté
-// PROBABILITÉ, gratuit) + miroir exigé dans le critère "parfait" comme la
-// couleur (voir isPerfect plus bas, compense côté RECHERCHE) : ~100% en 1★
-// (quasi gratuit, <1s), mais la combinaison palier+couleur+miroir devient
-// rare en 2★/3★ (mesuré : ~15-24s par génération contre ~6-14s pour la
-// couleur seule à ces paliers, ~50-80% de réussite miroir selon le budget)
-// — jugé acceptable pour une génération en ARRIÈRE-PLAN (buffer 3 niveaux
-// d'avance, voir infiniteClient.js) : le joueur ne le perçoit que si le
-// buffer est vide ET que la config vient de changer, cas déjà accepté pour
-// la couleur seule au même palier.
-const MIRROR_DENSITY = 0.16;
-// Voir COLOR_BUDGET_MULTIPLIER (même principe et mêmes raisons) : combiné
-// multiplicativement avec lui (le miroir REQUIERT déjà la couleur, donc les
-// deux s'appliquent presque toujours ensemble en pratique). Volontairement
-// plus modeste que COLOR_BUDGET_MULTIPLIER (1.3 contre 2.2) — le miroir vient
-// s'ajouter PAR-DESSUS un budget déjà élargi par la couleur, pas besoin de le
-// multiplier aussi agressivement.
-const MIRROR_BUDGET_MULTIPLIER = 1.3;
+// Calibrage mesuré à l'usage (deux itérations) : un miroir n'est utile QUE
+// s'il se trouve être le premier obstacle sur le trajet d'un laser de charge
+// colorée. Première itération (placement 100% aléatoire) : ~4% de niveaux
+// avec un miroir vraiment utilisé — corrigé en exigeant le miroir dans le
+// critère "parfait" comme la couleur (voir isPerfect plus bas), mais ça
+// revenait à PAYER le hasard en temps de recherche plutôt qu'à le réduire :
+// mesuré jusqu'à ~15-24s par génération en 2★/3★ (contre ~6-14s pour la
+// couleur seule), un coût jugé "interdit" par l'utilisateur — ce n'était pas
+// un problème de réglage mais d'approche (compter sur une coïncidence
+// indépendante rare, puis rallonger le budget pour compenser, ne scale pas —
+// chaque nouvelle feature dépendante future paierait le même prix). Deuxième
+// itération, retenue : rendre la coïncidence beaucoup MOINS rare à la
+// racine plutôt que d'attendre plus longtemps qu'elle survienne —
+// `placeAlignedMirrors` (pose les miroirs alignés avec les cases-indice
+// candidates) + `orderCluesByMirrorAlignment` (le coloriage préfère les
+// charges déjà alignées avec un miroir) — les deux gratuits, aucun appel
+// solveur de plus. Le miroir n'entre PLUS dans `isPerfect`/le budget élargi
+// (voir MIRROR_BUDGET_MULTIPLIER) : il reste un bonus opportuniste
+// (isBetterCandidate), mais qui survient bien plus souvent naturellement.
+const MIRROR_DENSITY = 0.24;
+// Volontairement 1 (aucun effet) : voir le commentaire ci-dessus — le
+// miroir ne doit plus jamais coûter de recherche supplémentaire, sa
+// fréquence repose entièrement sur le placement/la sélection biaisés, pas
+// sur un budget de temps élargi. Gardé (plutôt que supprimé) pour rester
+// symétrique avec COLOR_BUDGET_MULTIPLIER et réutilisable si jamais un futur
+// réglage en avait de nouveau besoin.
+const MIRROR_BUDGET_MULTIPLIER = 1;
 
 // Budget global d'une génération (Phase F du doc), CLÉS = ÉTOILES affichées
 // (voir SOLVER_TIER_FOR_STARS) : le premier des deux atteint arrête la
@@ -449,15 +462,15 @@ function buildInitialLayout({ rows, cols, clueDensity, cornerVoid, mirrorDensity
     for (let c = 0; c < cols; c++) {
       const inCorner =
         cornerVoid > 0 && (r < cornerVoid || r >= rows - cornerVoid) && (c < cornerVoid || c >= cols - cornerVoid);
-      let token;
-      if (inCorner) token = "X";
-      else if (rand() < clueDensity) token = "W";
-      else if (mirrorDensity > 0 && rand() < mirrorDensity) token = rand() < 0.5 ? "/" : "\\";
-      else token = ".";
-      row.push(token);
+      row.push(inCorner ? "X" : rand() < clueDensity ? "W" : ".");
     }
     layout.push(row);
   }
+  // Passe séparée (pas dans la boucle ci-dessus) : voir placeAlignedMirrors,
+  // le placement des miroirs a besoin de connaître TOUTES les cases "W" déjà
+  // décidées, y compris celles de lignes/colonnes pas encore visitées au
+  // moment où une case donnée serait remplie dans un unique passage.
+  if (mirrorDensity > 0) placeAlignedMirrors(layout, rows, cols, mirrorDensity, rand);
   // Voir relaxIsolatedCells : le remplissage ci-dessus tire chaque case
   // indépendamment, ce qui peut par pur hasard entourer une case vide sur
   // ses 4 côtés — cette passe répare les cas vraiment inutiles et plafonne
@@ -465,6 +478,38 @@ function buildInitialLayout({ rows, cols, clueDensity, cornerVoid, mirrorDensity
   // et sans coût de recalcul).
   relaxIsolatedCells(layout, rows, cols, rand);
   return layout;
+}
+
+/** Vrai si (r,c) partage sa ligne OU sa colonne avec au moins une case
+ * indice candidate ("W") — voir placeAlignedMirrors. */
+function alignedWithClueCandidate(layout, r, c, rows, cols) {
+  for (let cc = 0; cc < cols; cc++) if (cc !== c && layout[r][cc] === "W") return true;
+  for (let rr = 0; rr < rows; rr++) if (rr !== r && layout[rr][c] === "W") return true;
+  return false;
+}
+
+/**
+ * Pose les miroirs EN PRIORITÉ sur des cases vides alignées (même ligne OU
+ * colonne) avec au moins une charge candidate ("W") — plutôt qu'un tirage
+ * totalement indépendant sur toute la grille (l'approche initiale, mesurée
+ * trop peu efficace : voir docs/infinite-mode-design.md). Une charge
+ * satisfaite tire un laser dans TOUTES ses directions non déjà occupées par
+ * une lumière — un miroir hors de portée de toute charge ne sera donc
+ * JAMAIS traversé par aucun laser (voir mirrorGenuinelyUsed), alors qu'un
+ * miroir aligné a une vraie chance géométrique de l'être dès qu'une charge
+ * de cette ligne/colonne est effectivement coloriée. Rien ne garantit encore
+ * l'absence d'obstacle intermédiaire (voir tryDiscriminatingColoring, qui
+ * complète côté SÉLECTION des charges à colorier) — mais ça change la base
+ * probabiliste de "quasi jamais" à "souvent". Coût : toujours zéro appel
+ * solveur, fait avant toute résolution comme le reste de cette fonction.
+ */
+function placeAlignedMirrors(layout, rows, cols, mirrorDensity, rand) {
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (layout[r][c] !== ".") continue;
+      if (!alignedWithClueCandidate(layout, r, c, rows, cols)) continue;
+      if (rand() < mirrorDensity) layout[r][c] = rand() < 0.5 ? "/" : "\\";
+    }
 }
 
 // Distance 1 (orthogonale) uniquement : c'est la seule qui compte pour
@@ -948,7 +993,38 @@ function mirrorGenuinelyUsed(layout, rows, cols, solution) {
  * décoratif, donc partir large ne risque jamais de laisser une charge
  * inutile dans le résultat final.
  */
-function tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand, deadline) {
+/** Vrai si (r,c) partage sa ligne OU sa colonne avec au moins un miroir —
+ * pendant de `alignedWithClueCandidate` côté sélection plutôt que placement.
+ * Voir `orderCluesByMirrorAlignment`. */
+function alignedWithMirror(layout, r, c, rows, cols) {
+  for (let cc = 0; cc < cols; cc++) if (cc !== c && isMirrorToken(layout[r][cc])) return true;
+  for (let rr = 0; rr < rows; rr++) if (rr !== r && isMirrorToken(layout[rr][c])) return true;
+  return false;
+}
+
+/**
+ * Réordonne `clueCells` en mettant en tête celles alignées avec un miroir
+ * (même ligne/colonne — voir `placeAlignedMirrors`), chaque groupe mélangé
+ * indépendamment pour garder de la variété entre tentatives. Utilisé par
+ * `tryDiscriminatingColoring` quand le Miroir est demandé : un `.slice(0,
+ * size)` qui pioche en priorité dans ce sous-ensemble maximise la chance
+ * qu'une charge RETENUE pour le coloriage ait, une fois satisfaite, un
+ * laser qui traverse réellement un miroir plutôt que de dépendre d'une
+ * coïncidence purement aléatoire. Gratuit : pure réorganisation d'une liste
+ * déjà en mémoire, aucun appel solveur.
+ */
+function orderCluesByMirrorAlignment(clueCells, layout, rows, cols, rand) {
+  const aligned = [];
+  const rest = [];
+  for (const cell of clueCells) {
+    (alignedWithMirror(layout, cell[0], cell[1], rows, cols) ? aligned : rest).push(cell);
+  }
+  shuffle(aligned, rand);
+  shuffle(rest, rand);
+  return [...aligned, ...rest];
+}
+
+function tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand, deadline, wantsMirror = false) {
   const clueCells = collectPlainClueCells(layout, rows, cols);
   if (clueCells.length === 0) return null;
 
@@ -958,7 +1034,15 @@ function tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand,
     for (let attempt = 0; attempt < MAX_COLOR_ATTEMPTS_PER_SIZE; attempt++) {
       if (Date.now() > deadline) return null;
 
-      const chosen = shuffle([...clueCells], rand).slice(0, size);
+      // Sans miroir demandé: comportement identique à avant (shuffle pur).
+      // Avec miroir: biaise l'ordre de tirage (voir orderCluesByMirrorAlignment)
+      // plutôt que de chercher activement un coloriage qui traverse un miroir
+      // — ça reste "premier coloriage discriminant trouvé gagne", juste avec
+      // un tirage qui favorise déjà les charges les plus prometteuses.
+      const ordered = wantsMirror
+        ? orderCluesByMirrorAlignment(clueCells, layout, rows, cols, rand)
+        : shuffle([...clueCells], rand);
+      const chosen = ordered.slice(0, size);
       const applied = []; // [r, c, prevToken] — dans l'ordre d'application, pour un revert LIFO propre
       for (const [r, c] of chosen) {
         applied.push([r, c, layout[r][c]]);
@@ -1066,7 +1150,7 @@ function tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand,
  * plateau non colorié tel quel (la couleur reste probabiliste, jamais
  * forcée: voir commentaire d'en-tête).
  */
-function tryColorizeForNecessity(layout, rows, cols, referenceSolution, rand, preset, stars, deadline) {
+function tryColorizeForNecessity(layout, rows, cols, referenceSolution, rand, preset, stars, deadline, wantsMirror = false) {
   const removalPlan = COLOR_REMOVAL_PLAN_BY_STAR[stars] ?? [{ count: 1, candidates: 24 }];
 
   for (const { count: k, candidates: maxCandidates } of removalPlan) {
@@ -1076,7 +1160,17 @@ function tryColorizeForNecessity(layout, rows, cols, referenceSolution, rand, pr
     for (let attempt = 0; attempt < maxCandidates; attempt++) {
       if (Date.now() > deadline) return null;
 
-      const subset = shuffle([...clueCells], rand).slice(0, k);
+      // Sans miroir demandé: shuffle pur, comportement inchangé. Avec
+      // miroir: retire en PRIORITÉ les charges NON alignées avec un miroir
+      // (ordre inversé par rapport à orderCluesByMirrorAlignment) pour
+      // garder le plus possible de charges alignées disponibles pour le
+      // coloriage juste après (tryDiscriminatingColoring, qui lui les
+      // préfère) — pas de retrait forcé, juste un tirage moins susceptible
+      // de gâcher les meilleurs candidats.
+      const removalOrder = wantsMirror
+        ? orderCluesByMirrorAlignment(clueCells, layout, rows, cols, rand).reverse()
+        : shuffle([...clueCells], rand);
+      const subset = removalOrder.slice(0, k);
       if (wouldCreateDeadIsolationForSet(layout, subset, rows, cols)) continue; // voir commentaire dédié, aucun appel solveur gaspillé
       const prevTokens = subset.map(([r, c]) => layout[r][c]);
       for (const [r, c] of subset) layout[r][c] = "X"; // retrait tentatif: réintroduit potentiellement une ambiguïté blanche contrôlée
@@ -1099,7 +1193,7 @@ function tryColorizeForNecessity(layout, rows, cols, referenceSolution, rand, pr
       const winner = solutions[winnerIdx];
       const alternates = solutions.filter((_, idx) => idx !== winnerIdx);
 
-      const applied = tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand, deadline);
+      const applied = tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand, deadline, wantsMirror);
       if (applied) {
         const finalLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
         const verify = analyzeAndCount(finalLevel, 2, preset.nodeBudget);
@@ -1209,7 +1303,17 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
   let finalAnalysis = analysis;
   let colorApplied = false;
   if (wantsColor) {
-    const colorAnalysis = tryColorizeForNecessity(layout, rows, cols, analysis.solution, rand, preset, stars, deadline);
+    const colorAnalysis = tryColorizeForNecessity(
+      layout,
+      rows,
+      cols,
+      analysis.solution,
+      rand,
+      preset,
+      stars,
+      deadline,
+      wantsMirror
+    );
     if (colorAnalysis) {
       finalAnalysis = colorAnalysis;
       colorApplied = true;
@@ -1339,17 +1443,16 @@ export function generateLevel({
       attempts,
     };
 
-    // "Parfait" (arrêt immédiat) exige désormais AUSSI la couleur ET (si
-    // demandé) un miroir réellement traversé (voir commentaire ci-dessus) —
-    // un candidat au bon palier mais sans l'un des deux reste un excellent
-    // filet de sécurité (via isBetterCandidate juste en dessous), mais ne
-    // coupe plus la boucle : on continue à retenter, dans le budget élargi,
-    // jusqu'à trouver mieux ou épuiser le budget. Voir MIRROR_DENSITY pour
-    // le calibrage mesuré (fréquence/latence par palier) de cette exigence.
-    const isPerfect =
-      measuredTier === solverTarget &&
-      (!colorRequested || candidate.featureSubset.includes("color")) &&
-      (!mirrorRequested || candidate.featureSubset.includes("mirror"));
+    // "Parfait" (arrêt immédiat) exige désormais AUSSI la couleur quand elle
+    // a été demandée par le joueur (voir commentaire ci-dessus) — un
+    // candidat au bon palier mais sans couleur reste un excellent filet de
+    // sécurité (via isBetterCandidate juste en dessous), mais ne coupe plus
+    // la boucle : on continue à retenter, dans le budget élargi, jusqu'à
+    // trouver mieux ou épuiser le budget. Le miroir, lui, N'entre PAS dans
+    // ce critère (voir MIRROR_DENSITY/MIRROR_BUDGET_MULTIPLIER pour le
+    // pourquoi) — il reste un bonus opportuniste, jamais un motif de
+    // prolonger la recherche.
+    const isPerfect = measuredTier === solverTarget && (!colorRequested || candidate.featureSubset.includes("color"));
     if (isPerfect) {
       best = candidate;
       break;

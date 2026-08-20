@@ -775,32 +775,67 @@ piochée seule (couleur cochée mais pas piochée pour cet essai précis, sa
 probabilité de pioche étant élevée mais jamais 1), donc purement décorative.
 Corrigé par un filtre final sur le sous-ensemble choisi.
 
-**Calibrage fréquence/latence** (mesuré, script jetable) : une première
-tentative avec une densité modeste (0.07) et le miroir seulement "préféré"
-(pas exigé) donnait un taux d'usage réel très faible (~4-15% selon le
-palier) — le simple hasard du placement tombe rarement sur le trajet d'un
-laser. Exiger le miroir dans le critère "parfait" (comme la Couleur, avec un
-`MIRROR_BUDGET_MULTIPLIER` dédié combiné à `COLOR_BUDGET_MULTIPLIER`) corrige
-bien le taux mais coûte cher en 2★/3★ (mesuré jusqu'à ~20-26s par essai avec
-un multiplicateur agressif). Réglage final retenu : densité relevée à 0.16
-(compense côté probabilité, gratuit) + exigence dans `isPerfect` maintenue
-avec un multiplicateur plus modeste (1.3, contre 2.2 pour la couleur) :
+**Calibrage fréquence/latence — deux itérations.**
+
+*Première itération (abandonnée)* : densité modeste (0.07), placement 100%
+aléatoire, miroir seulement "préféré" (pas exigé) → taux d'usage réel très
+faible (~4-15% selon le palier), le simple hasard du placement tombe
+rarement sur le trajet d'un laser. Exiger le miroir dans le critère
+"parfait" (comme la Couleur, avec un `MIRROR_BUDGET_MULTIPLIER` dédié
+combiné à `COLOR_BUDGET_MULTIPLIER`) corrige bien le taux mais coûte cher en
+2★/3★ (mesuré jusqu'à ~15-26s par essai). Retour utilisateur : ce n'était pas
+un problème de réglage mais d'approche — traiter "le miroir sert à quelque
+chose" comme un événement purement aléatoire indépendant de la couleur, puis
+PAYER en temps de recherche pour compenser sa rareté, ne scale pas (chaque
+future feature dépendante — Filtre, Prisme — referait payer le même prix).
+
+*Deuxième itération (retenue)* : rendre la coïncidence beaucoup MOINS rare à
+la racine plutôt que d'attendre plus longtemps qu'elle survienne, et ne plus
+jamais prolonger la recherche pour le miroir :
+
+- `placeAlignedMirrors` : les miroirs ne sont plus posés uniformément sur
+  toute la grille, mais EN PRIORITÉ sur des cases vides alignées (même ligne
+  OU colonne) avec au moins une charge candidate ("W") — une charge
+  satisfaite tire un laser dans toutes ses directions libres, donc un miroir
+  hors de portée de toute charge ne sera JAMAIS traversé, alors qu'un miroir
+  aligné a une vraie chance géométrique de l'être.
+- `orderCluesByMirrorAlignment` : `tryDiscriminatingColoring` (quelles
+  charges colorier) et `tryColorizeForNecessity` (quelles charges retirer)
+  biaisent désormais leur tirage pour respectivement PRÉFÉRER les charges
+  alignées avec un miroir côté coloriage, et les ÉVITER côté retrait (pour
+  garder les meilleures candidates disponibles) — toujours "premier
+  coloriage discriminant trouvé gagne", juste avec un tirage qui favorise
+  déjà les charges les plus prometteuses. Gratuit : aucun nouvel appel
+  solveur, pure réorganisation de listes déjà en mémoire.
+- Le miroir est retiré de `isPerfect` et `MIRROR_BUDGET_MULTIPLIER` repasse à
+  1 (aucun effet) : il ne coûte plus JAMAIS de recherche supplémentaire,
+  seulement une préférence à palier/couleur déjà égaux (`isBetterCandidate`,
+  qui en pratique s'exécute rarement puisque `isPerfect` arrête la boucle dès
+  le premier succès tier+couleur).
+- Densité relevée 0.07 → 0.16, et surtout `pickProbability` du miroir relevée
+  à 0.92 (proche de celle de la Couleur, 0.95) — puisque la boucle s'arrête
+  au premier essai réussi sans jamais comparer les suivants, la seule vraie
+  façon d'augmenter la fréquence gratuitement est de maximiser la chance que
+  le miroir soit DÉJÀ tiré sur cet essai précis, pas de compter sur une
+  comparaison ultérieure qui n'arrive presque jamais.
+
+Résultat mesuré (script jetable, mêmes conditions) :
 
 | Palier | Couleur obtenue | Miroir obtenu | Latence moy. | Latence max |
 |---|---|---|---|---|
-| 1★ | 20/20 | 20/20 | ~0.24s | ~0.76s |
-| 2★ | 11/15 | 10/15 | ~7.4s | ~7.9s |
-| 3★ | 7/7 | 5/7 | ~13.6s | ~25.8s |
+| 1★ | 20/20 | 17/20 (85%) | ~0.11s | ~0.33s |
+| 2★ | 14/20 (70%) | 11/20 (55%) | ~5.7s | ~6.0s |
+| 3★ | 13/13 (100%) | 9/13 (69%) | ~9-11s | ~20.4s |
 
-Le taux de couleur en 2★ (73%, contre ~80-87% en l'absence de Miroir coché)
-baisse légèrement : la présence de miroirs dans le plateau consomme une
-partie de l'espace de cases vides/indices, rendant le retrait+coloriage
-marginalement plus dur à réussir. Jugé acceptable pour un v1 (feature
-optionnelle, cochée explicitement) — génération en ARRIÈRE-PLAN via le
-buffer 3 niveaux d'avance (section 11), donc la latence en 2★/3★ n'est
-perçue par le joueur que si le buffer est vide ET que la config vient de
-changer, un cas déjà accepté pour la Couleur seule à ces mêmes paliers. À
-ajuster si l'usage réel montre que c'est trop fréquent ou trop lent.
+Comparé à la latence de la Couleur SEULE (sans Miroir coché, référence
+section 6/12) : 1★ quasi identique, 2★ identique (~5.7s), 3★ en hausse
+modérée (~6.6s→~9-11s moy., ~13.6s→~20.4s max) mais très loin des ~15-26s
+moyens de la première itération — la hausse résiduelle vient de la simple
+présence des miroirs dans le plateau (moins de cases disponibles pour le
+retrait/coloriage), pas d'une recherche prolongée. Le taux de couleur en 2★
+(70%, contre ~80-87% sans Miroir coché) baisse pour la même raison. Jugé
+acceptable : plus aucune latence "interdite", et le miroir apparaît
+désormais la plupart du temps plutôt qu'occasionnellement.
 
 Validation : `npm run check-unique` (mêmes résultats de référence, aucune
 régression sur les 26 niveaux statiques — y compris `Mirror`/`reflect`, qui
