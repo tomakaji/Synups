@@ -242,6 +242,14 @@ const MAX_REPAIR_ITERATIONS = 15;
 const MAX_COLOR_ATTEMPTS_PER_SIZE = 10;
 const CLUE_COLOR_LETTERS = ["r", "g", "b"];
 
+// EXPÉRIMENTAL / TEST (voir tryDiscriminatingColoring) : multiplie l'échelle
+// des tailles de coloriage essayées (la charge la plus haute, `clueCells.
+// length`, reste toujours tentée en premier inchangée — seul le palier de
+// repli [5,3,2,1] est mis à l'échelle). 1 = comportement par défaut inchangé.
+// Sert uniquement à mesurer/générer des variantes "plus de lumières
+// colorées" à la demande — pas câblé à l'UI, à remettre à 1 après usage.
+const COLOR_SIZE_MULTIPLIER = 1;
+
 // Retour utilisateur : la couleur ne doit pas se rabattre sur un
 // renforcement numérique pour paraître plus difficile — au contraire, plus
 // le palier visé est élevé, plus on retire d'indices SIMULTANÉMENT pour
@@ -263,16 +271,20 @@ const CLUE_COLOR_LETTERS = ["r", "g", "b"];
 // budget de temps avant même d'atteindre le repli k=1 (pourtant bien plus
 // fiable), faisant chuter la fréquence globale de la couleur. Un budget k=2
 // plus court laisse plus de marge au repli fiable si k=2 ne marche pas vite.
+//
+// 3★: k=1 (choix définitif de Toma). k=2 avait été essayé combiné à
+// COLOR_MIN_SOLUTIONS_REQUIRED=5 (ci-dessous) mais mesuré sans bénéfice net
+// sur la richesse de couleur par rapport à k=1+seuil=5 (qui donnait même une
+// médiane plus haute) — et plus lent. C'est donc le seuil de solutions, pas
+// k, qui reste le vrai levier de richesse colorée ; k=1 seul suffit et reste
+// le plus rapide.
 const COLOR_REMOVAL_PLAN_BY_STAR = {
   1: [{ count: 1, candidates: 24 }],
   2: [
     { count: 2, candidates: 10 },
     { count: 1, candidates: 24 },
   ],
-  3: [
-    { count: 2, candidates: 10 },
-    { count: 1, candidates: 24 },
-  ],
+  3: [{ count: 1, candidates: 24 }],
 };
 // Cap d'énumération pour la détection d'ambiguïté (voir
 // tryColorizeForNecessity) : plus large que du temps du retrait unique (qui
@@ -286,6 +298,17 @@ const COLOR_AMBIGUITY_CAP = 5;
 // plus généreux ferait juste explorer plus longtemps une forme déjà trop
 // relâchée pour ce retrait précis, sans plus de chances utiles d'exhaustivité.
 const COLOR_AMBIGUITY_NODE_BUDGET = 40_000;
+
+// Seuil minimal de solutions blanches exigé avant d'accepter un retrait
+// candidat (voir tryColorizeForNecessity, juste en dessous de l'appel à
+// enumerateSolutions). Choix définitif de Toma après comparaison A/B: viser
+// le plafond d'énumération (COLOR_AMBIGUITY_CAP=5) plutôt que s'arrêter à la
+// première ambiguïté trouvée (2, l'ancien comportement) — force une
+// ambiguïté plus riche à discriminer, donc plus de charges colorées
+// réellement nécessaires en moyenne (Garde-fou 2, le nettoyage décoratif,
+// reste PLEINEMENT actif: rien ici ne contourne la règle "couleur jamais
+// décorative", ça change seulement l'ambiguïté qu'on lui donne à nettoyer).
+const COLOR_MIN_SOLUTIONS_REQUIRED = 5;
 
 // Multiplicateur appliqué au budget de tentatives/temps (voir
 // DEFAULT_MAX_ATTEMPTS_BY_TIER/DEFAULT_MAX_TIME_MS_BY_TIER) quand la Couleur
@@ -822,6 +845,43 @@ function wouldCreateDeadIsolation(layout, r, c, rows, cols) {
   return wouldCreateDeadIsolationForSet(layout, [[r, c]], rows, cols);
 }
 
+// EXPÉRIMENTAL (mesure en cours, voir tryColorizeForNecessity): taille de la
+// plus grande région connexe de cases vides SANS AUCUN voisin indice — ces
+// zones sont précisément celles où pickBranchCell perd son heuristique de
+// guidage (voir solver.js: "sans indice actif à proximité, on retombe sur la
+// première case non décidée") et où l'énumération d'ambiguïté devient chère,
+// pas parce qu'elle est inefficace mais parce qu'il existe réellement
+// beaucoup de remplissages valides différents à distinguer. Coût: un simple
+// flood-fill, O(lignes×colonnes), aucun appel solveur.
+const REGION_FILTER_THRESHOLD = 0; // 0 = désactivé; mis à une valeur >0 pour activer le filtre pendant la mesure
+
+function largestClueSparseRegionSize(layout, rows, cols) {
+  const seen = Array.from({ length: rows }, () => new Array(cols).fill(false));
+  let best = 0;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (seen[r][c] || layout[r][c] !== ".") continue;
+      const stack = [[r, c]];
+      seen[r][c] = true;
+      let size = 0;
+      let touchesClue = false;
+      while (stack.length) {
+        const [cr, cc] = stack.pop();
+        size++;
+        for (const [nr, nc] of orthogonalNeighbors(cr, cc, rows, cols)) {
+          if (isClueToken(layout[nr][nc])) touchesClue = true;
+          if (layout[nr][nc] === "." && !seen[nr][nc]) {
+            seen[nr][nc] = true;
+            stack.push([nr, nc]);
+          }
+        }
+      }
+      if (!touchesClue) best = Math.max(best, size);
+    }
+  }
+  return best;
+}
+
 function stripToTargetTier(layout, rows, cols, targetTier, nodeBudget, rand, deadline) {
   const startLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
   let best = analyzeAndCount(startLevel, 2, nodeBudget);
@@ -959,6 +1019,40 @@ function mirrorGenuinelyUsed(layout, rows, cols, solution) {
 }
 
 /**
+ * Nettoie EN PLACE les miroirs purement décoratifs (retour utilisateur:
+ * "la plupart des miroirs générés ne servent à rien, il y en a beaucoup pour
+ * rien, c'est polluant") — mesuré sur 10 générations 3★+couleur+miroir avant
+ * ce correctif : seulement ~31% des miroirs POSÉS (`placeAlignedMirrors`,
+ * densité MIRROR_DENSITY sur les cases alignées) étaient réellement
+ * traversés par un laser dans la solution gagnante ; les ~69% restants
+ * restaient sur le plateau sans jamais rien faire (`mirrorGenuinelyUsed` ne
+ * vérifiait qu'"AU MOINS UN" miroir utilisé pour la sélection du candidat,
+ * jamais un nettoyage par miroir individuel comme Garde-fou 2 le fait pour
+ * la couleur).
+ *
+ * Convertit chaque miroir non traversé en VOID ("X") plutôt qu'en case vide :
+ * un miroir est DÉJÀ, par construction, strictement équivalent à VOID pour
+ * la propagation blanche (voir commentaire Phase 3 plus haut : "un miroir ne
+ * se distingue de 'X' que pour les lasers colorés, jamais pour la
+ * propagation blanche") — ce nettoyage ne change donc RIEN à la
+ * solvabilité/unicité blanche déjà confirmée, et ne peut pas non plus
+ * affecter un laser coloré de la solution gagnante puisque, par définition,
+ * aucun ne traverse ce miroir précis. Aucun appel solveur, aucune
+ * re-vérification nécessaire — sûr et gratuit, comme le reste du nettoyage
+ * Phase 2/3.
+ */
+function pruneUnusedMirrors(layout, rows, cols, solution) {
+  const grid = buildGridWithLights(layout, rows, cols, solution);
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (!isMirrorToken(layout[r][c])) continue;
+      const mc = grid.cellAt(r, c)._mirrorColor;
+      const used = mc && (mc.r || mc.g || mc.b);
+      if (!used) layout[r][c] = "X";
+    }
+}
+
+/**
  * Étape 2 (voir commentaire d'en-tête) : essaie de colorier un sous-ensemble
  * des charges numériques restantes puis de désigner des cases-cibles dont la
  * teinte, sous ce coloriage, DIFFÈRE entre `winner` (la solution qu'on veut
@@ -1028,7 +1122,21 @@ function tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand,
   const clueCells = collectPlainClueCells(layout, rows, cols);
   if (clueCells.length === 0) return null;
 
-  const sizes = [...new Set([clueCells.length, 5, 3, 2, 1].filter((n) => n <= clueCells.length))];
+  // TEMP TEST (Toma) : essayer `clueCells.length` en premier "gagne" presque
+  // toujours dès que Garde-fou 2 est désactivé (voir plus bas) — ça rend le
+  // multiplicateur inopérant puisque "colorier tout" écrase la cible visée.
+  // Avec COLOR_SIZE_MULTIPLIER != 1, on vise donc une taille EXPLICITE (2 ×
+  // médiane mesurée en 1x, elle-même ≈2) au lieu de la liste habituelle, avec
+  // un repli décroissant seulement pour éviter un échec total.
+  const sizes =
+    COLOR_SIZE_MULTIPLIER === 1
+      ? [...new Set([clueCells.length, 5, 3, 2, 1].filter((n) => n <= clueCells.length))]
+      : (() => {
+          const target = Math.min(clueCells.length, Math.max(2, Math.round(2 * COLOR_SIZE_MULTIPLIER)));
+          const fallback = [];
+          for (let n = target; n >= 1; n--) fallback.push(n);
+          return fallback;
+        })();
 
   for (const size of sizes) {
     for (let attempt = 0; attempt < MAX_COLOR_ATTEMPTS_PER_SIZE; attempt++) {
@@ -1109,7 +1217,16 @@ function tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand,
       // (pas de recherche solveur): winner doit toujours atteindre CHAQUE
       // cible avec exactement sa couleur déjà figée, ET chaque alternative
       // doit encore échouer sur AU MOINS une cible.
-      for (let i = 0; i < chosen.length; i++) {
+      //
+      // TEMP TEST (Toma, voir COLOR_SIZE_MULTIPLIER) : ce nettoyage est ce
+      // qui ramène systématiquement le nombre de charges coloriées survivantes
+      // au strict minimum nécessaire, quelle que soit la taille initiale
+      // essayée — désactivé quand COLOR_SIZE_MULTIPLIER > 1 pour que "plus de
+      // lumières colorées demandées" se voie vraiment à l'écran (au prix
+      // d'accepter des charges décoratives, normalement proscrites — voir
+      // commentaire de tryColorizeForNecessity). À retirer avec le reste du
+      // levier une fois le test terminé.
+      for (let i = 0; i < chosen.length && COLOR_SIZE_MULTIPLIER === 1; i++) {
         const [r, c] = chosen[i];
         const numberOnlyToken = applied[i][2];
         const coloredToken = layout[r][c];
@@ -1175,16 +1292,25 @@ function tryColorizeForNecessity(layout, rows, cols, referenceSolution, rand, pr
       const prevTokens = subset.map(([r, c]) => layout[r][c]);
       for (const [r, c] of subset) layout[r][c] = "X"; // retrait tentatif: réintroduit potentiellement une ambiguïté blanche contrôlée
 
+      // EXPÉRIMENTAL (voir REGION_FILTER_THRESHOLD): écarte les candidats
+      // qui ouvrent une zone clue-sparse trop large AVANT de payer le coût
+      // du solveur dessus.
+      if (REGION_FILTER_THRESHOLD > 0 && largestClueSparseRegionSize(layout, rows, cols) > REGION_FILTER_THRESHOLD) {
+        subset.forEach(([r, c], i) => (layout[r][c] = prevTokens[i]));
+        continue;
+      }
+
       const level = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
       const { solutions, exhausted } = enumerateSolutions(level, COLOR_AMBIGUITY_CAP, COLOR_AMBIGUITY_NODE_BUDGET, {
         ignoreColor: true,
       });
 
-      // On ne garde que les cas à ambiguïté CONTRÔLÉE (au moins 2 solutions
-      // blanches, cap atteint et épuisé) — "trop" de solutions (cap non
-      // épuisé) serait coûteux à discriminer entièrement et signale une
-      // forme trop relâchée pour ce retrait précis.
-      if (!exhausted || solutions.length < 2) {
+      // On ne garde que les cas à ambiguïté CONTRÔLÉE (au moins
+      // COLOR_MIN_SOLUTIONS_REQUIRED solutions blanches — 2 par défaut, voir
+      // ce nom pour le test en cours — cap atteint et épuisé) — "trop" de
+      // solutions (cap non épuisé) serait coûteux à discriminer entièrement
+      // et signale une forme trop relâchée pour ce retrait précis.
+      if (!exhausted || solutions.length < COLOR_MIN_SOLUTIONS_REQUIRED) {
         subset.forEach(([r, c], i) => (layout[r][c] = prevTokens[i]));
         continue;
       }
@@ -1327,6 +1453,13 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
   // traversé par un laser dans la solution gagnante — sinon la feature n'est
   // pas honnêtement "obtenue" pour cet essai (voir mirrorGenuinelyUsed).
   const mirrorApplied = wantsMirror && colorApplied && mirrorGenuinelyUsed(layout, rows, cols, finalAnalysis.solution);
+
+  // Retour utilisateur ("beaucoup de miroirs pour rien, c'est polluant") :
+  // que `mirrorApplied` soit vrai ou faux, tout miroir posé mais jamais
+  // traversé par un laser dans LA solution gagnante finale est retiré (voir
+  // pruneUnusedMirrors) — sinon il reste sur le plateau comme pur décor,
+  // jamais nettoyé par aucune passe précédente.
+  if (wantsMirror) pruneUnusedMirrors(layout, rows, cols, finalAnalysis.solution);
 
   const actualFeatureSubset = featureSubset.filter((k) => {
     if (k === "color") return colorApplied;

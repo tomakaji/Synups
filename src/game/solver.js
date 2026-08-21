@@ -83,6 +83,17 @@ function keyOf(r, c) {
   return `${r},${c}`;
 }
 
+/** Index numérique (r*cols+c) pour `excluded`/`mirrorReachable` — voir leur
+ * usage plus bas : ce sont les deux ensembles consultés au chemin le plus
+ * chaud du solveur (à chaque case candidate, à chaque nœud), donc les seuls
+ * pour lesquels remplacer les clés chaîne "r,c" (une allocation par appel)
+ * par un entier (aucune allocation, juste une multiplication) vaut la peine.
+ * `pairDeductions`/`varIndex` reste en clés chaîne : structure locale et
+ * bornée (n≤12 cases), pas dans le chemin chaud de la même façon. */
+function idxOf(grid, r, c) {
+  return r * grid.cols + c;
+}
+
 /** Voisins EMPTY d'une case (r,c) déjà porteurs d'une lumière (décidés "allumés"). */
 function litNeighborCount(grid, r, c) {
   let n = 0;
@@ -102,10 +113,53 @@ function freeUndecidedNeighbors(grid, r, c, excluded) {
     const cell = grid.cellAt(nr, nc);
     if (!cell || cell.type !== CellType.EMPTY) continue;
     if (grid.hasLight(nr, nc)) continue;
-    if (excluded.has(keyOf(nr, nc))) continue;
+    if (excluded.has(idxOf(grid, nr, nc))) continue;
     result.push([nr, nc]);
   }
   return result;
+}
+
+/**
+ * Candidats restants capables d'illuminer la case vide (r,c) elle-même
+ * non illuminée: (r,c) elle-même (si pas exclue) plus chaque case EMPTY
+ * libre (ni allumée, ni exclue) sur ses 4 directions jusqu'au premier
+ * obstacle — même balayage que `_computeIlluminationOnly` dans grid.js,
+ * mais côté solveur (ne modifie rien). Voir Stage 1.5 dans `propagate`.
+ *
+ * Retourne `null` (abstention) si un candidat écarté par `excluded` est
+ * atteignable par un neurone miroir [expérimental] (`mirrorReachable`):
+ * cette exclusion n'est alors pas une certitude (voir commentaire en tête
+ * de fichier — même prudence que `hasRiskyExcludedNeighbor`), donc aucune
+ * conclusion ne doit s'appuyer sur "ce candidat restera noir" pour CETTE
+ * case, ni pour forcer l'unique survivant, ni pour déclarer une
+ * contradiction s'il n'en reste aucun.
+ */
+function illuminationCandidates(grid, r, c, excluded, mirrorReachable) {
+  const candidates = [];
+  let risky = false;
+  const selfIdx = idxOf(grid, r, c);
+  if (excluded.has(selfIdx)) {
+    if (mirrorReachable && mirrorReachable.has(selfIdx)) risky = true;
+  } else {
+    candidates.push([r, c]);
+  }
+  for (const [dr, dc] of DIRECTIONS) {
+    let nr = r + dr;
+    let nc = c + dc;
+    while (true) {
+      const cell = grid.cellAt(nr, nc);
+      if (!cell || cell.type !== CellType.EMPTY) break;
+      const idx = idxOf(grid, nr, nc);
+      if (excluded.has(idx)) {
+        if (mirrorReachable && mirrorReachable.has(idx)) risky = true;
+      } else {
+        candidates.push([nr, nc]);
+      }
+      nr += dr;
+      nc += dc;
+    }
+  }
+  return risky ? null : candidates;
 }
 
 /**
@@ -123,8 +177,8 @@ function hasRiskyExcludedNeighbor(grid, r, c, excluded, mirrorReachable) {
     const cell = grid.cellAt(nr, nc);
     if (!cell || cell.type !== CellType.EMPTY) continue;
     if (grid.hasLight(nr, nc)) continue;
-    const k = keyOf(nr, nc);
-    if (excluded.has(k) && mirrorReachable.has(k)) return true;
+    const idx = idxOf(grid, nr, nc);
+    if (excluded.has(idx) && mirrorReachable.has(idx)) return true;
   }
   return false;
 }
@@ -153,7 +207,7 @@ function computeMirrorReachable(grid) {
   for (let r = 0; r < grid.rows; r++) {
     for (let c = 0; c < grid.cols; c++) {
       if (grid.cellAt(r, c).type !== CellType.EMPTY) continue;
-      if (neuronRows.has(r) || neuronCols.has(c)) reachable.add(keyOf(r, c));
+      if (neuronRows.has(r) || neuronCols.has(c)) reachable.add(idxOf(grid, r, c));
     }
   }
   return reachable;
@@ -167,7 +221,7 @@ function getUndecided(grid, excluded) {
       const cell = grid.cellAt(r, c);
       if (cell.type !== CellType.EMPTY) continue;
       if (grid.hasLight(r, c)) continue;
-      if (excluded.has(keyOf(r, c))) continue;
+      if (excluded.has(idxOf(grid, r, c))) continue;
       result.push([r, c]);
     }
   }
@@ -298,23 +352,23 @@ function propagate(grid, excluded, mirrorReachable, stats) {
 
   function undo() {
     for (let i = litAdded.length - 1; i >= 0; i--) {
-      grid.toggleLight(litAdded[i][0], litAdded[i][1]);
+      grid.toggleLight(litAdded[i][0], litAdded[i][1], { full: false });
     }
     for (const k of excludedAdded) excluded.delete(k);
   }
 
   function forceLit(r, c) {
     if (grid.hasLight(r, c)) return true;
-    const placed = grid.toggleLight(r, c) === "placed";
+    const placed = grid.toggleLight(r, c, { full: false }) === "placed";
     if (placed) litAdded.push([r, c]);
     return placed;
   }
 
   function forceExcluded(r, c) {
-    const k = keyOf(r, c);
-    if (!excluded.has(k)) {
-      excluded.add(k);
-      excludedAdded.push(k);
+    const idx = idxOf(grid, r, c);
+    if (!excluded.has(idx)) {
+      excluded.add(idx);
+      excludedAdded.push(idx);
     }
   }
 
@@ -369,6 +423,55 @@ function propagate(grid, excluded, mirrorReachable, stats) {
     }
     if (changed) continue; // relance stage 1 avant de tenter stage 2
 
+    // Stage 1.5: chaque case vide sans lumière doit finir illuminée (voir
+    // grid.js isWon: `else if (!cell._illuminated) return false`) — si elle
+    // n'a plus qu'UN candidat restant capable de l'illuminer (elle-même, si
+    // pas exclue, ou une case libre sur sa ligne/colonne jusqu'au premier
+    // obstacle), ce candidat est forcé allumé ; s'il n'en reste aucun,
+    // contradiction immédiate — détectée ici plutôt qu'à la feuille (voir
+    // isWon), donc potentiellement bien plus tôt qu'aujourd'hui. `_illuminated`
+    // est déjà tenu à jour à chaque case (voir toggleLight{full:false}),
+    // donc coût O(1) pour écarter la grande majorité des cases déjà
+    // couvertes avant de payer le balayage sur celles qui ne le sont pas.
+    //
+    // Même prudence que hasRiskyExcludedNeighbor pour le Neurone miroir
+    // [expérimental]: si un candidat écarté par `excluded` est atteignable
+    // par un neurone miroir (donc pas vraiment certain de rester noir), on
+    // s'abstient de toute conclusion pour CETTE case plutôt que de risquer
+    // une fausse certitude — voir `illuminationCandidates`.
+    for (let r = 0; r < grid.rows; r++) {
+      for (let c = 0; c < grid.cols; c++) {
+        const cell = grid.cellAt(r, c);
+        if (cell.type !== CellType.EMPTY || cell._illuminated) continue;
+
+        const candidates = illuminationCandidates(grid, r, c, excluded, mirrorReachable);
+        if (!candidates) continue; // abstention (risque miroir)
+
+        if (candidates.length === 0) {
+          undo();
+          return { ok: false };
+        }
+        if (candidates.length === 1) {
+          const [fr, fc] = candidates[0];
+          if (!forceLit(fr, fc)) {
+            undo();
+            return { ok: false };
+          }
+          if (stats) {
+            // Même rôle que `stats.stage2Used` (voir Stage 2 plus bas) : signale
+            // qu'une déduction NON triviale (au-delà de Stage 1) a été nécessaire
+            // ici. Stage 1.5 absorbe désormais une bonne partie de ce qui
+            // nécessitait autrefois Stage 2 (voir computeTier) — sans ce
+            // deuxième signal, computeTier perdrait la trace de cette difficulté
+            // réelle et plafonnerait à tort au palier 1.
+            stats.stage15Used = true;
+          }
+          changed = true;
+        }
+      }
+    }
+    if (changed) continue; // relance stage 1 avant de tenter stage 2
+
     // Stage 2: paires d'indices dont certaines cases libres s'excluent mutuellement.
     const clues = [];
     for (let r = 0; r < grid.rows; r++) {
@@ -415,27 +518,28 @@ function propagate(grid, excluded, mirrorReachable, stats) {
 
 /**
  * Palier de difficulté RÉEL (1 à 4) déduit des statistiques de résolution —
- * partagé par `analyzeSolve`/`analyzeAndCount`. Le palier 2+ exige une
- * déduction Stage 2 (voir commentaire en tête de fichier) : sans ça, aucune
- * grille ne dépasse le palier 1, même avec un `branchCount` élevé (grande
- * zone ouverte, mais aucun "lieu de doute" réel). Les seuils sont calibrés
- * empiriquement (voir docs/infinite-mode-design.md §10) et n'ont pas de
- * signification physique — seule leur ORDRE relatif compte.
+ * partagé par `analyzeSolve`/`analyzeAndCount`. Le palier 2+ exige qu'une
+ * déduction non triviale (Stage 1.5 OU Stage 2, voir commentaire en tête de
+ * fichier) ait été nécessaire : sans ça, aucune grille ne dépasse le palier
+ * 1, même avec un `branchCount` élevé (grande zone ouverte, mais aucun "lieu
+ * de doute" réel). Les seuils sont calibrés empiriquement (voir
+ * docs/infinite-mode-design.md §10) et n'ont pas de signification physique —
+ * seule leur ORDRE relatif compte.
  *
- * Le palier 4 a été ajouté après un second retour utilisateur : le mode
- * Infini v2 (génération par réparation + minimisation, voir generator.js)
- * convergeant de façon fiable, l'ancien palier 3 (`branchCount > 250`)
- * s'atteignait presque toujours en 1-2 tentatives — trop facilement pour
- * rester le palier "3 étoiles". Un sweep empirique sur des plateaux 8×9/9×9
- * en poussant la minimisation au maximum (au lieu de s'arrêter au premier
- * seuil atteint) a montré une distribution de `branchCount` bien plus large
- * que prévu (médiane ~450, jusqu'à plusieurs milliers) — largement de quoi
- * définir un palier nettement plus dur au-dessus de l'ancien palier 3.
+ * Recalibré après l'introduction de Stage 1.5 (déduction par illumination) :
+ * ce stage absorbe une grande partie de ce qui nécessitait autrefois du
+ * backtracking (voire Stage 2), donc (a) `stage2Used` seul n'est plus un
+ * signal fiable de "déduction non triviale" — d'où `stage15Used` en renfort
+ * ci-dessous — et (b) la distribution de `branchCount` atteignable s'est
+ * effondrée d'un ordre de grandeur (sweep empirique 3★+couleur+miroir, 15
+ * seeds : médiane ~130, max ~211, contre médiane ~450 avant Stage 1.5). Les
+ * seuils sont donc resserrés en conséquence — à réajuster de nouveau si la
+ * distribution bouge encore (générateur/mécaniques futurs).
  */
-function computeTier(stage2Used, branchCount) {
-  if (!stage2Used) return branchCount <= 25 ? 1 : 2;
-  if (branchCount <= 250) return 2;
-  if (branchCount <= 400) return 3;
+function computeTier(stage2Used, branchCount, stage15Used) {
+  if (!stage2Used && !stage15Used) return branchCount <= 25 ? 1 : 2;
+  if (branchCount <= 60) return 2;
+  if (branchCount <= 130) return 3;
   return 4;
 }
 
@@ -503,26 +607,27 @@ export function countSolutions(level, cap = 2, maxNodes = 2_000_000, options = {
     const undecided = getUndecided(grid, excluded);
 
     if (undecided.length === 0) {
+      grid.recompute(); // léger pendant la descente (voir toggleLight{full:false}): isWon() a besoin de l'illumination à jour
       if (grid.isWon(options)) count++;
     } else {
       const [r, c] = pickBranchCell(grid, undecided, excluded);
-      const key = keyOf(r, c);
+      const idx = idxOf(grid, r, c);
 
-      excluded.add(key);
+      excluded.add(idx);
       search();
-      excluded.delete(key);
+      excluded.delete(idx);
 
       if (count < cap) {
-        const result = grid.toggleLight(r, c);
+        const result = grid.toggleLight(r, c, { full: false });
         if (result === "placed") {
           if (!anyClueError(grid)) search();
-          grid.toggleLight(r, c);
+          grid.toggleLight(r, c, { full: false });
         }
       }
     }
 
     for (let i = prop.litAdded.length - 1; i >= 0; i--) {
-      grid.toggleLight(prop.litAdded[i][0], prop.litAdded[i][1]);
+      grid.toggleLight(prop.litAdded[i][0], prop.litAdded[i][1], { full: false });
     }
     for (const k of prop.excludedAdded) excluded.delete(k);
   }
@@ -566,26 +671,27 @@ export function enumerateSolutions(level, cap = 5, maxNodes = 3_000_000, options
     const undecided = getUndecided(grid, excluded);
 
     if (undecided.length === 0) {
+      grid.recompute(); // léger pendant la descente (voir toggleLight{full:false}): isWon() a besoin de l'illumination à jour
       if (grid.isWon(options)) found.push(currentLights());
     } else {
       const [r, c] = pickBranchCell(grid, undecided, excluded);
-      const key = keyOf(r, c);
+      const idx = idxOf(grid, r, c);
 
-      excluded.add(key);
+      excluded.add(idx);
       search();
-      excluded.delete(key);
+      excluded.delete(idx);
 
       if (found.length < cap) {
-        const result = grid.toggleLight(r, c);
+        const result = grid.toggleLight(r, c, { full: false });
         if (result === "placed") {
           if (!anyClueError(grid)) search();
-          grid.toggleLight(r, c);
+          grid.toggleLight(r, c, { full: false });
         }
       }
     }
 
     for (let i = prop.litAdded.length - 1; i >= 0; i--) {
-      grid.toggleLight(prop.litAdded[i][0], prop.litAdded[i][1]);
+      grid.toggleLight(prop.litAdded[i][0], prop.litAdded[i][1], { full: false });
     }
     for (const k of prop.excludedAdded) excluded.delete(k);
   }
@@ -625,30 +731,31 @@ export function findSolution(level, maxNodes = 2_000_000) {
       const undecided = getUndecided(grid, excluded);
 
       if (undecided.length === 0) {
+        grid.recompute(); // léger pendant la descente (voir toggleLight{full:false}): isWon() a besoin de l'illumination à jour
         if (grid.isWon()) {
           solution = currentLights();
           found = true;
         }
       } else {
         const [r, c] = pickBranchCell(grid, undecided, excluded);
-        const key = keyOf(r, c);
+        const idx = idxOf(grid, r, c);
 
-        excluded.add(key);
+        excluded.add(idx);
         found = search();
-        excluded.delete(key);
+        excluded.delete(idx);
 
         if (!found) {
-          const result = grid.toggleLight(r, c);
+          const result = grid.toggleLight(r, c, { full: false });
           if (result === "placed") {
             if (!anyClueError(grid)) found = search();
-            if (!found) grid.toggleLight(r, c);
+            if (!found) grid.toggleLight(r, c, { full: false });
           }
         }
       }
 
       if (!found) {
         for (let i = prop.litAdded.length - 1; i >= 0; i--) {
-          grid.toggleLight(prop.litAdded[i][0], prop.litAdded[i][1]);
+          grid.toggleLight(prop.litAdded[i][0], prop.litAdded[i][1], { full: false });
         }
         for (const k of prop.excludedAdded) excluded.delete(k);
       }
@@ -706,7 +813,7 @@ export function analyzeSolve(level, maxNodes = 2_000_000) {
   const grid = new LightUpGrid(level);
   const excluded = new Set();
   const mirrorReachable = computeMirrorReachable(grid);
-  const stats = { stage2Used: false, stage2Count: 0, branchCount: 0 };
+  const stats = { stage2Used: false, stage2Count: 0, branchCount: 0, stage15Used: false };
   let nodes = 0;
   let solution = null;
 
@@ -724,6 +831,7 @@ export function analyzeSolve(level, maxNodes = 2_000_000) {
       const undecided = getUndecided(grid, excluded);
 
       if (undecided.length === 0) {
+        grid.recompute(); // léger pendant la descente (voir toggleLight{full:false}): isWon() a besoin de l'illumination à jour
         if (grid.isWon()) {
           solution = currentLights();
           found = true;
@@ -731,24 +839,24 @@ export function analyzeSolve(level, maxNodes = 2_000_000) {
       } else {
         stats.branchCount++;
         const [r, c] = pickBranchCell(grid, undecided, excluded);
-        const key = keyOf(r, c);
+        const idx = idxOf(grid, r, c);
 
-        excluded.add(key);
+        excluded.add(idx);
         found = search();
-        excluded.delete(key);
+        excluded.delete(idx);
 
         if (!found) {
-          const result = grid.toggleLight(r, c);
+          const result = grid.toggleLight(r, c, { full: false });
           if (result === "placed") {
             if (!anyClueError(grid)) found = search();
-            if (!found) grid.toggleLight(r, c);
+            if (!found) grid.toggleLight(r, c, { full: false });
           }
         }
       }
 
       if (!found) {
         for (let i = prop.litAdded.length - 1; i >= 0; i--) {
-          grid.toggleLight(prop.litAdded[i][0], prop.litAdded[i][1]);
+          grid.toggleLight(prop.litAdded[i][0], prop.litAdded[i][1], { full: false });
         }
         for (const k of prop.excludedAdded) excluded.delete(k);
       }
@@ -766,13 +874,14 @@ export function analyzeSolve(level, maxNodes = 2_000_000) {
   }
   if (!solved) return null;
 
-  const tier = computeTier(stats.stage2Used, stats.branchCount);
+  const tier = computeTier(stats.stage2Used, stats.branchCount, stats.stage15Used);
   return {
     solution,
     moves: solution.length,
     stage2Used: stats.stage2Used,
     stage2Count: stats.stage2Count,
     branchCount: stats.branchCount,
+    stage15Used: stats.stage15Used,
     tier,
   };
 }
@@ -810,7 +919,7 @@ export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = 
   const grid = new LightUpGrid(level);
   const excluded = new Set();
   const mirrorReachable = computeMirrorReachable(grid);
-  const stats = { stage2Used: false, stage2Count: 0, branchCount: 0 };
+  const stats = { stage2Used: false, stage2Count: 0, branchCount: 0, stage15Used: false };
   let frozen = false; // true dès qu'une 1re solution a été trouvée: stats figées
   let firstSolution = null;
   let count = 0;
@@ -830,6 +939,7 @@ export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = 
     const undecided = getUndecided(grid, excluded);
 
     if (undecided.length === 0) {
+      grid.recompute(); // léger pendant la descente (voir toggleLight{full:false}): isWon() a besoin de l'illumination à jour
       if (grid.isWon(options)) {
         count++;
         if (!frozen) {
@@ -840,23 +950,23 @@ export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = 
     } else {
       if (!frozen) stats.branchCount++;
       const [r, c] = pickBranchCell(grid, undecided, excluded);
-      const key = keyOf(r, c);
+      const idx = idxOf(grid, r, c);
 
-      excluded.add(key);
+      excluded.add(idx);
       search();
-      excluded.delete(key);
+      excluded.delete(idx);
 
       if (count < cap) {
-        const result = grid.toggleLight(r, c);
+        const result = grid.toggleLight(r, c, { full: false });
         if (result === "placed") {
           if (!anyClueError(grid)) search();
-          grid.toggleLight(r, c);
+          grid.toggleLight(r, c, { full: false });
         }
       }
     }
 
     for (let i = prop.litAdded.length - 1; i >= 0; i--) {
-      grid.toggleLight(prop.litAdded[i][0], prop.litAdded[i][1]);
+      grid.toggleLight(prop.litAdded[i][0], prop.litAdded[i][1], { full: false });
     }
     for (const k of prop.excludedAdded) excluded.delete(k);
   }
@@ -870,7 +980,7 @@ export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = 
     else throw e;
   }
 
-  const tier = firstSolution ? computeTier(stats.stage2Used, stats.branchCount) : null;
+  const tier = firstSolution ? computeTier(stats.stage2Used, stats.branchCount, stats.stage15Used) : null;
 
   return {
     count,
@@ -880,6 +990,7 @@ export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = 
     stage2Used: firstSolution ? stats.stage2Used : null,
     stage2Count: firstSolution ? stats.stage2Count : null,
     branchCount: firstSolution ? stats.branchCount : null,
+    stage15Used: firstSolution ? stats.stage15Used : null,
     tier,
   };
 }

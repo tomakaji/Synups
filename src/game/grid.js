@@ -268,6 +268,15 @@ export class LightUpGrid {
     //   reset en tête de toggleLight).
     this._lastMirrorLinks = [];
     this._lastMirrorFailure = null;
+    // Voir toggleLight({full}) / _recomputeAfterToggle: le mode "léger"
+    // (utilisé par le solveur pendant sa recherche, voir solver.js) saute le
+    // traçage de laser et la diffusion d'illumination — sûr UNIQUEMENT parce
+    // que ni l'un ni l'autre n'influence le calcul lui-même, sauf pour le
+    // Neurone miroir [expérimental] : `_computeMirrorDuplicates` lit
+    // `target._illuminated` pour juger une case cible légale, qui deviendrait
+    // périmée sans un recompute() complet. Calculé une seule fois ici (la
+    // géométrie de la grille ne change jamais) plutôt qu'à chaque appel.
+    this._hasMirrorNeuron = this.cells.some((row) => row.some((cell) => cell.type === CellType.MIRROR_NEURON));
     this.recompute();
   }
 
@@ -351,8 +360,14 @@ export class LightUpGrid {
    * ou si une duplication requise est impossible).
    * Voir `getLastAffectedCells()` pour la liste complète des cases
    * effectivement modifiées (peut être plus d'une, voir neurone miroir).
+   *
+   * `full` (par défaut `true`, TOUS les appelants existants — jeu, éditeur —
+   * inchangés) : passé à `false` par le solveur pendant sa recherche (voir
+   * solver.js) pour ne recalculer que l'état des indices plutôt qu'un
+   * `recompute()` complet — voir `_recomputeAfterToggle` pour la garde de
+   * sécurité (jamais léger en présence d'un Neurone miroir [expérimental]).
    */
-  toggleLight(r, c) {
+  toggleLight(r, c, { full = true } = {}) {
     // Réinitialisé avant tout `return false` possible: un échec pour une
     // raison SANS RAPPORT avec un neurone miroir (case non vide, déjà
     // illuminée...) ne doit jamais laisser croire à l'appelant qu'il peut
@@ -378,7 +393,7 @@ export class LightUpGrid {
         const [gr, gc] = gk.split(",").map(Number);
         this._lastAffected.push({ r: gr, c: gc, action: "removed", isDuplicate: !!originKey, originKey });
       }
-      this.recompute();
+      this._recomputeAfterToggle(full);
       return "removed";
     }
 
@@ -401,7 +416,7 @@ export class LightUpGrid {
       const [dr, dc] = dk.split(",").map(Number);
       this._lastAffected.push({ r: dr, c: dc, action: "placed", isDuplicate: true, originKey: k });
     }
-    this.recompute();
+    this._recomputeAfterToggle(full);
     return "placed";
   }
 
@@ -618,31 +633,19 @@ export class LightUpGrid {
     return null;
   }
 
-  /** Recalcule états des indices/interdictions, lasers de couleur, puis illumination. */
-  recompute() {
-    for (let r = 0; r < this.rows; r++) {
-      for (let c = 0; c < this.cols; c++) {
-        const cell = this.cells[r][c];
-        if (cell.type === CellType.EMPTY) {
-          cell._litColor = { r: false, g: false, b: false };
-          cell._litWhite = false;
-          cell._hits = 0; // nombre de rayons distincts qui touchent cette case (intersection si >= 2)
-          // Neurone miroir [expérimental]: un laser qui atteindrait
-          // directement un duplicata n'a AUCUN effet sur sa couleur (il
-          // hérite toujours de son origine, voir étape 3 ci-dessous) — ce
-          // drapeau permet à render.js de le signaler visuellement plutôt
-          // que de laisser croire que ce laser a fonctionné normalement.
-          cell._mirrorLaserBlocked = false;
-        } else if (cell.type === CellType.MIRROR) {
-          // Couleurs actuellement en train de traverser ce miroir (rendu:
-          // "miroir actif"), recalculé à chaque passe donc jamais périmé.
-          cell._mirrorColor = { r: false, g: false, b: false };
-        }
-      }
-    }
-
-    // 1) États des cases à charge / interdites (dépend seulement des positions
-    //    des lumières, pas encore de l'illumination).
+  /**
+   * Sous-ensemble de `recompute()` : ne calcule QUE `_state`/`_adjacentLights`/
+   * `_activeColor` des cases FORBIDDEN/PYRA/CLUE (dépend seulement des
+   * positions des lumières, jamais de l'illumination/des lasers). C'est
+   * précisément — et UNIQUEMENT — ce dont `solver.js` a besoin pendant sa
+   * recherche (`propagate`/branchement ne lisent jamais `_illuminated`/
+   * `_lit`/laser, voir `isWon` pour la seule consommatrice de ces champs) —
+   * voir `toggleLight({full:false})`. Beaucoup moins cher qu'un
+   * `recompute()` complet : pas de traçage de laser (deux passes sur toutes
+   * les charges colorées), pas de scan de prisme, pas de diffusion
+   * d'illumination (un parcours en rayon par lumière posée).
+   */
+  _computeClueStates() {
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
         const cell = this.cells[r][c];
@@ -702,6 +705,96 @@ export class LightUpGrid {
         }
       }
     }
+  }
+
+  /**
+   * Sous-ensemble "moyen" de `recompute()` : `_computeClueStates()` PLUS une
+   * diffusion d'illumination simplifiée (juste `_illuminated`, un booléen —
+   * PAS `_litColor`/`_hits`/`_colorMatch`, qui ont besoin du traçage de
+   * laser pour être exacts). Contrairement à `_computeClueStates()` seule,
+   * `_illuminated` doit rester à jour à CHAQUE `toggleLight`, pas seulement
+   * aux feuilles de la recherche : `toggleLight` lui-même refuse une pose sur
+   * une case déjà `_illuminated` (règle du jeu), et `_computeMirrorDuplicates`
+   * (Neurone miroir [expérimental]) en dépend aussi pour juger une case
+   * cible légale — un simple `_computeClueStates()` isolé, essayé d'abord,
+   * laissait `_illuminated` périmé et acceptait/refusait des poses à tort
+   * (régression détectée par comparaison avant/après sur tous les niveaux de
+   * `levels.js`, voir l'historique). Reste nettement moins cher qu'un
+   * `recompute()` complet : pas de traçage de laser (deux passes sur les
+   * charges colorées), pas de scan de prisme — seulement ce qui est
+   * structurellement nécessaire à la légalité des coups.
+   */
+  _computeIlluminationOnly() {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.cells[r][c];
+        if (cell.type === CellType.EMPTY) cell._illuminated = false;
+      }
+    }
+    for (const k of this.lights) {
+      const [r, c] = k.split(",").map(Number);
+      const selfCell = this.cellAt(r, c);
+      if (selfCell) selfCell._illuminated = true;
+      for (const [dr, dc] of DIRECTIONS) {
+        let nr = r + dr;
+        let nc = c + dc;
+        while (this.inBounds(nr, nc)) {
+          const nCell = this.cells[nr][nc];
+          if (nCell.type !== CellType.EMPTY) break;
+          nCell._illuminated = true;
+          nr += dr;
+          nc += dc;
+        }
+      }
+    }
+  }
+
+  /**
+   * Choisit, après un `toggleLight`, entre un `recompute()` complet et le
+   * sous-ensemble "moyen" (`_computeClueStates()` + `_computeIlluminationOnly()`)
+   * — voir le commentaire du constructeur : jamais allégé si la grille
+   * contient un Neurone miroir [expérimental] (`_computeMirrorDuplicates` a
+   * besoin d'un `_illuminated` exact, déjà garanti ici, MAIS aussi de
+   * `_litColor` pour d'autres cas limites non audités — on préfère s'abstenir
+   * plutôt que risquer une régression sur une mécanique aussi délicate).
+   * `full=true` (comportement par défaut de `toggleLight`, tous les
+   * appelants existants — jeu, éditeur — inchangés) redemande toujours la
+   * version complète.
+   */
+  _recomputeAfterToggle(full) {
+    if (full || this._hasMirrorNeuron) this.recompute();
+    else {
+      this._computeClueStates();
+      this._computeIlluminationOnly();
+    }
+  }
+
+  /** Recalcule états des indices/interdictions, lasers de couleur, puis illumination. */
+  recompute() {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.cells[r][c];
+        if (cell.type === CellType.EMPTY) {
+          cell._litColor = { r: false, g: false, b: false };
+          cell._litWhite = false;
+          cell._hits = 0; // nombre de rayons distincts qui touchent cette case (intersection si >= 2)
+          // Neurone miroir [expérimental]: un laser qui atteindrait
+          // directement un duplicata n'a AUCUN effet sur sa couleur (il
+          // hérite toujours de son origine, voir étape 3 ci-dessous) — ce
+          // drapeau permet à render.js de le signaler visuellement plutôt
+          // que de laisser croire que ce laser a fonctionné normalement.
+          cell._mirrorLaserBlocked = false;
+        } else if (cell.type === CellType.MIRROR) {
+          // Couleurs actuellement en train de traverser ce miroir (rendu:
+          // "miroir actif"), recalculé à chaque passe donc jamais périmé.
+          cell._mirrorColor = { r: false, g: false, b: false };
+        }
+      }
+    }
+
+    // 1) États des cases à charge / interdites (dépend seulement des positions
+    //    des lumières, pas encore de l'illumination).
+    this._computeClueStates();
 
     // 2) Lasers de couleur: pour chaque case à charge colorée et satisfaite,
     //    chaque direction qui ne pointe pas vers une lumière tire un laser
