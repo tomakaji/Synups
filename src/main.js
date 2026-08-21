@@ -40,9 +40,52 @@ let moveHistory = [];
 
 const boardEl = document.getElementById("board");
 const levelNameEl = document.getElementById("level-name");
-const winOverlay = document.getElementById("win-overlay");
+const boardContainerEl = document.getElementById("board-container");
 const btnUndo = document.getElementById("btn-undo");
 const renderer = createBoardRenderer(boardEl);
+
+// ---------- Transition de fin de niveau (fondu, partagée Jouer/Infini) ----------
+// Un niveau résolu n'affiche plus de menu bloquant ("Niveau suivant" à
+// cliquer) : le plateau s'efface en fondu, le niveau suivant se charge
+// PENDANT que l'écran est effacé, puis réapparaît en fondu — même logique
+// dans les deux modes (retour utilisateur: "la logique standard pour passer
+// d'un niveau à l'autre"), seule la façon d'obtenir le niveau suivant
+// diffère (loadLevel() vs runGeneration()). BOARD_HOLD_MS garantit que
+// l'écran reste effacé un minimum de temps même si le niveau suivant est
+// prêt instantanément (cas courant en Infini via le buffer), pour éviter un
+// clignotement — au total (fondu de sortie + pause + fondu d'entrée),
+// une transition d'environ la durée du son de victoire (voir sound.js:
+// playWin).
+const BOARD_FADE_MS = 450;
+const BOARD_HOLD_MS = 900;
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Vrai entre la résolution d'un niveau et l'affichage effectif du suivant :
+// bloque toute action de jeu pendant la transition (placer/retirer une
+// lumière, Annuler, Réinitialiser, navigation) dans les DEUX modes — avant,
+// seul le mode Infini avait un tel verrou (infiniteAdvancePending), le mode
+// Jouer s'appuyait sur le menu bloquant pour empêcher les clics.
+let boardLocked = false;
+
+async function advanceAfterWin() {
+  boardLocked = true;
+  boardContainerEl.classList.add("board-fade");
+  await wait(BOARD_FADE_MS);
+  const holdStart = performance.now();
+  if (mode === "infinite") {
+    awardInfinitePoints(lastInfiniteResult?.measuredTier ?? lastInfiniteResult?.requestedTier ?? 1);
+    await runGeneration({ intoBoard: true });
+  } else {
+    loadLevel(currentLevelIndex + 1);
+  }
+  const elapsed = performance.now() - holdStart;
+  if (elapsed < BOARD_HOLD_MS) await wait(BOARD_HOLD_MS - elapsed);
+  boardContainerEl.classList.remove("board-fade");
+  boardLocked = false;
+}
 
 // Musique par calques [voir music.js]: `mechanicCounts` est appelé une fois
 // PAR FRAME par render.js avec l'état COURANT (pas edge-triggered comme les
@@ -135,7 +178,6 @@ function startBoard() {
   moveHistory = [];
   syncMoveUi();
   renderer.build(grid, { onCellClick: handleCellClick, sounds });
-  winOverlay.classList.add("hidden");
   // Musique par calques: le déblocage reflète la progression du niveau qui
   // commence, pas un cumul avec le précédent — la lecture elle-même
   // continue sans interruption (voir music.js: resetLayers).
@@ -151,7 +193,7 @@ function loadLevel(index) {
 }
 
 function handleCellClick(r, c) {
-  if (mode === "infinite" && infiniteAdvancePending) return;
+  if (boardLocked) return;
   // Musique par calques: démarre au premier vrai geste utilisateur (voir
   // music.js — Tone.js exige un clic avant de pouvoir jouer du son, même
   // règle que ensureStarted() dans sound.js). Sans effet si déjà démarrée.
@@ -186,25 +228,12 @@ function handleCellClick(r, c) {
 
   if (grid.isWon()) {
     playWin();
-    if (mode === "infinite") {
-      // Mode Infini: plus de notation par étoiles basée sur les coups ni
-      // d'écran de victoire bloquant (retrait demandé — voir
-      // docs/infinite-mode-design.md) : gain de points selon le palier
-      // mesuré du niveau, puis enchaînement direct sur le suivant (servi
-      // instantanément depuis le buffer dans le cas courant — voir
-      // runGeneration/infiniteClient.js). Le petit délai laisse le temps de
-      // percevoir le son de victoire et l'animation de gain avant la
-      // transition, plutôt qu'un changement de plateau instantané et brutal.
-      infiniteAdvancePending = true;
-      awardInfinitePoints(lastInfiniteResult?.measuredTier ?? lastInfiniteResult?.requestedTier ?? 1);
-      setTimeout(() => runGeneration({ intoBoard: true }), 500);
-    } else {
-      winOverlay.classList.remove("hidden");
-    }
+    advanceAfterWin();
   }
 }
 
 function undoLastMove() {
+  if (boardLocked) return;
   const last = moveHistory.pop();
   if (!last) return;
   // Restaure directement l'état précédent (voir setLightRaw) plutôt que de
@@ -224,7 +253,6 @@ function undoLastMove() {
   if (anyPlaced) playPlace();
   else playRemove();
   renderer.render();
-  winOverlay.classList.add("hidden");
 }
 
 btnUndo.onclick = undoLastMove;
@@ -293,16 +321,6 @@ let infiniteDifficulty = 1;
 let infiniteEnabledFeatures = new Set(Object.keys(FEATURES).filter((k) => FEATURES[k].implemented));
 let lastInfiniteResult = null; // dernier niveau généré (pour "Réglages" -> retour au jeu sans perdre la partie)
 let infiniteRequestInFlight = false;
-// Vrai entre le moment où un niveau Infini vient d'être résolu et celui où
-// le niveau suivant est effectivement chargé (voir le court délai dans
-// handleCellClick) : sans overlay bloquant pour couvrir le plateau pendant
-// ce court délai (retiré avec le compteur de coups), le joueur pourrait
-// continuer à cliquer sur la grille déjà résolue — ce garde-fou ignore ces
-// clics et empêche surtout un double gain de points si `isWon()` reste vrai
-// et qu'un nouveau clic redéclenche la branche de victoire avant la
-// transition. Remis à `false` dans loadInfiniteLevel, point de passage commun
-// à chaque (re)chargement d'un niveau Infini.
-let infiniteAdvancePending = false;
 
 /** Config courante, telle que passée à requestLevel/ensureLevelBuffer/
  * takeBufferedLevel — un seul endroit pour construire cet objet, pour ne
@@ -390,7 +408,14 @@ function starsLabel(tier) {
 }
 
 function loadInfiniteLevel(result) {
-  infiniteAdvancePending = false;
+  // Ne touche PAS à `boardLocked` ici: son cycle de vie complet (pose à
+  // `true`, attente du fondu de sortie, chargement, pause, fondu d'entrée,
+  // repasse à `false`) est géré de bout en bout par `advanceAfterWin` — un
+  // reset prématuré ici déverrouillerait le plateau AVANT la fin du fondu
+  // d'entrée quand ce chargement vient d'elle (cas normal après une
+  // victoire). Les appels manuels (clic sur "Nouveau niveau", Réinitialiser)
+  // ne passent jamais par `advanceAfterWin`, donc `boardLocked` y vaut déjà
+  // `false` et n'a rien à réinitialiser.
   lastInfiniteResult = result;
   currentLevelIndex = -1;
   currentLevel = result.level;
@@ -458,27 +483,34 @@ async function runGeneration({ intoBoard }) {
 }
 
 btnInfiniteGenerate.onclick = () => runGeneration({ intoBoard: false });
-btnInfiniteNext.onclick = () => runGeneration({ intoBoard: true });
+btnInfiniteNext.onclick = () => {
+  // Bloqué pendant la transition de fin de niveau (boardLocked): sinon un
+  // double appel à runGeneration (celui-ci + celui déjà en cours dans
+  // advanceAfterWin) pourrait charger deux niveaux à la suite.
+  if (!boardLocked) runGeneration({ intoBoard: true });
+};
 btnInfiniteSettings.onclick = () => {
   infiniteConfigView.classList.remove("hidden");
   playView.classList.add("hidden");
 };
 
 // ---------- Navigation haut / bas selon le mode courant ----------
-// btn-reset et le bouton "Niveau suivant" de l'écran de victoire sont
-// partagés entre les modes Jouer et Infini (contrairement à prev/next,
-// masqués en Infini avec #nav-static) — leur comportement dépend donc du
-// mode courant plutôt que d'appeler systématiquement loadLevel().
+// btn-reset est partagé entre les modes Jouer et Infini (contrairement à
+// prev/next, masqués en Infini avec #nav-static) — son comportement dépend
+// donc du mode courant plutôt que d'appeler systématiquement loadLevel().
+// Les trois sont bloqués pendant la transition de fin de niveau
+// (boardLocked, voir advanceAfterWin) pour ne pas interrompre le fondu en
+// cours ou agir sur un niveau qui n'est plus affiché.
 
-document.getElementById("btn-prev").onclick = () => loadLevel(currentLevelIndex - 1);
-document.getElementById("btn-next").onclick = () => loadLevel(currentLevelIndex + 1);
-
-document.getElementById("btn-next-win").onclick = () => {
-  if (mode === "infinite") runGeneration({ intoBoard: true });
-  else loadLevel(currentLevelIndex + 1);
+document.getElementById("btn-prev").onclick = () => {
+  if (!boardLocked) loadLevel(currentLevelIndex - 1);
+};
+document.getElementById("btn-next").onclick = () => {
+  if (!boardLocked) loadLevel(currentLevelIndex + 1);
 };
 
 document.getElementById("btn-reset").onclick = () => {
+  if (boardLocked) return;
   if (mode === "infinite" && lastInfiniteResult) loadInfiniteLevel(lastInfiniteResult);
   else loadLevel(currentLevelIndex);
 };
