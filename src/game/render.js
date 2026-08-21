@@ -619,6 +619,7 @@ export function createBoardRenderer(boardEl) {
     let chargeFullColoredCount = 0;
     let mirrorActiveCount = 0;
     let prismActiveCount = 0;
+    let pyraSatisfiedCount = 0;
 
     for (let r = 0; r < grid.rows; r++) {
       for (let c = 0; c < grid.cols; c++) {
@@ -723,7 +724,13 @@ export function createBoardRenderer(boardEl) {
               if (prevPyra === "overloaded" && pyraState !== "overloaded") sounds.chargeOverloadResolved?.();
             }
             prevChargeState.set(key, pyraState);
-            if (pyraState === "satisfied") chargeFullCount++;
+            if (pyraState === "satisfied") {
+              chargeFullCount++;
+              // Compteur DÉDIÉ (en plus de chargeFullCount ci-dessus, pas à
+              // sa place) pour la couche musicale "pyra" — voir music.js:
+              // MECHANIC_THRESHOLDS.pyra, démutée dès 1 pyra satisfaite.
+              pyraSatisfiedCount++;
+            }
             break;
           }
           case CellType.EMPTY: {
@@ -781,6 +788,7 @@ export function createBoardRenderer(boardEl) {
       mirrorActive: mirrorActiveCount,
       prismActive: prismActiveCount,
       neuronesMiroirsActive: grid._mirrorDuplicateOf ? grid._mirrorDuplicateOf.size : 0,
+      pyraActive: pyraSatisfiedCount,
     });
   }
 

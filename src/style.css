@@ -95,7 +95,9 @@ body {
 
 /* Boutons icône (Annuler/Réinitialiser) — mêmes dimensions/comportement que
    .level-controls button mais sans texte, l'icône SVG seule porte le sens
-   (voir aria-label/title dans le markup pour l'accessibilité). */
+   (voir aria-label/title dans le markup pour l'accessibilité). Plus grands
+   que les icônes toggle son/musique ci-dessous (retour utilisateur): ce
+   sont des actions de jeu fréquentes, elles doivent rester faciles à viser. */
 .icon-btn {
   display: inline-flex;
   align-items: center;
@@ -103,8 +105,8 @@ body {
   background: none;
   border: 1px solid #2a3040;
   color: var(--text);
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border-radius: 6px;
   cursor: pointer;
@@ -126,6 +128,14 @@ body {
 .icon-svg {
   width: 18px;
   height: 18px;
+}
+
+/* Icônes plus grandes spécifiquement dans .icon-btn (Annuler/Réinitialiser)
+   — l'icône toggle son/musique (.icon-toggle) garde la taille par défaut
+   ci-dessus, plus discrète car ce sont des réglages, pas des actions de jeu. */
+.icon-btn .icon-svg {
+  width: 24px;
+  height: 24px;
 }
 
 /* Rangée son/musique: deux icônes toggle (mute/unmute indépendants) +

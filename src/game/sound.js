@@ -80,25 +80,45 @@ const soft = new Tone.Synth({
   volume: -16,
 }).connect(delay);
 
-// Le son de réussite (playWin, pad + shimmer ci-dessous) est baissé de 30%
-// en amplitude perçue: -30% linéaire = 20*log10(0.7) ≈ -3.1 dB, appliqué
-// directement sur le volume de base de ces deux synths (utilisés
-// uniquement par playWin, donc sans effet sur les autres sons).
+// Le son de réussite (playWin ci-dessous) est baissé de 30% en amplitude
+// perçue: -30% linéaire = 20*log10(0.7) ≈ -3.1 dB, appliqué directement sur
+// le volume de base de ces synths (utilisés uniquement par playWin, donc
+// sans effet sur les autres sons).
 const WIN_VOLUME_TRIM_DB = -3.1;
 
-// Durée totale de playWin réduite de moitié par rapport à la version
-// d'origine (attaques/decays/releases divisés par 2, voir playWin
-// ci-dessous pour les délais et durées de note également divisés par 2).
-const pad = new Tone.PolySynth(Tone.Synth, {
+// playWin alterne entre DEUX habillages à chaque victoire (retour
+// utilisateur: un peu de variété) — tous deux recomposés dans la gamme
+// pentatonique de La (A-C-D-E-G) qui sert de centre tonal à TOUTE la
+// musique du jeu (voir music.js/music-demos/couches/notes-couches.md);
+// les accords en do/ré majeur de la version d'origine juraient avec elle.
+
+// Version A ("quintes qui s'ouvrent"): deux accords en quintes ouvertes
+// (pas de tierce qui trancherait majeur/mineur) + un point d'orgue aigu.
+const padWinA = new Tone.PolySynth(Tone.Synth, {
   oscillator: { type: "sine" },
-  envelope: { attack: 0.7, decay: 0.8, sustain: 0.5, release: 2 },
+  envelope: { attack: 0.5, decay: 0.6, sustain: 0.52, release: 1.2 },
   volume: -12 + WIN_VOLUME_TRIM_DB,
 }).connect(reverb);
 
-const shimmer = new Tone.Synth({
+const shimmerWinA = new Tone.Synth({
   oscillator: { type: "sine" },
-  envelope: { attack: 0.3, decay: 0.5, sustain: 0.2, release: 1.5 },
+  envelope: { attack: 0.25, decay: 0.5, sustain: 0.15, release: 1.2 },
   volume: -18 + WIN_VOLUME_TRIM_DB,
+}).connect(reverb);
+
+// Version C ("quinte ouverte + brillance"): même langage que la nappe de
+// fond de music.js (quinte ouverte A2+E3 dans base.wav) + deux notes de
+// brillance qui arrivent au sommet.
+const padWinC = new Tone.PolySynth(Tone.Synth, {
+  oscillator: { type: "sine" },
+  envelope: { attack: 0.6, decay: 0.65, sustain: 0.48, release: 1.15 },
+  volume: -12 + WIN_VOLUME_TRIM_DB,
+}).connect(reverb);
+
+const sparkWinC = new Tone.Synth({
+  oscillator: { type: "sine" },
+  envelope: { attack: 0.02, decay: 0.35, sustain: 0.15, release: 0.5 },
+  volume: -17 + WIN_VOLUME_TRIM_DB,
 }).connect(reverb);
 
 // Petits accusés de réception pour les objectifs (cible atteinte/perdue,
@@ -157,14 +177,25 @@ export async function playError() {
   soft.triggerAttackRelease("F#3", "16n", Tone.now(), ERROR_SFX_VELOCITY);
 }
 
-// Montée ambiante, plus proche d'une onde qui se déploie que d'une fanfare :
-// deux accords étalés en pad + un point d'orgue aigu très diffus (reverb).
+// Montée ambiante, plus proche d'une onde qui se déploie que d'une fanfare —
+// alterne à chaque victoire entre les versions A et C ci-dessus (un peu de
+// variété), toutes deux dans la gamme pentatonique de La.
+let winVariantIsA = false; // premier appel bascule à true -> A joue en premier
+
 export async function playWin() {
   await ensureStarted();
   const now = Tone.now();
-  pad.triggerAttackRelease(["C4", "G4", "E5"], "4n", now);
-  pad.triggerAttackRelease(["D4", "A4", "F#5"], "2n", now + 0.65);
-  shimmer.triggerAttackRelease("C6", "2n", now + 0.25);
+  winVariantIsA = !winVariantIsA;
+  if (winVariantIsA) {
+    padWinA.triggerAttackRelease(["A3", "E4", "A4"], "4n", now);
+    padWinA.triggerAttackRelease(["D4", "A4", "D5"], "2n", now + 0.55);
+    shimmerWinA.triggerAttackRelease("E6", "2n", now + 0.25);
+  } else {
+    padWinC.triggerAttackRelease(["A3", "E4"], "2n", now);
+    padWinC.triggerAttackRelease(["A4", "D5"], "2n", now + 0.5);
+    sparkWinC.triggerAttackRelease("G5", "8n", now + 0.9);
+    sparkWinC.triggerAttackRelease("A5", "4n", now + 1.15);
+  }
 }
 
 // --- Objectifs: case-cible ---------------------------------------------

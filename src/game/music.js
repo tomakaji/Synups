@@ -36,6 +36,7 @@ const LAYER_URLS = {
   miroirsLayer2: "/music/miroirs-layer2.wav",
   neuronesMiroirs: "/music/neurones-miroirs.wav",
   prismes: "/music/prismes.wav",
+  pyra: "/music/pyra.wav",
   echec: "/music/echec.wav",
 };
 
@@ -54,6 +55,7 @@ const MECHANIC_LAYERS = [
   "miroirsLayer2",
   "neuronesMiroirs",
   "prismes",
+  "pyra",
 ];
 
 // Palier (compte d'éléments actuellement actifs, voir render.js:
@@ -70,6 +72,7 @@ const MECHANIC_THRESHOLDS = {
   miroirsLayer2: { count: "mirrorActive", min: 2 },
   neuronesMiroirs: { count: "neuronesMiroirsActive", min: 1 },
   prismes: { count: "prismActive", min: 1 },
+  pyra: { count: "pyraActive", min: 1 },
 };
 
 // Gain cible (au lieu de 1) quand une couche est débloquée — seule
@@ -78,6 +81,15 @@ const MECHANIC_THRESHOLDS = {
 const LAYER_ACTIVE_GAIN = { neurone: 1.1 };
 
 const FADE = 0.35; // secondes, montée/descente de gain par calque — évite tout clic
+
+// Fondu utilisé spécifiquement pour l'apparition/disparition d'une couche
+// MÉCANIQUE (setLayerActive, palier franchi/défranchi en cours de partie —
+// retour utilisateur: le fondu de 0.35s ci-dessus donnait une impression de
+// bascule "brutale" pour ce cas précis). Volontairement PAS utilisé pour
+// l'état d'échec (enterFailure/exitFailure) ni resetLayers: la musique
+// d'erreur doit au contraire apparaître/disparaître de façon nette et
+// immédiate — c'est le signal d'alarme, il doit rester FADE (0.35s).
+const LAYER_FADE = 1.1;
 
 const musicBus = new Tone.Volume(0).toDestination();
 
@@ -158,7 +170,7 @@ function setLayerActive(key, active) {
   if (active) unlocked.add(key);
   else unlocked.delete(key);
   if (!gains || failureCount > 0) return;
-  gains[key].gain.rampTo(active ? (LAYER_ACTIVE_GAIN[key] ?? 1) : 0, FADE);
+  gains[key].gain.rampTo(active ? (LAYER_ACTIVE_GAIN[key] ?? 1) : 0, LAYER_FADE);
 }
 
 /** Point d'entrée unique pour la musique par calques côté logique de jeu —
