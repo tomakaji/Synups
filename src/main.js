@@ -14,18 +14,23 @@ import {
   playChargeOverload,
   setMasterVolume,
 } from "./game/sound.js";
+import {
+  preloadMusic,
+  startMusic,
+  resetLayers as resetMusicLayers,
+  applyMechanicCounts,
+  enterFailure,
+  exitFailure,
+  setMusicVolume,
+} from "./game/music.js";
 import { createBoardRenderer } from "./game/render.js";
 import { initEditor } from "./editor.js";
-import { findSolution } from "./game/solver.js";
 import { FEATURES } from "./game/generator.js";
 import { requestLevel, ensureLevelBuffer, takeBufferedLevel } from "./game/infiniteClient.js";
 
 let currentLevelIndex = 0;
 // Le niveau EFFECTIVEMENT en cours, statique (`levels[currentLevelIndex]`)
 // ou généré à la volée (mode Infini) — voir loadLevel/loadInfiniteLevel.
-// `computeStars` travaille sur cet objet directement plutôt que sur un
-// index, pour ne pas dépendre du tableau `levels` quand la source est le
-// générateur.
 let currentLevel = null;
 let grid = null;
 // Historique des coups (poses/retraits de lumière) pour le bouton
@@ -33,54 +38,37 @@ let grid = null;
 // chargement/réinitialisation de niveau.
 let moveHistory = [];
 
-// Repère "par" (nombre de lumières d'une solution valide) utilisé comme
-// seuil de notation par défaut quand un niveau ne fournit pas explicitement
-// `starThresholds`. Calculé à la demande (au moment de la victoire, pas au
-// chargement du niveau: certains niveaux prennent jusqu'à ~1s à résoudre,
-// pas la peine de ralentir la navigation entre niveaux pour ça) et mis en
-// cache par OBJET niveau (Map à clé objet: fonctionne aussi bien pour un
-// niveau statique que pour un niveau généré, jamais deux fois le même objet
-// en mémoire pour deux niveaux différents). Les niveaux générés par le mode
-// Infini fournissent déjà `starThresholds` explicitement (voir
-// generator.js), donc ce chemin de secours ne les concerne en pratique
-// jamais — gardé quand même par cohérence/robustesse.
-const parCache = new Map();
-
-function computeStars(moves, level) {
-  if (Array.isArray(level.starThresholds) && level.starThresholds.length === 2) {
-    const [threeMax, twoMax] = level.starThresholds;
-    if (moves <= threeMax) return 3;
-    if (moves <= twoMax) return 2;
-    return 1;
-  }
-  let par = parCache.get(level);
-  if (par === undefined) {
-    const solution = findSolution(level, 400_000);
-    par = solution ? solution.length : null;
-    parCache.set(level, par);
-  }
-  if (par == null) return null;
-  if (moves <= par) return 3;
-  if (moves <= Math.ceil(par * 1.5)) return 2;
-  return 1;
-}
-
 const boardEl = document.getElementById("board");
 const levelNameEl = document.getElementById("level-name");
 const winOverlay = document.getElementById("win-overlay");
-const winStarsEl = document.getElementById("win-stars");
 const btnUndo = document.getElementById("btn-undo");
-const moveCountEl = document.getElementById("move-count");
 const renderer = createBoardRenderer(boardEl);
 
+// Musique par calques [voir music.js]: `mechanicCounts` est appelé une fois
+// PAR FRAME par render.js avec l'état COURANT (pas edge-triggered comme les
+// autres callbacks ci-dessous) — c'est lui qui pilote le démute/remute de
+// toutes les couches mécaniques (y compris les paliers "couche 2"), donc
+// aucun des callbacks edge-triggered n'a plus besoin de toucher à la
+// musique directement (contrairement à avant).
 const sounds = {
   targetSuccess: playTargetSuccess,
   targetLost: playTargetLost,
-  synapseBreak: playSynapseBreak,
-  synapseRestore: playSynapseRestore,
+  synapseBreak: () => {
+    playSynapseBreak();
+    enterFailure();
+  },
+  synapseRestore: () => {
+    playSynapseRestore();
+    exitFailure();
+  },
   chargeFull: playChargeFull,
   chargeEmptied: playChargeEmptied,
-  chargeOverload: playChargeOverload,
+  chargeOverload: () => {
+    playChargeOverload();
+    enterFailure();
+  },
+  chargeOverloadResolved: () => exitFailure(),
+  mechanicCounts: applyMechanicCounts,
 };
 
 // ---------- Points Infini ----------
@@ -133,32 +121,12 @@ function awardInfinitePoints(tier) {
 
 renderInfinitePoints();
 
-// Le compteur affiché (et l'entrée du système d'étoiles) doit baisser
-// quand on retire une lumière, pas monter: l'objectif est de résoudre le
-// puzzle avec le moins de lumières posées possible, pas juste d'y arriver
-// du premier coup. On utilise donc le nombre de lumières ACTUELLEMENT sur
-// la grille (grid.getPlacedLightCount()) plutôt que la longueur de
-// l'historique — chaque pose l'augmente de 1, chaque retrait (y compris via
-// Annuler, qui mute directement `lights`) le diminue de 1, sans variable à
-// garder synchronisée à la main. `getPlacedLightCount()` exclut les
-// duplicatas de neurone miroir [expérimental]: ils n'ont pas été posés par
-// le joueur, ils ne comptent donc pas comme un coup. `moveHistory`, lui,
-// reste un journal complet et inchangé: c'est uniquement lui qui permet à
-// Annuler/Ctrl+Z de retrouver l'état précédent.
+// Journal complet des coups: c'est uniquement lui qui permet à Annuler/
+// Ctrl+Z de retrouver l'état précédent (le compteur de coups affiché et la
+// notation par étoiles qui en dépendait ont été retirés — feature jugée
+// obsolète).
 function syncMoveUi() {
   btnUndo.disabled = moveHistory.length === 0;
-  const n = grid.getPlacedLightCount();
-  moveCountEl.textContent = `${n} coup${n === 1 ? "" : "s"}`;
-}
-
-function renderStars(stars) {
-  if (stars == null) {
-    winStarsEl.textContent = "";
-    return;
-  }
-  winStarsEl.innerHTML = [1, 2, 3]
-    .map((i) => `<span class="win-star ${i <= stars ? "win-star--filled" : ""}">★</span>`)
-    .join("");
 }
 
 /** Commun aux niveaux statiques et générés: prépare le plateau une fois
@@ -168,7 +136,10 @@ function startBoard() {
   syncMoveUi();
   renderer.build(grid, { onCellClick: handleCellClick, sounds });
   winOverlay.classList.add("hidden");
-  renderStars(null);
+  // Musique par calques: le déblocage reflète la progression du niveau qui
+  // commence, pas un cumul avec le précédent — la lecture elle-même
+  // continue sans interruption (voir music.js: resetLayers).
+  resetMusicLayers();
 }
 
 function loadLevel(index) {
@@ -181,6 +152,10 @@ function loadLevel(index) {
 
 function handleCellClick(r, c) {
   if (mode === "infinite" && infiniteAdvancePending) return;
+  // Musique par calques: démarre au premier vrai geste utilisateur (voir
+  // music.js — Tone.js exige un clic avant de pouvoir jouer du son, même
+  // règle que ensureStarted() dans sound.js). Sans effet si déjà démarrée.
+  startMusic();
   const result = grid.toggleLight(r, c);
   if (result === "placed" || result === "removed") {
     // Un seul clic peut affecter PLUSIEURS cases à la fois (neurone
@@ -224,7 +199,6 @@ function handleCellClick(r, c) {
       awardInfinitePoints(lastInfiniteResult?.measuredTier ?? lastInfiniteResult?.requestedTier ?? 1);
       setTimeout(() => runGeneration({ intoBoard: true }), 500);
     } else {
-      renderStars(computeStars(grid.getPlacedLightCount(), currentLevel));
       winOverlay.classList.remove("hidden");
     }
   }
@@ -255,13 +229,45 @@ function undoLastMove() {
 
 btnUndo.onclick = undoLastMove;
 
-// Réglage de volume simple: un seul curseur pour tous les sons (voir
-// setMasterVolume dans sound.js, appliqué en amont de tous les synths).
+// Un seul curseur de volume commun aux sons ET à la musique (retour
+// utilisateur: "ajouter une barre de réglage volume qui regle les deux en
+// même temps pour plus de cohérence"), plus deux icônes toggle indépendantes
+// pour couper/rétablir chaque flux sans toucher au niveau réglé par le
+// curseur — on retient donc juste un booléen muet par flux et on ré-applique
+// `niveau du curseur` (ou 0 si muet) à chaque changement de l'un ou l'autre.
 const volumeSlider = document.getElementById("volume-slider");
-setMasterVolume(Number(volumeSlider.value) / 100);
-volumeSlider.addEventListener("input", () => {
-  setMasterVolume(Number(volumeSlider.value) / 100);
+const btnSoundToggle = document.getElementById("btn-sound-toggle");
+const btnMusicToggle = document.getElementById("btn-music-toggle");
+
+let soundMuted = false;
+let musicMuted = false;
+
+function applyVolumes() {
+  const level = Number(volumeSlider.value) / 100;
+  setMasterVolume(soundMuted ? 0 : level);
+  setMusicVolume(musicMuted ? 0 : level);
+}
+
+volumeSlider.addEventListener("input", applyVolumes);
+
+btnSoundToggle.addEventListener("click", () => {
+  soundMuted = !soundMuted;
+  btnSoundToggle.classList.toggle("muted", soundMuted);
+  applyVolumes();
 });
+
+btnMusicToggle.addEventListener("click", () => {
+  musicMuted = !musicMuted;
+  btnMusicToggle.classList.toggle("muted", musicMuted);
+  applyVolumes();
+});
+
+applyVolumes();
+
+// Précharge les 7 pistes dès le chargement de la page (pas besoin d'un
+// geste utilisateur pour ÇA, seule la LECTURE l'exige — voir startMusic
+// dans handleCellClick) pour qu'elles soient déjà prêtes au premier clic.
+preloadMusic();
 
 // ---------- Mode Infini ----------
 // Voir docs/infinite-mode-design.md. Un niveau généré est un objet niveau
@@ -488,12 +494,6 @@ let mode = "play";
 function setMode(next) {
   mode = next;
   document.querySelectorAll(".mode-switch-btn").forEach((b) => b.classList.toggle("active", b.dataset.mode === next));
-
-  // Le compteur de coups (et la notation par étoiles qui en dépend) n'existe
-  // plus qu'en mode Jouer statique — voir handleCellClick. Basculé ici
-  // plutôt que dans startBoard: syncMoveUi (partagée) continue de mettre à
-  // jour son texte en Infini aussi (inoffensif), seul l'AFFICHAGE change.
-  moveCountEl.classList.toggle("hidden", next === "infinite");
 
   editorView.classList.toggle("hidden", next !== "editor");
   if (next === "editor") {

@@ -2,6 +2,48 @@
 // Sons doux et spatiaux (onde/reverb) plutôt que secs et percussifs, pour
 // rester cohérent avec le thème cérébral/neuronal du jeu.
 import * as Tone from "tone";
+import { isFailureActive } from "./music.js";
+
+// Multiplicateur d'amplitude (paramètre `velocity` de Tone.Synth, 1 =
+// niveau normal) appliqué aux SFX d'action qui mènent à une erreur — retour
+// utilisateur: "on les entend trop peu", +20% linéaire. Appliqué via
+// `velocity` plutôt qu'en remontant le `.volume` (en dB) des synths
+// partagés (`soft`/`tone`), qui servent aussi à d'autres sons (ex.
+// playTargetLost, playChargeEmptied) qui ne doivent PAS être affectés.
+const ERROR_SFX_VELOCITY = 1.2;
+
+// Note de pose = extraite de la VRAIE mélodie de neurone-couleur.wav
+// (analyse spectrale du fichier, voir music-demos/couches/notes-couches.md
+// pour le contexte général) plutôt qu'un tirage uniforme dans MUSIC_SCALE
+// comme avant — retour utilisateur: la pose doit "citer" la mélodie du jeu.
+// La piste est structurée en 3 blocs de 8s (phrase A-B-A', voir notes-
+// couches.md) ; chaque bloc est décomposé ci-dessous en sa propre suite de
+// notes JOUÉES DANS L'ORDRE. Bloc A (0-8s): E5 puis C5 puis A4 (résolution
+// sur la tonique). Bloc B (8-16s): E5, G4, E5 (seul bloc qui ne redescend
+// pas sur A4, cohérent avec son rôle de contraste). Bloc A' (16-24s):
+// C5, E5, A4 (variante du bloc A, même note de résolution finale).
+const MELODY_BLOCKS = [
+  ["E5", "C5", "A4"],
+  ["E5", "G4", "E5"],
+  ["C5", "E5", "A4"],
+];
+
+// État de la suite en cours: `currentBlock` est l'un des tableaux ci-dessus
+// (référence directe, pas une copie), `posInBlock` l'index de la PROCHAINE
+// note à jouer dedans. Tant que la suite n'est pas épuisée, on avance
+// simplement dedans à chaque pose ; une fois épuisée, on retire un nouveau
+// bloc au hasard parmi les 3 (répétition du même bloc possible, voir retour
+// utilisateur) et on repart de son index 0.
+let currentBlock = null;
+let posInBlock = 0;
+
+function nextPlacementNote() {
+  if (!currentBlock || posInBlock >= currentBlock.length) {
+    currentBlock = MELODY_BLOCKS[Math.floor(Math.random() * MELODY_BLOCKS.length)];
+    posInBlock = 0;
+  }
+  return currentBlock[posInBlock++];
+}
 
 let started = false;
 async function ensureStarted() {
@@ -68,9 +110,41 @@ const chime = new Tone.Synth({
   volume: -13,
 }).connect(reverb);
 
+// Timbre dédié au son de pose pendant l'état d'échec (synapse rompue ou
+// neurone en surcharge, voir music.js: isFailureActive/enterFailure) — un
+// intervalle dissonant (tritone) en registre grave, sur une onde en dents de
+// scie (plus "sombre"/rugueuse que le sinus utilisé pour la pose normale)
+// pour signaler que quelque chose ne va pas SANS sonner comme playError
+// (une seule note, timbre/registre différents) : la pose n'est pas elle-même
+// une erreur, elle se contente d'être teintée par l'état d'échec en cours.
+const darkPlaceLow = new Tone.Synth({
+  oscillator: { type: "sawtooth" },
+  envelope: { attack: 0.015, decay: 0.3, sustain: 0, release: 0.4 },
+  volume: -14,
+}).connect(delay);
+
+const darkPlaceHigh = new Tone.Synth({
+  oscillator: { type: "sawtooth" },
+  envelope: { attack: 0.015, decay: 0.3, sustain: 0, release: 0.4 },
+  volume: -16,
+}).connect(delay);
+
 export async function playPlace() {
   await ensureStarted();
-  tone.triggerAttackRelease("E5", "8n");
+  if (isFailureActive()) {
+    // Hauteur FIXE (aucune variation de note tant que l'échec dure) — voir
+    // nextPlacementNote() plus bas, qu'on n'appelle PAS ici: currentBlock/
+    // posInBlock restent inchangés, donc la suite normale reprend
+    // exactement où elle en était une fois l'échec résolu.
+    const now = Tone.now();
+    darkPlaceLow.triggerAttackRelease("G2", "8n", now);
+    darkPlaceHigh.triggerAttackRelease("C#3", "8n", now);
+    return;
+  }
+  // Voir nextPlacementNote() plus haut: avance dans la suite de notes du
+  // bloc de mélodie en cours (neurone-couleur.wav), retire un nouveau bloc
+  // au hasard une fois la suite épuisée.
+  tone.triggerAttackRelease(nextPlacementNote(), "8n");
 }
 
 export async function playRemove() {
@@ -80,7 +154,7 @@ export async function playRemove() {
 
 export async function playError() {
   await ensureStarted();
-  soft.triggerAttackRelease("F#3", "16n");
+  soft.triggerAttackRelease("F#3", "16n", Tone.now(), ERROR_SFX_VELOCITY);
 }
 
 // Montée ambiante, plus proche d'une onde qui se déploie que d'une fanfare :
@@ -114,8 +188,8 @@ export async function playTargetLost() {
 export async function playSynapseBreak() {
   await ensureStarted();
   const now = Tone.now();
-  soft.triggerAttackRelease("D3", "16n", now);
-  soft.triggerAttackRelease("C3", "8n", now + 0.05);
+  soft.triggerAttackRelease("D3", "16n", now, ERROR_SFX_VELOCITY);
+  soft.triggerAttackRelease("C3", "8n", now + 0.05, ERROR_SFX_VELOCITY);
 }
 
 export async function playSynapseRestore() {
@@ -138,6 +212,6 @@ export async function playChargeEmptied() {
 export async function playChargeOverload() {
   await ensureStarted();
   const now = Tone.now();
-  soft.triggerAttackRelease("F3", "16n", now);
-  tone.triggerAttackRelease("F#3", "16n", now + 0.02);
+  soft.triggerAttackRelease("F3", "16n", now, ERROR_SFX_VELOCITY);
+  tone.triggerAttackRelease("F#3", "16n", now + 0.02, ERROR_SFX_VELOCITY);
 }

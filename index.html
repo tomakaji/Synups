@@ -22,13 +22,38 @@
             <button id="btn-infinite-settings">Réglages</button>
             <button id="btn-infinite-next">Nouveau niveau</button>
           </span>
-          <button id="btn-undo" disabled>Annuler</button>
-          <button id="btn-reset">Réinitialiser</button>
-          <span id="move-count" class="move-count">0 coup</span>
+          <button id="btn-undo" class="icon-btn" disabled aria-label="Annuler" title="Annuler">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="1 4 1 10 7 10"></polyline>
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+            </svg>
+          </button>
+          <button id="btn-reset" class="icon-btn" aria-label="Réinitialiser" title="Réinitialiser">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
         </div>
-        <div id="volume-control" class="volume-control">
-          <label for="volume-slider">Volume</label>
-          <input id="volume-slider" type="range" min="0" max="100" value="80" step="1" />
+        <div class="audio-controls-row">
+          <button id="btn-sound-toggle" class="icon-toggle" aria-label="Activer/couper les sons" title="Sons">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"></polygon>
+              <path class="icon-wave icon-wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              <path class="icon-wave icon-wave-2" d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+              <line class="icon-mute-slash" x1="2" y1="2" x2="22" y2="22"></line>
+            </svg>
+          </button>
+          <button id="btn-music-toggle" class="icon-toggle" aria-label="Activer/couper la musique" title="Musique">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 18V5l12-2v13"></path>
+              <circle cx="6" cy="18" r="3"></circle>
+              <circle cx="18" cy="16" r="3"></circle>
+              <line class="icon-mute-slash" x1="2" y1="2" x2="22" y2="22"></line>
+            </svg>
+          </button>
+          <input id="volume-slider" type="range" min="0" max="100" value="80" step="1" aria-label="Volume (sons et musique)" />
         </div>
         <div id="infinite-points" class="infinite-points" title="Points gagnés en mode Infini">0 pt</div>
         <div class="mode-switch" id="mode-switch">
@@ -310,7 +335,6 @@
     <div id="win-overlay" class="hidden">
       <div class="win-card">
         <p>Résolu</p>
-        <div id="win-stars" class="win-stars"></div>
         <button id="btn-next-win">Niveau suivant</button>
       </div>
     </div>

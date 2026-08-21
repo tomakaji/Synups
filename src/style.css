@@ -88,31 +88,93 @@ body {
   color: var(--text-dim);
 }
 
-.volume-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-  color: var(--text-dim);
-}
-
-.volume-control input[type="range"] {
-  width: 100px;
-  accent-color: var(--accent);
-}
-
 .level-controls button:disabled:hover {
   border-color: #2a3040;
   color: var(--text-dim);
 }
 
-.move-count {
-  font-size: 0.85rem;
+/* Boutons icône (Annuler/Réinitialiser) — mêmes dimensions/comportement que
+   .level-controls button mais sans texte, l'icône SVG seule porte le sens
+   (voir aria-label/title dans le markup pour l'accessibilité). */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  border-color: #2a3040;
   color: var(--text-dim);
 }
 
-.move-count.hidden {
-  display: none;
+.icon-svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Rangée son/musique: deux icônes toggle (mute/unmute indépendants) +
+   un curseur de volume UNIQUE qui règle les deux flux à la fois. */
+.audio-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icon-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text-dim);
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.icon-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Barre oblique de coupure: masquée par défaut, révélée quand le bouton
+   porte .muted (voir main.js: btnSoundToggle/btnMusicToggle). */
+.icon-toggle .icon-mute-slash {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.icon-toggle.muted {
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.icon-toggle.muted .icon-mute-slash {
+  opacity: 1;
+}
+
+.audio-controls-row input[type="range"] {
+  width: 100px;
+  accent-color: var(--accent);
 }
 
 #level-name {
@@ -583,23 +645,6 @@ body {
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
-}
-
-.win-stars {
-  display: flex;
-  justify-content: center;
-  gap: 6px;
-  margin: 0 0 18px;
-  font-size: 1.8rem;
-  line-height: 1;
-}
-
-.win-star {
-  color: #2a3040;
-}
-
-.win-star--filled {
-  color: var(--accent);
 }
 
 /* ---------- Bascule Jeu / Infini / Éditeur ---------- */

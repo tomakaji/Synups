@@ -339,7 +339,13 @@ function prismIcon(cell) {
  * une case vide (jeu normal ou test en direct dans l'éditeur) ;
  * `options.sounds` est un objet de callbacks optionnels
  * (targetSuccess/targetLost/synapseBreak/synapseRestore/chargeFull/
- * chargeEmptied/chargeOverload). `playMirrorSuccess(links)`/
+ * chargeEmptied/chargeOverload/chargeOverloadResolved — edge-triggered, un
+ * seul appel au franchissement, effet sonore propre) plus `mechanicCounts`
+ * (appelé une fois PAR FRAME avec l'état courant complet — voir plus bas —
+ * dédié à la musique par calques, voir music.js: c'est lui qui permet à une
+ * couche de se démuter ET de se remuter selon le compte courant, pas juste
+ * au premier franchissement).
+ * `playMirrorSuccess(links)`/
  * `playMirrorFailure(failure)` [expérimental] jouent une animation
  * éphémère de neurone miroir (voir grid.js: getLastMirrorLinks/
  * getLastMirrorFailure) — à appeler par l'appelant juste après un
@@ -599,6 +605,21 @@ export function createBoardRenderer(boardEl) {
   }
 
   function render() {
+    // Musique par calques [voir music.js] : contrairement aux hooks
+    // ci-dessous (edge-triggered, un seul appel au FRANCHISSEMENT), ces
+    // compteurs mesurent l'état COURANT à chaque frame — nécessaire pour
+    // pouvoir aussi bien démuter que REMUTER une couche quand son palier
+    // n'est plus atteint (retour utilisateur: "si on retire les conditions
+    // d'unmute, on remute"), y compris les paliers "couche 2" (≥3
+    // neurones/≥2 neurones couleur/≥2 miroirs). `neuronesMiroirsActive`
+    // vient directement de `grid._mirrorDuplicateOf` (un duplicata par lien
+    // actif) plutôt que d'un compteur par case, ce mécanisme n'ayant pas
+    // d'état "actif" par case comme prisme/miroir.
+    let chargeFullCount = 0;
+    let chargeFullColoredCount = 0;
+    let mirrorActiveCount = 0;
+    let prismActiveCount = 0;
+
     for (let r = 0; r < grid.rows; r++) {
       for (let c = 0; c < grid.cols; c++) {
         const cellData = grid.cellAt(r, c);
@@ -609,6 +630,13 @@ export function createBoardRenderer(boardEl) {
           el.className = "cell cell--prism";
           el.style.backgroundColor = "";
           renderPrismIcon(icon, cellData);
+          // Musique par calques: "actif" dès la 1ère lumière en portée (voir
+          // grid.js — 0 et 1 lumière donnent le même état de base, la
+          // couleur s'applique déjà à ce stade). Compté ci-dessous pour
+          // `mechanicCounts` (plus de hook edge-triggered dédié: la couche
+          // prisme doit pouvoir se remuter, pas seulement se démuter).
+          const prismActive = (cellData._prismAdjacentCount || 0) >= 1;
+          if (prismActive) prismActiveCount++;
           continue;
         }
 
@@ -625,10 +653,16 @@ export function createBoardRenderer(boardEl) {
             el.classList.add("cell--wall");
             if (icon) icon.innerHTML = wallIcon();
             break;
-          case CellType.MIRROR:
+          case CellType.MIRROR: {
             el.classList.add("cell--mirror");
             if (icon) icon.innerHTML = mirrorIcon(cellData);
+            // Musique par calques: "actif" dès qu'un laser coloré le
+            // traverse (voir mirrorIcon ci-dessus, même test). Compté pour
+            // `mechanicCounts` (plus de hook edge-triggered dédié).
+            const mirrorActive = !!(cellData._mirrorColor && (cellData._mirrorColor.r || cellData._mirrorColor.g || cellData._mirrorColor.b));
+            if (mirrorActive) mirrorActiveCount++;
             break;
+          }
           case CellType.FILTER:
             el.classList.add("cell--filter");
             if (icon) icon.innerHTML = filterIcon(cellData);
@@ -660,8 +694,16 @@ export function createBoardRenderer(boardEl) {
               if (chargeState === "satisfied" && prevCharge !== "satisfied") sounds.chargeFull?.();
               if (prevCharge === "satisfied" && chargeState !== "satisfied") sounds.chargeEmptied?.();
               if (chargeState === "overloaded" && prevCharge !== "overloaded") sounds.chargeOverload?.();
+              // Musique par calques: sortie de surcharge (vers "building" OU
+              // "satisfied" — les deux comptent comme "erreur résolue" pour
+              // l'état échec, voir music.js).
+              if (prevCharge === "overloaded" && chargeState !== "overloaded") sounds.chargeOverloadResolved?.();
             }
             prevChargeState.set(key, chargeState);
+            if (chargeState === "satisfied") {
+              chargeFullCount++;
+              if (cellData.color) chargeFullColoredCount++;
+            }
             break;
           }
           case CellType.PYRA: {
@@ -678,8 +720,10 @@ export function createBoardRenderer(boardEl) {
               if (pyraState === "satisfied" && prevPyra !== "satisfied") sounds.chargeFull?.();
               if (prevPyra === "satisfied" && pyraState !== "satisfied") sounds.chargeEmptied?.();
               if (pyraState === "overloaded" && prevPyra !== "overloaded") sounds.chargeOverload?.();
+              if (prevPyra === "overloaded" && pyraState !== "overloaded") sounds.chargeOverloadResolved?.();
             }
             prevChargeState.set(key, pyraState);
+            if (pyraState === "satisfied") chargeFullCount++;
             break;
           }
           case CellType.EMPTY: {
@@ -724,6 +768,20 @@ export function createBoardRenderer(boardEl) {
     }
 
     renderLasers();
+
+    // Musique par calques: un seul appel par frame avec l'état COURANT
+    // complet — voir music.js `applyMechanicCounts`, qui décide lui-même
+    // démute/remute par seuil (y compris les seuils "couche 2"). Le
+    // duplicata de neurone miroir n'a pas de compteur dédié plus haut car
+    // ce n'est pas un état par case (voir grid.js: `_mirrorDuplicateOf`, un
+    // duplicata actuellement placé = un lien actif).
+    sounds.mechanicCounts?.({
+      chargeFull: chargeFullCount,
+      chargeFullColored: chargeFullColoredCount,
+      mirrorActive: mirrorActiveCount,
+      prismActive: prismActiveCount,
+      neuronesMiroirsActive: grid._mirrorDuplicateOf ? grid._mirrorDuplicateOf.size : 0,
+    });
   }
 
   return {
