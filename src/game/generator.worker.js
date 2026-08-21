@@ -15,8 +15,12 @@
 
 import { generateLevel } from "./generator.js";
 
+// TEMPORAIRE (debug déploiement) — à retirer une fois le problème identifié.
+console.log("[generator.worker] script chargé et exécuté");
+
 self.onmessage = (event) => {
   const { type, requestId } = event.data || {};
+  console.log("[generator.worker] message reçu", event.data);
   if (type !== "generate") return;
 
   let result = null;
@@ -24,8 +28,10 @@ self.onmessage = (event) => {
     const { difficulty, enabledFeatureKeys, seed, maxAttempts, maxTimeMs } = event.data;
     result = generateLevel({ difficulty, enabledFeatureKeys, seed, maxAttempts, maxTimeMs });
   } catch (err) {
+    console.log("[generator.worker] erreur, postMessage error", err);
     self.postMessage({ type: "error", requestId, message: err?.message || String(err) });
     return;
   }
+  console.log("[generator.worker] résultat prêt, postMessage result", requestId);
   self.postMessage({ type: "result", requestId, result });
 };

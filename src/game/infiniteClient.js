@@ -35,8 +35,18 @@ let pool = null; // Array<{ worker, pending, nextRequestId }>, créé au premier
 
 function makeWorkerEntry() {
   const entry = { worker: null, pending: null, nextRequestId: 1 };
+  // IMPORTANT: `new Worker(new URL(...), options)` doit rester un appel
+  // inline en un seul statement — Vite détecte ce motif exact par analyse
+  // statique pour émettre le worker comme un chunk séparé en build de
+  // production. Extraire `new URL(...)` dans une variable intermédiaire
+  // (comme fait ici temporairement pour logguer l'URL) casse cette
+  // détection et fait basculer Vite sur un inlining base64 du script, qui
+  // échoue silencieusement une fois déployé — c'est very probablement LA
+  // cause du bug de génération en prod. Voir commentaire ci-dessous.
+  console.log("[infiniteClient] création Worker (pool)");
   entry.worker = new Worker(new URL("./generator.worker.js", import.meta.url), { type: "module" });
   entry.worker.onmessage = (event) => {
+    console.log("[infiniteClient] onmessage reçu du Worker", event.data);
     const { type, requestId } = event.data || {};
     if (!entry.pending || requestId !== entry.pending.requestId) return; // réponse obsolète: ignorée
     const { resolve, reject } = entry.pending;
@@ -45,10 +55,14 @@ function makeWorkerEntry() {
     else if (type === "error") reject(new Error(event.data.message || "Erreur du générateur"));
   };
   entry.worker.onerror = (event) => {
+    console.log("[infiniteClient] onerror du Worker", event);
     if (!entry.pending) return;
     const { reject } = entry.pending;
     entry.pending = null;
     reject(event.error || new Error(event.message || "Erreur du Worker de génération"));
+  };
+  entry.worker.onmessageerror = (event) => {
+    console.log("[infiniteClient] onmessageerror du Worker", event);
   };
   return entry;
 }
@@ -63,6 +77,8 @@ function runOnWorker(entry, payload) {
   const requestId = entry.nextRequestId++;
   return new Promise((resolve, reject) => {
     entry.pending = { requestId, resolve, reject };
+    // TEMPORAIRE (debug déploiement) — à retirer une fois le problème identifié.
+    console.log("[infiniteClient] postMessage vers Worker", requestId, payload);
     entry.worker.postMessage({ type: "generate", requestId, ...payload });
   });
 }
