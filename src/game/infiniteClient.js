@@ -110,20 +110,36 @@ export function raceForBest(taskPromises, { isPerfect, isBetter }) {
     for (const task of taskPromises) {
       task
         .then((result) => {
+          console.log("[raceForBest] task resolved", { doneCount, total, result });
           if (settled) return;
           doneCount++;
-          if (result && isPerfect(result)) {
+          let perfect;
+          try {
+            perfect = result && isPerfect(result);
+          } catch (err) {
+            console.log("[raceForBest] isPerfect a levé une exception", err);
+            throw err;
+          }
+          if (perfect) {
             settled = true;
+            console.log("[raceForBest] resolve (perfect)", result);
             resolve(result);
             return;
           }
-          if (result && (!best || isBetter(best, result))) best = result;
+          try {
+            if (result && (!best || isBetter(best, result))) best = result;
+          } catch (err) {
+            console.log("[raceForBest] isBetter a levé une exception", err);
+            throw err;
+          }
           if (!settled && doneCount === total) {
             settled = true;
+            console.log("[raceForBest] resolve (best-effort, tous terminés)", best);
             resolve(best);
           }
         })
         .catch((err) => {
+          console.log("[raceForBest] task rejetée", err);
           if (settled) return;
           doneCount++;
           lastError = err;
@@ -206,9 +222,20 @@ function runNextQueuedJob() {
   const next = highPriorityQueue.shift() || lowPriorityQueue.shift();
   if (!next) return;
   activeJob = true;
+  console.log("[runNextQueuedJob] lancement generateOnce", next.config);
   generateOnce(next.config)
-    .then(next.resolve, next.reject)
+    .then(
+      (r) => {
+        console.log("[runNextQueuedJob] generateOnce résolu", r);
+        next.resolve(r);
+      },
+      (err) => {
+        console.log("[runNextQueuedJob] generateOnce rejeté", err);
+        next.reject(err);
+      }
+    )
     .finally(() => {
+      console.log("[runNextQueuedJob] finally, activeJob=false");
       activeJob = false;
       runNextQueuedJob();
     });
