@@ -362,30 +362,54 @@ const MIRROR_DENSITY = 0.24;
 // Pyra se greffe directement dans `resolveAndDeriveClues` — la même passe
 // qui dérive déjà le nombre de chaque charge classique depuis une solution
 // gloutonne fraîche (voir `greedySolve`): parmi les cases candidates "W",
-// un sous-ensemble est choisi une seule fois (voir `pickPyraCandidates`,
-// juste après `buildInitialLayout`) comme "éligible Pyra" — mais chaque
-// case éligible ne devient RÉELLEMENT "Y" QUE si son compte réel de
-// lumières adjacentes, dans la solution gloutonne DE CET APPEL précis,
-// tombe dans la plage valide [1,3] ; sinon elle retombe sur la dérivation
-// normale (charge classique ou case interdite/void), exactement comme un
-// candidat non-éligible. Un "Y" commité est donc TOUJOURS valide par
-// construction pour la solution qui vient de le produire (jamais de
-// surcharge/case morte figée par erreur) — et comme toute case candidate,
-// elle reste "vivante" (re-dérivée, potentiellement re-testée pour
-// l'éligibilité Pyra) à chaque nouvel appel de `resolveAndDeriveClues`
-// (typiquement après qu'un nouveau mur soit posé par `repairToUnique`),
-// SAUF si elle tombe un jour à 0 lumière adjacente: elle est alors voidée
-// DÉFINITIVEMENT comme n'importe quelle charge classique (voir le
-// commentaire de `resolveAndDeriveClues`, ce n'est pas spécifique à Pyra).
+// un TOUT PETIT sous-ensemble est choisi une seule fois (voir
+// `pickPyraCandidates`, juste après `buildInitialLayout`) comme "éligible
+// Pyra" — mais chaque case éligible ne devient RÉELLEMENT "Y" QUE si son
+// compte réel de lumières adjacentes, dans la solution gloutonne DE CET
+// APPEL précis, tombe dans la plage valide [1,3] ; sinon elle retombe sur
+// la dérivation normale (charge classique ou case interdite/void),
+// exactement comme un candidat non-éligible. Un "Y" commité est donc
+// TOUJOURS valide par construction pour la solution qui vient de le
+// produire (jamais de surcharge/case morte figée par erreur) — et comme
+// toute case candidate, elle reste "vivante" (re-dérivée, potentiellement
+// re-testée pour l'éligibilité Pyra) à chaque nouvel appel de
+// `resolveAndDeriveClues` (typiquement après qu'un nouveau mur soit posé
+// par `repairToUnique`), SAUF si elle tombe un jour à 0 lumière adjacente:
+// elle est alors voidée DÉFINITIVEMENT comme n'importe quelle charge
+// classique (voir le commentaire de `resolveAndDeriveClues`, ce n'est pas
+// spécifique à Pyra).
+//
+// Retour utilisateur explicite (après une première version qui en plaçait
+// beaucoup trop, et surtout sans jamais vérifier leur utilité réelle):
+// "on ne veut pas beaucoup de pyras, mais à chaque fois ils doivent poser
+// un dilemme [...] actuellement leur couleur est déduite par les autres
+// indices" — càd qu'une fois le reste du plateau résolu par déduction
+// normale, le nombre de lumières autour de la case Pyra (donc sa couleur)
+// se trouvait déjà entièrement fixé PAR AILLEURS: le joueur n'avait jamais
+// besoin de choisir/déduire quoi que ce soit à cet endroit précis, la case
+// se "remplissait toute seule". Corrigé en deux volets :
+//   1. Un nombre de candidats désormais MINUSCULE (voir
+//      `PYRA_MAX_CANDIDATES`, un compte fixe plutôt qu'une densité) — moins
+//      de bruit à filtrer, et surtout aucun risque de devoir retirer après
+//      coup un Pyra qui se révélerait NÉCESSAIRE (voir point 2 : un retrait
+//      après coup casserait potentiellement l'unicité déjà garantie).
+//   2. Un nettoyage de NÉCESSITÉ (voir `pruneUnnecessaryPyra`, appelé en fin
+//      de `tryGenerate` comme `pruneUnusedMirrors`) : chaque "Y" survivant
+//      est retesté SEUL — retiré (VOID) sauf si son retrait rouvrirait une
+//      ambiguïté (le reste du plateau, SANS sa contrainte propre, admettrait
+//      alors plusieurs remplissages valides). Un "Y" qui survit ce
+//      nettoyage est donc TOUJOURS un vrai dilemme par construction: sans
+//      lui, le joueur ne pourrait PAS déduire le bon remplissage par les
+//      seuls autres indices.
 //
 // Volontairement appliqué sur les candidats "W" au hasard (contrairement à
 // `placeAlignedMirrors`, qui biaise vers l'alignement pour maximiser les
 // chances qu'un laser coloré traverse effectivement le miroir): Pyra n'a
 // besoin d'aucune coordination géométrique avec autre chose pour être
-// "utile" — sa propre contrainte (1 à 3 lumières) suffit à le rendre
-// nécessaire au même titre qu'une charge classique, que la Couleur soit
+// "utile" — le nettoyage de nécessité (point 2 ci-dessus) suffit déjà à
+// écarter les emplacements qui ne l'auraient pas été, que la Couleur soit
 // cochée ou non pour cet essai.
-const PYRA_CANDIDATE_DENSITY = 0.4;
+const PYRA_MAX_CANDIDATES = 2;
 // Volontairement 1 (aucun effet) : voir le commentaire ci-dessus — le
 // miroir ne doit plus jamais coûter de recherche supplémentaire, sa
 // fréquence repose entièrement sur le placement/la sélection biaisés, pas
@@ -579,32 +603,88 @@ function placeAlignedMirrors(layout, rows, cols, mirrorDensity, rand) {
  * Choisit, parmi les cases "W" (candidates indice) du layout déjà stabilisé
  * (après `buildInitialLayout`, donc après `relaxIsolatedCells` — pas avant,
  * pour ne pas piocher un candidat qui serait ensuite rouvert en case vide),
- * un sous-ensemble éligible Pyra — voir le commentaire de
- * `PYRA_CANDIDATE_DENSITY` pour la sémantique exacte de cette éligibilité
- * (une promesse de CANDIDATURE, pas une garantie de survie). Retourne un
- * `Set` de clés `"r,c"`, consulté par `resolveAndDeriveClues`. Appelé une
- * seule fois par tentative de génération — la composition du sous-ensemble
- * ne change plus ensuite, seule sa dérivation effective est refaite à
- * chaque passe.
+ * un TOUT PETIT sous-ensemble éligible Pyra — au plus `maxCount` (voir
+ * `PYRA_MAX_CANDIDATES`), tirés au hasard SANS remise (`shuffle` puis les N
+ * premiers) plutôt qu'une densité indépendante par case : retour
+ * utilisateur explicite ("on ne veut pas beaucoup de pyras") — un compte
+ * fixe plafonne le nombre de candidats quelle que soit la taille de la
+ * grille, là où une densité en aurait fait proliférer sur les grandes
+ * grilles 3★. Une promesse de CANDIDATURE, pas une garantie de survie (voir
+ * `resolveAndDeriveClues` pour la validité, `pruneUnnecessaryPyra` pour la
+ * nécessité). Retourne un `Set` de clés `"r,c"`, consulté par
+ * `resolveAndDeriveClues`. Appelé une seule fois par tentative de
+ * génération — la composition du sous-ensemble ne change plus ensuite,
+ * seule sa dérivation effective est refaite à chaque passe.
  */
-function pickPyraCandidates(layout, rows, cols, density, rand) {
+function pickPyraCandidates(layout, rows, cols, maxCount, rand) {
   const set = new Set();
-  if (density <= 0) return set;
+  if (maxCount <= 0) return set;
+  const wCells = [];
   for (let r = 0; r < rows; r++)
     for (let c = 0; c < cols; c++) {
-      if (layout[r][c] === "W" && rand() < density) set.add(`${r},${c}`);
+      if (layout[r][c] === "W") wCells.push(`${r},${c}`);
     }
+  shuffle(wCells, rand);
+  for (let i = 0; i < Math.min(maxCount, wCells.length); i++) set.add(wCells[i]);
   return set;
 }
 
 /** Vrai si au moins une case Pyra ("Y") survit dans le layout final — voir
- * `tryGenerate`, pendant de `mirrorGenuinelyUsed` pour le Miroir : Pyra n'a
- * pas besoin d'une simulation de solution (sa validité est déjà garantie au
- * moment de sa dérivation, voir `resolveAndDeriveClues`), un simple test de
- * présence suffit à savoir si la feature a effectivement survécu à la
- * réparation/minimisation. */
+ * `tryGenerate`, pendant de `mirrorGenuinelyUsed` pour le Miroir. */
 function layoutHasPyra(layout) {
   return layout.some((row) => row.includes("Y"));
+}
+
+/**
+ * Nettoie EN PLACE les Pyra décoratifs — retour utilisateur explicite (voir
+ * le commentaire de `PYRA_MAX_CANDIDATES`): "actuellement leur couleur est
+ * déduite par les autres indices", càd qu'une fois le reste résolu, le
+ * nombre de lumières adjacentes à la case Pyra (donc sa couleur) se
+ * trouvait déjà entièrement fixé PAR AILLEURS — le joueur n'a jamais besoin
+ * de le déduire lui-même. Pendant de `pruneUnusedMirrors` pour le Miroir,
+ * même philosophie que pour la Couleur ("nécessaire, jamais décoratif",
+ * voir commentaire d'en-tête) — mais le TEST est différent, car
+ * contrairement au Miroir (qui n'a lui-même AUCUNE contrainte de victoire,
+ * seulement un effet optionnel sur des lasers), Pyra EST une contrainte de
+ * victoire à part entière (`isWon`, voir grid.js) : la question n'est pas
+ * "a-t-il été traversé par un laser ?" mais "sa contrainte propre a-t-elle
+ * un jour été la SEULE chose qui empêchait une autre solution ?".
+ *
+ * Pour chaque "Y" survivant, teste si LE RETIRER (converti en VOID, donc
+ * sans SA contrainte propre "1 à 3 lumières adjacentes") change quoi que ce
+ * soit à l'unicité du plateau ENTIER (recalculée par le VRAI solveur —
+ * `analyzeAndCount`, pas la solution gloutonne de `resolveAndDeriveClues` —
+ * donc toute interaction avec la Couleur/les cibles déjà posées, si un
+ * laser Pyra y contribuait, est nativement prise en compte: retirer un Pyra
+ * dont dépendait une cible rendrait le plateau insolvable, `count` tomberait
+ * à 0, donc `stillUnique` serait faux et le retrait serait annulé — jamais
+ * besoin d'un traitement spécial pour ce cas).
+ *
+ * Si le plateau reste unique SANS cette contrainte (`stillUnique`), c'est
+ * que les AUTRES indices suffisaient déjà, seuls, à fixer un pattern de
+ * lumière unique autour de cette case : le "Y" est décoratif, on laisse le
+ * retrait (VOID, définitif — comme n'importe quelle charge classique
+ * voidée). Sinon (retrait rouvre une ambiguïté, ou rend même le plateau
+ * insolvable), il est réellement nécessaire : on le remet intact.
+ *
+ * Sûr par construction, comme le reste du nettoyage Phase 2/3 : un retrait
+ * n'est jamais commité sauf si `count===1` ET `exhausted` sont CONFIRMÉS
+ * par le solveur — jamais de perte de l'invariant "toujours unique".
+ */
+function pruneUnnecessaryPyra(layout, rows, cols, nodeBudget, deadline) {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (layout[r][c] !== "Y") continue;
+      if (Date.now() > deadline) return; // budget de temps global dépassé: on garde les "Y" pas encore retestés tels quels
+
+      layout[r][c] = "X"; // retrait test: sans sa contrainte propre, cette case redevient un void neutre
+      const level = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
+      const { count, exhausted } = analyzeAndCount(level, 2, nodeBudget);
+      const stillUnique = exhausted && count === 1;
+
+      if (!stillUnique) layout[r][c] = "Y"; // nécessaire: on le remet (décoratif sinon, le retrait reste)
+    }
+  }
 }
 
 // Distance 1 (orthogonale) uniquement : c'est la seule qui compte pour
@@ -779,7 +859,7 @@ function greedySolve(cells, rows, cols) {
  * Retourne la solution utilisée, ou `null` si la forme est dégénérée (rien
  * à éclairer).
  *
- * `pyraCandidates` (voir `pickPyraCandidates`/`PYRA_CANDIDATE_DENSITY`,
+ * `pyraCandidates` (voir `pickPyraCandidates`/`PYRA_MAX_CANDIDATES`,
  * `null`/absent si la feature Pyra n'est pas demandée) : une case candidate
  * dont la clé `"r,c"` y figure devient "Y" au lieu d'une dérivation normale
  * SI ET SEULEMENT SI son compte réel de lumières adjacentes dans CETTE
@@ -1504,12 +1584,12 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
     mirrorDensity: wantsMirror ? MIRROR_DENSITY : 0,
     rand,
   });
-  // Voir PYRA_CANDIDATE_DENSITY: choisi une seule fois ici, APRÈS
+  // Voir PYRA_MAX_CANDIDATES: choisi une seule fois ici, APRÈS
   // buildInitialLayout (donc après relaxIsolatedCells) pour ne piocher que
   // parmi des candidats "W" qui resteront bien des candidats — passé
   // ensuite tel quel à travers repairToUnique (qui seul rappelle
   // resolveAndDeriveClues), jamais recalculé.
-  const pyraCandidates = wantsPyra ? pickPyraCandidates(layout, rows, cols, PYRA_CANDIDATE_DENSITY, rand) : null;
+  const pyraCandidates = wantsPyra ? pickPyraCandidates(layout, rows, cols, PYRA_MAX_CANDIDATES, rand) : null;
   if (!repairToUnique(layout, rows, cols, useForbidden, rand, preset.repairNodeBudget, deadline, pyraCandidates))
     return null;
 
@@ -1556,12 +1636,18 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
   // jamais nettoyé par aucune passe précédente.
   if (wantsMirror) pruneUnusedMirrors(layout, rows, cols, finalAnalysis.solution);
 
-  // Phase Pyra : aucune tentative supplémentaire non plus — chaque "Y" déjà
-  // présent dans `layout` a été validé au moment même de sa dérivation
-  // (voir `resolveAndDeriveClues`), donc contrairement au Miroir, aucune
-  // vérification a posteriori contre `finalAnalysis.solution` n'est
-  // nécessaire pour sa VALIDITÉ. Seule sa SURVIE (a-t-elle été minimisée ou
-  // colorée jusqu'à disparaître ?) reste à constater, via `layoutHasPyra`.
+  // Phase Pyra : chaque "Y" déjà présent dans `layout` a été validé au
+  // moment même de sa dérivation (voir `resolveAndDeriveClues`), donc
+  // contrairement au Miroir, aucune vérification a posteriori contre
+  // `finalAnalysis.solution` n'est nécessaire pour sa VALIDITÉ. Ce qui reste
+  // à faire, c'est le nettoyage de NÉCESSITÉ (retour utilisateur — voir
+  // `pruneUnnecessaryPyra`) : retire tout "Y" dont le retrait ne changerait
+  // rien à l'unicité (donc jamais un vrai dilemme pour le joueur), APRÈS la
+  // Couleur/le Miroir pour que la vérification tienne compte de toute
+  // interaction déjà en place (ex: une cible qui dépendrait du laser d'un
+  // Pyra précis). `pyraApplied` ne peut donc être constaté qu'APRÈS ce
+  // nettoyage, pas avant.
+  if (wantsPyra) pruneUnnecessaryPyra(layout, rows, cols, preset.nodeBudget, deadline);
   const pyraApplied = wantsPyra && layoutHasPyra(layout);
 
   const actualFeatureSubset = featureSubset.filter((k) => {
