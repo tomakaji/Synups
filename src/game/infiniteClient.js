@@ -48,11 +48,23 @@ function makeWorkerEntry() {
   entry.worker.onmessage = (event) => {
     console.log("[infiniteClient] onmessage reçu du Worker", event.data);
     const { type, requestId } = event.data || {};
-    if (!entry.pending || requestId !== entry.pending.requestId) return; // réponse obsolète: ignorée
+    console.log("[infiniteClient] check pending", {
+      hasPending: !!entry.pending,
+      pendingRequestId: entry.pending && entry.pending.requestId,
+      incomingRequestId: requestId,
+      pendingRequestIdType: entry.pending && typeof entry.pending.requestId,
+      incomingRequestIdType: typeof requestId,
+    });
+    if (!entry.pending || requestId !== entry.pending.requestId) {
+      console.log("[infiniteClient] IGNORÉ (réponse obsolète ou pending absent)");
+      return; // réponse obsolète: ignorée
+    }
     const { resolve, reject } = entry.pending;
     entry.pending = null;
+    console.log("[infiniteClient] appel de resolve/reject", type);
     if (type === "result") resolve(event.data.result);
     else if (type === "error") reject(new Error(event.data.message || "Erreur du générateur"));
+    console.log("[infiniteClient] resolve/reject terminé");
   };
   entry.worker.onerror = (event) => {
     console.log("[infiniteClient] onerror du Worker", event);
@@ -106,8 +118,10 @@ export function raceForBest(taskPromises, { isPerfect, isBetter }) {
     let doneCount = 0;
     let best = null;
     let lastError = null;
+    console.log("[raceForBest] démarrage avec", total, "tâches");
 
     for (const task of taskPromises) {
+      console.log("[raceForBest] enregistrement .then() sur une tâche");
       task
         .then((result) => {
           console.log("[raceForBest] task resolved", { doneCount, total, result });
