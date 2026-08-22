@@ -145,15 +145,18 @@ export const FEATURES = {
   mirror: { label: "Miroir dévieur", weight: 2, implemented: true, requires: "color", pickProbability: 0.92 },
   filter: { label: "Filtre", weight: 2, implemented: false, requires: "color" },
   prism: { label: "Prisme", weight: 3, implemented: false, requires: "color" },
-  // Pas de `requires`: contrairement à Filtre/Prisme, Pyra est complet en
-  // lui-même — une contrainte "1 à 3 lumières adjacentes" (voir grid.js)
-  // qui fonctionne indépendamment de la Couleur. Son laser tricolore est
-  // tracé par recompute() qu'il y ait ou non des cases-cibles à satisfaire
-  // (voir tryGenerate/pickPyraCandidates plus bas: aucune coordination
-  // dédiée avec la Phase 2 Couleur n'est nécessaire, la simulation
-  // générique suffit déjà à en tenir compte si les deux se trouvent
-  // cochées ensemble).
-  pyra: { label: "Pyra", weight: 3, implemented: true },
+  // `requires: "color"` (retour utilisateur : "ce qu'on veut c'est un
+  // dilemme de COULEUR sur le Pyra", pas juste un dilemme sur son propre
+  // compte — voir `pruneUnnecessaryPyra`, dont le SEUL critère de survie
+  // est désormais "son laser est-il nécessaire à une cible couleur ?").
+  // Sans Couleur, aucune cible n'existe jamais pour dépendre de ce laser :
+  // un "Y" y démote donc TOUJOURS en charge numérique normale, par
+  // construction — cocher Pyra sans Couleur ne produirait jamais rien,
+  // exactement comme Miroir/Filtre/Prisme. `pickProbability` élevée pour la
+  // même raison que Miroir (voir son commentaire) : maximiser la chance
+  // d'être piochée sur LE MÊME essai qui obtient déjà Couleur, seule façon
+  // gratuite d'augmenter sa fréquence sans budget de recherche dédié.
+  pyra: { label: "Pyra", weight: 3, implemented: true, requires: "color", pickProbability: 0.92 },
   mirrorNeuron: { label: "Neurone miroir [expérimental]", weight: 5, implemented: false },
 };
 
@@ -392,41 +395,37 @@ const MIRROR_DENSITY = 0.24;
 //      coup un Pyra qui se révélerait NÉCESSAIRE (voir point 2 : un retrait
 //      après coup casserait potentiellement l'unicité déjà garantie).
 //   2. Un nettoyage de NÉCESSITÉ (voir `pruneUnnecessaryPyra`, appelé en fin
-//      de `tryGenerate` comme `pruneUnusedMirrors`) : chaque "Y" survivant a
-//      SA CONTRAINTE PROPRE ignorée (pas la case elle-même retirée — voir
-//      grid.js `isWon({ignorePyra})`) et on vérifie si le reste du plateau
-//      admet alors plusieurs remplissages valides. Un "Y" qui survit ce
-//      nettoyage est donc TOUJOURS un vrai dilemme par construction: sans
-//      SA contrainte précise (1 à 3 lumières), plusieurs remplissages du
-//      reste du plateau seraient par ailleurs valides — le joueur doit
-//      réellement choisir/déduire, pas juste constater une case qui se
-//      remplit toute seule.
+//      de `tryGenerate` comme `pruneUnusedMirrors`) — REDÉFINI depuis (voir
+//      son commentaire) pour ne garder QUE le rôle couleur : un "Y" qui
+//      survit ce nettoyage est TOUJOURS nécessaire à UNE CIBLE COULEUR
+//      précise, jamais juste "nécessaire" au sens générique du terme.
 //
 // Volontairement appliqué sur les candidats "W" au hasard (contrairement à
 // `placeAlignedMirrors`, qui biaise vers l'alignement pour maximiser les
-// chances qu'un laser coloré traverse effectivement le miroir): Pyra n'a
-// besoin d'aucune coordination géométrique avec autre chose pour être
-// "utile" — le nettoyage de nécessité (point 2 ci-dessus) suffit déjà à
-// écarter les emplacements qui ne l'auraient pas été, que la Couleur soit
-// cochée ou non pour cet essai.
+// chances qu'un laser coloré traverse effectivement le miroir): la richesse
+// du dilemme de couleur repose entièrement sur `pruneUnnecessaryPyra` (le
+// SEUL filtre qui compte désormais) et sur le biais de retrait
+// `PYRA_PROXIMITY_RADIUS` ci-dessous (qui, lui, coordonne activement avec la
+// Phase 2 Couleur) — le PLACEMENT initial n'a donc besoin d'aucune
+// coordination géométrique propre.
 const PYRA_MAX_CANDIDATES = 3;
 // Rayon (distance de Manhattan) utilisé UNIQUEMENT par la Phase 2 (Couleur,
 // voir `orderCluesForRemoval`) pour biaiser QUELLES charges retirer/rouvrir
 // en priorité — ne contredit pas le paragraphe ci-dessus sur le PLACEMENT du
 // Pyra (toujours au hasard pur, aucune coordination géométrique à la pose).
-// Retour utilisateur : même corrigé (point 2 ci-dessus), un Pyra survit le
-// plus souvent grâce à SA PROPRE contrainte de filtre (`ignorePyra`), rarement
-// comme SOURCE de laser coloré nécessaire à une cible (l'autre moitié du test
-// dans `pruneUnnecessaryPyra`) — parce que la Couleur choisit quoi retirer
-// sans savoir qu'un Pyra existe à proximité. En rouvrant en priorité les
-// charges proches d'un Pyra, l'ambiguïté blanche rouverte a plus de chances
-// de faire varier le compte de lumières adjacentes AU Pyra lui-même entre
-// solutions candidates — condition nécessaire (pas suffisante) pour que
-// `tryDiscriminatingColoring`, déjà générique sur la source du signal
-// coloré, choisisse une cible qui dépend réellement de sa couleur. 2 cases :
-// assez large pour couvrir les indices qui contraignent typiquement le
-// compte de lumières d'un Pyra (voisins directs ET voisins-de-voisins),
-// assez restreint pour rester un biais local plutôt qu'un retrait
+// But : `pruneUnnecessaryPyra` ne garde désormais un "Y" QUE si son laser
+// est nécessaire à une cible couleur (voir son commentaire) — mais la
+// Couleur choisit quoi retirer/coloriser sans savoir qu'un Pyra existe à
+// proximité, donc cette dépendance n'apparaît souvent que par accident. En
+// rouvrant en priorité les charges proches d'un Pyra, l'ambiguïté blanche
+// rouverte a plus de chances de faire varier le compte de lumières
+// adjacentes AU Pyra lui-même entre solutions candidates — condition
+// nécessaire (pas suffisante) pour que `tryDiscriminatingColoring`, déjà
+// générique sur la source du signal coloré, choisisse une cible qui dépend
+// réellement de sa couleur. 2 cases : assez large pour couvrir les indices
+// qui contraignent typiquement le compte de lumières d'un Pyra (voisins
+// directs ET voisins-de-voisins), assez restreint pour rester un biais
+// local plutôt qu'un retrait
 // quasi-global.
 const PYRA_PROXIMITY_RADIUS = 2;
 // Retour utilisateur (capture d'écran d'un niveau généré) : "le Pyra en haut
@@ -676,105 +675,6 @@ function layoutHasPyra(layout) {
   return layout.some((row) => row.includes("Y"));
 }
 
-/**
- * Nettoie EN PLACE les Pyra décoratifs — retour utilisateur explicite (voir
- * le commentaire de `PYRA_MAX_CANDIDATES`): "je trouve toujours la plupart
- * des pyra (voire tous) inutiles EN TANT QUE Pyra [...] ils sont utiles en
- * tant que Neurone [obstacle qui compte des lumières adjacentes, comme une
- * charge classique], mais ni en tant que Pyra (devoir faire un choix pour
- * avoir la couleur dont on a besoin) ni en tant que couleur".
- *
- * Une première version de ce nettoyage (voir historique) testait "retirer
- * le Y (converti en VOID) casse-t-il l'unicité du plateau ?" — un test TROP
- * LARGE : il confondait la nécessité de Pyra comme simple OBSTACLE OPAQUE
- * (compter/bloquer, comme n'importe quelle case pleine — presque toujours
- * "nécessaire" à ce titre, même sans rapport avec sa mécanique Pyra) avec
- * sa nécessité comme MÉCANIQUE PYRA (le joueur doit réellement hésiter
- * entre 1, 2 ou 3 lumières adjacentes pour obtenir la bonne couleur). Un
- * "Y" pouvait donc survivre uniquement parce qu'une case pleine QUELCONQUE
- * était nécessaire à cet endroit — jamais parce que son identité PYRA
- * (plutôt qu'un chiffre fixe) apportait quoi que ce soit.
- *
- * Test corrigé : au lieu de retirer la case, on ignore SEULEMENT sa
- * contrainte de victoire propre (voir grid.js `isWon({ ignorePyra })`) —
- * elle reste un obstacle opaque identique en tout point (même position,
- * même opacité aux lasers colorés, même participation à l'illumination),
- * seul son état "1 à 3 lumières" n'est plus un motif de rejet côté
- * solveur. On énumère alors (cap=2) les remplissages qui satisfont TOUT LE
- * RESTE du plateau SANS cette contrainte précise :
- *   - Une SEULE solution trouvée ⇒ le reste des indices (numériques,
- *     couleur, miroir...) fixe déjà, à lui seul, EXACTEMENT combien de
- *     lumières touchent cette case — la contrainte Pyra ne fait jamais la
- *     différence, le joueur n'a jamais besoin de choisir. Décoratif :
- *     candidat au retrait (voir plus bas pour le token de remplacement).
- *   - AU MOINS DEUX solutions trouvées ⇒ candidat à un vrai dilemme, MAIS
- *     voir le correctif ci-dessous avant de conclure.
- *
- * BUG CORRIGÉ #2 (retour utilisateur, capture d'écran d'un niveau généré :
- * "le Pyra en bas... il n'y a aucune case à colorer, il sert à rien") :
- * "au moins deux solutions" ne prouve PAS que c'est LA CASE PYRA qui les
- * distingue — ces solutions peuvent différer n'importe où ailleurs sur le
- * plateau tout en s'accordant PARFAITEMENT sur le nombre de lumières
- * adjacentes à CETTE case précise (ambiguïté réelle, mais sans aucun
- * rapport avec ce Pyra). Dans ce cas, ignorer sa contrainte "aide"
- * globalement à trancher le plateau, mais le joueur, LUI, n'a jamais besoin
- * de raisonner sur ce Pyra pour connaître son compte : il est déjà fixé par
- * les autres indices, quelle que soit l'ambiguïté qui subsiste ailleurs. Un
- * "vrai dilemme" exige donc EN PLUS que le nombre de lumières adjacentes à
- * (r,c) DIFFÈRE réellement entre au moins deux des solutions trouvées (voir
- * `adjacentLightCount`) — sinon, traité comme décoratif EN TANT QUE FILTRE
- * (comme le cas "une seule solution" ci-dessus), et seul le test laser
- * (ci-dessous) peut encore le sauver.
- *
- * BUG CORRIGÉ (retour utilisateur, niveaux devenus insolubles après ce
- * nettoyage): la toute première implémentation remplaçait un "Y" décoratif
- * par VOID ("X"). Or VOID est TRANSPARENT aux lasers colorés (voir grid.js,
- * en-tête) alors que Pyra — comme tout obstacle plein — leur est OPAQUE :
- * ce remplacement changeait donc silencieusement la trajectoire d'AUTRES
- * lasers (charges classiques colorées, mirroirs...) qui passaient à côté
- * sans jamais toucher ce Pyra, cassant des cibles couleur déjà posées par
- * la Phase 2 (qui, elle, a tourné en supposant cette case opaque). Corrigé
- * en remplaçant par un MUR ("W", -> CellType.WALL) plutôt qu'un Void: un
- * mur est opaque à la lumière blanche ET aux lasers colorés.
- *
- * Ce remplacement révèle en fait un DEUXIÈME angle de nécessité, distinct
- * du test `ignorePyra` ci-dessus et volontairement vérifié EN PLUS (pas
- * juste un filet de sécurité) : le test `ignorePyra` répond à "sa
- * contrainte de victoire (1 à 3) départage-t-elle l'unicité ?" (nécessaire
- * COMME FILTRE — le dilemme "combien de lumières pour rester valide"), mais
- * une case Pyra "success" est AUSSI une SOURCE DE LASER coloré (voir
- * grid.js recompute(): `pyraReady`, exactement comme une charge colorée
- * satisfaite) — un Mur, lui, n'émet jamais rien. Si une cible couleur
- * posée par la Phase 2 dépend de CE laser précis, le convertir en Mur (qui
- * tue le laser en même temps que le filtre) rend le plateau insoluble
- * (`count` tombe à 0) même si le test `ignorePyra` seul avait dit
- * "décoratif" — c'est donc une revérification complète (vrai solveur, pas
- * seulement `ignorePyra`) qui tranche : nécessaire COMME FILTRE (test
- * `ignorePyra`) OU COMME SOURCE DE LASER (cette revérification) suffit à
- * garder "Y" intact ; retiré seulement si ni l'un ni l'autre ne s'applique.
- * C'est précisément le second manque relevé par l'utilisateur ("ni en tant
- * que couleur") : un Pyra peut désormais survivre pour CETTE raison aussi,
- * pas seulement pour son rôle de filtre.
- *
- * Toujours prouvé sûr : la solution de référence du plateau (déjà connue
- * valide AVEC la contrainte Pyra pleine) reste par construction une des
- * solutions trouvées par le test `ignorePyra` (relâcher une contrainte ne
- * peut jamais l'invalider), donc `solutions.length === 0` ne devrait jamais
- * arriver là (garde-fou défensif : traité comme "nécessaire").
- *
- * Tourne jusqu'à POINT FIXE (pas une seule passe) : avec plusieurs Pyra sur
- * le même plateau (voir `PYRA_MAX_CANDIDATES`), un "Y" peut sembler
- * nécessaire uniquement parce qu'un AUTRE "Y", pas encore retiré à ce
- * moment de la passe, maintenait artificiellement une ambiguïté — le
- * retirer PEUT donc révéler qu'un "Y" déjà "confirmé nécessaire" plus tôt
- * dans la même passe est en fait, lui aussi, décoratif une fois le premier
- * retiré. Une seule passe gauche-à-droite laisserait ce genre de cas
- * survivre par simple accident d'ordre de balayage. Termine forcément
- * (chaque itération ne peut que RETIRER des "Y", jamais en rajouter — le
- * nombre de candidats, déjà minuscule, décroît strictement à chaque
- * retrait commité) ; `deadline` reste le garde-fou wall-clock si jamais une
- * itération devenait trop coûteuse.
- */
 /** Nombre de voisins orthogonaux de (r,c) allumés dans `solution` (un
  * remplissage — voir `symmetricDifferenceCells`, même format `[[r,c], ...]`
  * de coordonnées allumées). */
@@ -783,66 +683,94 @@ function adjacentLightCount(solution, r, c, rows, cols) {
   return orthogonalNeighbors(r, c, rows, cols).filter(([nr, nc]) => lit.has(`${nr},${nc}`)).length;
 }
 
-/** Vrai si `adjacentLightCount(., r, c, ...)` diffère entre AU MOINS deux
- * `solutions` — voir BUG CORRIGÉ #2 dans `pruneUnnecessaryPyra` : distingue
- * une ambiguïté qui concerne réellement (r,c) d'une ambiguïté purement
- * ailleurs sur le plateau. */
-function adjacentLightCountVaries(solutions, r, c, rows, cols) {
-  const counts = new Set(solutions.map((sol) => adjacentLightCount(sol, r, c, rows, cols)));
-  return counts.size >= 2;
-}
-
+/**
+ * Nettoie EN PLACE les Pyra décoratifs — retour utilisateur explicite (voir
+ * le commentaire de `PYRA_MAX_CANDIDATES`): "je trouve toujours la plupart
+ * des pyra (voire tous) inutiles EN TANT QUE Pyra [...] ils sont utiles en
+ * tant que Neurone [obstacle qui compte des lumières adjacentes, comme une
+ * charge classique], mais ni en tant que Pyra (devoir faire un choix pour
+ * avoir la couleur dont on a besoin) ni en tant que couleur".
+ *
+ * REDÉFINITION IMPORTANTE (retour utilisateur, après deux correctifs
+ * précédents qui gardaient encore un critère "filtre") : "avoir un dilemme
+ * SUR le Pyra c'est pas ce qu'on veut. Ce qu'on veut c'est avoir un dilemme
+ * DE COULEUR sur le Pyra." Autrement dit, la seule chose qui compte est :
+ * SON LASER (voir grid.js recompute(): `pyraReady`, exactement comme une
+ * charge colorée satisfaite) est-il nécessaire pour qu'une cible couleur de
+ * la Phase 2 soit atteinte avec la bonne teinte ? Tout le reste — y compris
+ * "sa propre contrainte 1-3 lumières départage-t-elle l'unicité blanche ?"
+ * (l'ancien critère "filtre", testé via `ignorePyra` dans une version
+ * antérieure) — a été ABANDONNÉ comme critère de survie : Pyra accepte
+ * indifféremment 1, 2 OU 3 lumières comme "succès" (voir grid.js
+ * `_computeClueStates`, ce n'est PAS un compte exact comme une charge
+ * numérique), donc un tel dilemme ne porte jamais sur "quelle couleur ?"
+ * mais seulement sur "au moins 1 et au plus 3 ?" — une question qui n'a
+ * rien à voir avec la couleur et qui a produit exactement le "Pyra qui ne
+ * sert à rien" pointé du doigt sur une capture d'écran.
+ *
+ * Test : convertit hypothétiquement la case en charge NUMÉRIQUE NORMALE de
+ * MÊME compte `n` (voir `adjacentLightCount` sur la solution actuelle,
+ * déjà garantie unique à ce stade) — PAS en mur ("W"/WALL). Une charge de
+ * compte `n` exige EXACTEMENT `n` lumières adjacentes, une contrainte au
+ * moins aussi stricte que celle de Pyra (qui acceptait tout `n` ∈ [1,3]) :
+ * ça préserve donc EXACTEMENT le même rôle de filtre, en ne retirant QUE le
+ * laser. Si le plateau reste unique avec cette charge normale, le laser
+ * n'était nécessaire à RIEN — décoratif, démotion commitée (le "Y" devient
+ * simplement ce chiffre, pas une case void : le rôle filtre, lui, était
+ * peut-être bien réel, juste sans rapport avec la couleur). Si l'unicité
+ * casse, c'est la PREUVE que sa couleur exacte importait à une cible
+ * quelque part — dilemme de couleur confirmé, "Y" reste intact.
+ *
+ * BUG CORRIGÉ (retour utilisateur, niveaux devenus insolubles après une
+ * toute première version de ce nettoyage) : cette première version
+ * remplaçait un "Y" décoratif par VOID ("X"). Or VOID est TRANSPARENT aux
+ * lasers colorés (voir grid.js, en-tête) alors que Pyra — comme tout
+ * obstacle plein — leur est OPAQUE : ce remplacement changeait donc
+ * silencieusement la trajectoire d'AUTRES lasers qui passaient à côté sans
+ * jamais toucher ce Pyra. La démotion en charge numérique normale (ci-
+ * dessus) est opaque exactement comme Pyra l'était, donc ce problème ne se
+ * pose plus.
+ *
+ * Tourne jusqu'à POINT FIXE (pas une seule passe) : avec plusieurs Pyra sur
+ * le même plateau (voir `PYRA_MAX_CANDIDATES`), un "Y" peut sembler
+ * nécessaire uniquement parce qu'un AUTRE "Y", pas encore retiré à ce
+ * moment de la passe, maintenait artificiellement une ambiguïté — le
+ * retirer PEUT donc révéler qu'un "Y" déjà "confirmé nécessaire" plus tôt
+ * dans la même passe est en fait, lui aussi, décoratif une fois le premier
+ * retiré. Une seule passe gauche-à-droite laisserait ce genre de cas
+ * survivre par simple accident d'ordre de balayage. Une seule résolution
+ * PAR PASSE (pas par candidat) suffit à connaître `n` pour tous les "Y"
+ * encore présents : la solution gagnante ne change jamais tant qu'aucune
+ * démotion n'a encore été commitée (une charge de compte `n` est une
+ * contrainte au moins aussi stricte que ce que Pyra acceptait déjà).
+ * Termine forcément (chaque itération ne peut que RETIRER des "Y", jamais
+ * en rajouter) ; `deadline` reste le garde-fou wall-clock.
+ */
 function pruneUnnecessaryPyra(layout, rows, cols, nodeBudget, deadline) {
   let changed = true;
   while (changed) {
     changed = false;
+    if (Date.now() > deadline) return;
+
+    const currentLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
+    const current = analyzeAndCount(currentLevel, 2, nodeBudget);
+    if (!current || !current.exhausted || !current.solution) return; // résultat non concluant: on arrête, "Y" restants inchangés
+
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         if (layout[r][c] !== "Y") continue;
-        if (Date.now() > deadline) return; // budget de temps global dépassé: on garde les "Y" pas encore retestés tels quels
+        if (Date.now() > deadline) return;
 
-        // BUG CORRIGÉ #3 (même capture d'écran) : `pickPyraCandidates` exige
-        // déjà >= PYRA_MIN_FREE_NEIGHBORS voisins "." AU MOMENT DU CHOIX du
-        // candidat, mais `repairToUnique` peut ensuite consommer l'un de ces
-        // voisins (le convertir en "W" pour casser une ambiguïté ailleurs)
-        // SANS savoir qu'il appartenait à un Pyra — la garantie de départ
-        // n'est donc pas toujours vraie sur le plateau FINAL. Retesté ici,
-        // sur le compte à CE stade : si trop peu de voisins libres restent,
-        // on tente le retrait D'OFFICE (sans même consulter le test filtre
-        // ci-dessous) — la revérification WALL plus bas reste le seul juge
-        // final: si ce Pyra s'avère malgré tout indispensable, elle annule
-        // le retrait et il survit (dilemme trivial mais réellement forcé,
-        // cas résiduel qu'on ne peut pas éliminer sans repenser le voisinage
-        // — voir le commentaire de PYRA_MIN_FREE_NEIGHBORS).
-        const freeNeighbors = orthogonalNeighbors(r, c, rows, cols).filter(
-          ([nr, nc]) => layout[nr][nc] === "."
-        ).length;
-        let seemsDecorative = freeNeighbors < PYRA_MIN_FREE_NEIGHBORS;
+        const n = adjacentLightCount(current.solution, r, c, rows, cols);
+        if (n < 1 || n > 3) continue; // garde-fou défensif: ne devrait jamais arriver (Y valide par construction)
 
-        if (!seemsDecorative) {
-          const probeLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
-          const probe = enumerateSolutions(probeLevel, 2, nodeBudget, {
-            ignorePyra: new Set([`${r},${c}`]),
-          });
-          if (!probe.exhausted) continue; // résultat non concluant: "Y" reste tel quel par prudence
-          // Voir BUG CORRIGÉ #2 ci-dessus: "plusieurs solutions" ne suffit
-          // pas, il faut que SON PROPRE compte de lumières adjacentes varie
-          // parmi elles pour que ce soit un vrai dilemme SUR CE PYRA
-          // précisément.
-          seemsDecorative =
-            probe.solutions.length === 1 || !adjacentLightCountVaries(probe.solutions, r, c, rows, cols);
-          if (!seemsDecorative) continue; // vrai dilemme confirmé: "Y" reste tel quel
-        }
-
-        // Voir le commentaire ci-dessus: "W" (WALL), jamais "X" (VOID), pour
-        // préserver l'opacité aux lasers colorés — puis revérification
-        // complète avant de commiter.
-        layout[r][c] = "W";
+        const prevToken = layout[r][c];
+        layout[r][c] = String(n); // hypothèse: charge NORMALE de même compte, sans laser (voir commentaire)
         const finalLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
         const verify = analyzeAndCount(finalLevel, 2, nodeBudget);
-        const stillUnique = verify.exhausted && verify.count === 1;
-        if (stillUnique) changed = true; // retrait commité: relance une passe complète (voir point fixe ci-dessus)
-        else layout[r][c] = "Y"; // filet de sécurité: interaction imprévue, on annule le retrait
+        const stillUnique = verify && verify.exhausted && verify.count === 1;
+        if (stillUnique) changed = true; // laser non nécessaire: démotion commitée, relance une passe complète
+        else layout[r][c] = prevToken; // dilemme de couleur confirmé: "Y" reste tel quel
       }
     }
   }
@@ -1074,7 +1002,7 @@ function symmetricDifferenceCells(solutionA, solutionB) {
 /** Vrai si murer (convertir en "W") la case vide (r,c) ferait chuter le
  * nombre de voisins orthogonaux ENCORE "." d'un candidat Pyra voisin
  * sous PYRA_MIN_FREE_NEIGHBORS — voir le commentaire de `repairToUnique`
- * ("BUG CORRIGÉ #3" dans `pruneUnnecessaryPyra`). `pyraCandidates` peut
+ * ci-dessous. `pyraCandidates` peut
  * contenir des clés de cases déjà dérivées en "Y" OU encore en attente
  * ("W", pas encore repassées par `resolveAndDeriveClues`) — les deux sont
  * protégées de la même façon, la case candidate ne change jamais de
@@ -1106,9 +1034,9 @@ function wouldStarvePyraNeighbor(layout, r, c, rows, cols, pyraCandidates) {
  * atteint, `false` sinon (forme dégénérée, réparation non convergée, ou
  * deadline dépassée).
  *
- * BUG CORRIGÉ #3 (voir `pruneUnnecessaryPyra`, capture d'écran utilisateur
- * d'un Pyra réduit à un seul voisin libre) : cette boucle mure des cases au
- * hasard parmi celles où deux solutions divergent, SANS savoir qu'une case
+ * BUG CORRIGÉ (retour utilisateur, capture d'écran d'un Pyra réduit à un
+ * seul voisin libre) : cette boucle mure des cases au hasard parmi celles
+ * où deux solutions divergent, SANS savoir qu'une case
  * peut être le DERNIER voisin "." encore libre d'un candidat Pyra — la
  * murer après coup réduit son espace de dilemme à un choix quasi-binaire
  * (0 ou 1 lumière) que `pickPyraCandidates` avait pourtant explicitement
