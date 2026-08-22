@@ -454,10 +454,8 @@ async function runGeneration({ intoBoard }) {
   const previousLabel = statusTarget.textContent;
   statusTarget.textContent = intoBoard ? "∞ · génération…" : "Génération en cours…";
 
-  console.log("[runGeneration] avant await requestLevel", config);
   try {
     const result = await requestLevel(config);
-    console.log("[runGeneration] requestLevel résolu", result);
     if (!result) {
       statusTarget.textContent = intoBoard
         ? previousLabel
@@ -468,9 +466,7 @@ async function runGeneration({ intoBoard }) {
     navStaticEl.classList.add("hidden");
     navInfiniteEl.classList.remove("hidden");
     playView.classList.remove("hidden");
-    console.log("[runGeneration] avant loadInfiniteLevel");
     loadInfiniteLevel(result);
-    console.log("[runGeneration] après loadInfiniteLevel");
     infiniteStatusEl.textContent = "";
     // Le résultat servi ici ne venait PAS du buffer (sinon on serait déjà
     // sorti plus haut) : on lance quand même un remplissage pour préparer
@@ -478,9 +474,8 @@ async function runGeneration({ intoBoard }) {
     ensureLevelBuffer(config);
   } catch (err) {
     statusTarget.textContent = "Erreur du générateur — réessaie.";
-    console.error("[runGeneration] catch", err);
+    console.error(err);
   } finally {
-    console.log("[runGeneration] finally");
     infiniteRequestInFlight = false;
     btnInfiniteGenerate.disabled = false;
     btnInfiniteNext.disabled = false;

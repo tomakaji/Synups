@@ -31,63 +31,11 @@ const POOL_SIZE = Math.max(
 // chevauchement de seeds entre deux Workers du pool.
 const WORKER_SEED_STRIDE = 104_729;
 
-let pool = null; // Array<{ worker, pending, nextRequestId }>, créé au premier appel
-let debugPendingSeq = 0; // TEMPORAIRE (debug déploiement): compteur global pour tracer les écrasements de entry.pending
+let pool = null; // Array<{ worker }>, créé au premier appel
+let nextRequestId = 1; // compteur global de requêtes (voir runOnWorker)
 
-function makeWorkerEntry(_unused, id) {
-  const entry = { id, worker: null, pending: null, nextRequestId: 1 };
-  // IMPORTANT: `new Worker(new URL(...), options)` doit rester un appel
-  // inline en un seul statement — Vite détecte ce motif exact par analyse
-  // statique pour émettre le worker comme un chunk séparé en build de
-  // production. Extraire `new URL(...)` dans une variable intermédiaire
-  // (comme fait ici temporairement pour logguer l'URL) casse cette
-  // détection et fait basculer Vite sur un inlining base64 du script, qui
-  // échoue silencieusement une fois déployé — c'est very probablement LA
-  // cause du bug de génération en prod. Voir commentaire ci-dessous.
-  console.log("[infiniteClient] création Worker (pool) id=", id);
-  entry.worker = new Worker(new URL("./generator.worker.js", import.meta.url), { type: "module" });
-  entry.worker.onmessage = (event) => {
-    // Capture TOUT en primitifs, immédiatement, en un seul accès à
-    // event.data et entry.pending, avant tout console.log — pour éliminer
-    // toute ambiguïté d'affichage/live-reference dans la console.
-    const msgType = event.data ? event.data.type : undefined;
-    const msgRequestId = event.data ? event.data.requestId : undefined;
-    const msgSeq = event.data ? event.data.seq : undefined;
-    const pendingSnapshot = entry.pending;
-    const pendingExists = pendingSnapshot !== null && pendingSnapshot !== undefined;
-    const pendingRequestId = pendingExists ? pendingSnapshot.requestId : undefined;
-    const pendingSeq = pendingExists ? pendingSnapshot.seq : undefined;
-    console.log(
-      "[infiniteClient] onmessage id=" + entry.id +
-      " msgType=" + msgType +
-      " msgRequestId=" + msgRequestId +
-      " msgSeq=" + msgSeq +
-      " pendingExists=" + pendingExists +
-      " pendingRequestId=" + pendingRequestId +
-      " pendingSeq=" + pendingSeq
-    );
-    if (!pendingExists || msgRequestId !== pendingRequestId) {
-      console.log("[infiniteClient] IGNORÉ id=" + entry.id);
-      return; // réponse obsolète: ignorée
-    }
-    const { resolve, reject } = pendingSnapshot;
-    entry.pending = null;
-    console.log("[infiniteClient] appel de resolve/reject id=" + entry.id + " type=" + msgType);
-    if (msgType === "result") resolve(event.data.result);
-    else if (msgType === "error") reject(new Error(event.data.message || "Erreur du générateur"));
-    console.log("[infiniteClient] resolve/reject terminé id=" + entry.id);
-  };
-  entry.worker.onerror = (event) => {
-    console.log("[infiniteClient] onerror du Worker id=", entry.id, event);
-    if (!entry.pending) return;
-    const { reject } = entry.pending;
-    entry.pending = null;
-    reject(event.error || new Error(event.message || "Erreur du Worker de génération"));
-  };
-  entry.worker.onmessageerror = (event) => {
-    console.log("[infiniteClient] onmessageerror du Worker id=", entry.id, event);
-  };
-  return entry;
+function makeWorkerEntry() {
+  return { worker: new Worker(new URL("./generator.worker.js", import.meta.url), { type: "module" }) };
 }
 
 function ensurePool() {
@@ -96,19 +44,44 @@ function ensurePool() {
   return pool;
 }
 
+// IMPORTANT — bug de build contourné ici (voir aussi le commentaire sur
+// `new Worker(new URL(...))` plus haut dans l'historique) : une version
+// antérieure stockait `resolve`/`reject` sur une propriété `entry.pending`,
+// relue plus tard par un handler `onmessage` déclaré séparément dans
+// `makeWorkerEntry`. En production (Vite/Rollup, PAS en dev), le
+// tree-shaking de Rollup perdait la trace de cette indirection au travers
+// d'une propriété d'objet et ÉLIMINAIT purement et simplement les appels à
+// resolve()/reject() comme s'ils étaient du code mort — la génération
+// restait donc bloquée indéfiniment une fois déployé, alors que tout
+// fonctionnait normalement en `npm run dev`. Confirmé en comparant la
+// sortie d'esbuild seul (correcte) à celle du pipeline Vite complet
+// (cassée). Le contournement : `resolve`/`reject` restent des closures
+// DIRECTES du listener qui les appelle (même portée lexicale, pas de
+// passage par un objet intermédiaire relu ailleurs), via
+// addEventListener/removeEventListener scopés à CET appel plutôt qu'un
+// onmessage unique réassigné/relu via une propriété partagée.
 function runOnWorker(entry, payload) {
-  const requestId = entry.nextRequestId++;
-  const seq = ++debugPendingSeq;
+  const requestId = nextRequestId++;
+  const worker = entry.worker;
   return new Promise((resolve, reject) => {
-    entry.pending = { requestId, resolve, reject, seq };
-    // TEMPORAIRE (debug déploiement) — à retirer une fois le problème identifié.
-    console.log("[infiniteClient] postMessage vers Worker id=" + entry.id + " requestId=" + requestId + " seq=" + seq);
-    entry.worker.postMessage({ type: "generate", requestId, seq, ...payload });
-    console.log(
-      "[infiniteClient] postMessage envoyé (après appel) id=" + entry.id +
-      " entry.pending.requestId=" + (entry.pending ? entry.pending.requestId : "null") +
-      " entry.pending.seq=" + (entry.pending ? entry.pending.seq : "null")
-    );
+    function cleanup() {
+      worker.removeEventListener("message", onMessage);
+      worker.removeEventListener("error", onError);
+    }
+    function onMessage(event) {
+      const data = event.data || {};
+      if (data.requestId !== requestId) return; // réponse obsolète: ignorée
+      cleanup();
+      if (data.type === "result") resolve(data.result);
+      else if (data.type === "error") reject(new Error(data.message || "Erreur du générateur"));
+    }
+    function onError(event) {
+      cleanup();
+      reject(event.error || new Error(event.message || "Erreur du Worker de génération"));
+    }
+    worker.addEventListener("message", onMessage);
+    worker.addEventListener("error", onError);
+    worker.postMessage({ type: "generate", requestId, ...payload });
   });
 }
 
@@ -135,42 +108,24 @@ export function raceForBest(taskPromises, { isPerfect, isBetter }) {
     let doneCount = 0;
     let best = null;
     let lastError = null;
-    console.log("[raceForBest] démarrage avec", total, "tâches");
 
     for (const task of taskPromises) {
-      console.log("[raceForBest] enregistrement .then() sur une tâche");
       task
         .then((result) => {
-          console.log("[raceForBest] task resolved", { doneCount, total, result });
           if (settled) return;
           doneCount++;
-          let perfect;
-          try {
-            perfect = result && isPerfect(result);
-          } catch (err) {
-            console.log("[raceForBest] isPerfect a levé une exception", err);
-            throw err;
-          }
-          if (perfect) {
+          if (result && isPerfect(result)) {
             settled = true;
-            console.log("[raceForBest] resolve (perfect)", result);
             resolve(result);
             return;
           }
-          try {
-            if (result && (!best || isBetter(best, result))) best = result;
-          } catch (err) {
-            console.log("[raceForBest] isBetter a levé une exception", err);
-            throw err;
-          }
+          if (result && (!best || isBetter(best, result))) best = result;
           if (!settled && doneCount === total) {
             settled = true;
-            console.log("[raceForBest] resolve (best-effort, tous terminés)", best);
             resolve(best);
           }
         })
         .catch((err) => {
-          console.log("[raceForBest] task rejetée", err);
           if (settled) return;
           doneCount++;
           lastError = err;
@@ -185,15 +140,14 @@ export function raceForBest(taskPromises, { isPerfect, isBetter }) {
 }
 
 /**
- * Lance UNE génération répartie sur TOUS les Workers du pool (chaque entrée
- * n'a qu'un seul emplacement `.pending` à la fois — voir runOnWorker/
- * makeWorkerEntry) et retourne une Promise résolue avec le résultat de
- * `generateLevel()` (voir generator.js), ou `null` si même le fallback
- * best-effort n'a rien trouvé nulle part. NE DOIT JAMAIS être appelée une
- * deuxième fois avant que la précédente se soit terminée (voir la file
- * d'attente `enqueuePoolJob` plus bas, qui garantit ça) : deux appels
- * chevauchants écraseraient le `.pending` de chaque Worker, orphelinant
- * silencieusement les Promises du premier appel (jamais résolues).
+ * Lance UNE génération répartie sur TOUS les Workers du pool et retourne une
+ * Promise résolue avec le résultat de `generateLevel()` (voir generator.js),
+ * ou `null` si même le fallback best-effort n'a rien trouvé nulle part.
+ * Chaque appel à `runOnWorker` s'identifie via un `requestId` unique (voir
+ * son commentaire) et ignore toute réponse dont l'id ne correspond pas, donc
+ * plusieurs générations peuvent en théorie cohabiter sur un même Worker sans
+ * se corrompre — en pratique la file d'attente `enqueuePoolJob` plus bas les
+ * sérialise de toute façon (une seule génération à la fois sur le pool).
  */
 function generateOnce({ difficulty, enabledFeatureKeys, seed, maxAttempts, maxTimeMs } = {}) {
   const tier = clampTier(difficulty);
@@ -253,27 +207,15 @@ function runNextQueuedJob() {
   const next = highPriorityQueue.shift() || lowPriorityQueue.shift();
   if (!next) return;
   activeJob = true;
-  console.log("[runNextQueuedJob] lancement generateOnce", next.config);
   generateOnce(next.config)
-    .then(
-      (r) => {
-        console.log("[runNextQueuedJob] generateOnce résolu", r);
-        next.resolve(r);
-      },
-      (err) => {
-        console.log("[runNextQueuedJob] generateOnce rejeté", err);
-        next.reject(err);
-      }
-    )
+    .then(next.resolve, next.reject)
     .finally(() => {
-      console.log("[runNextQueuedJob] finally, activeJob=false");
       activeJob = false;
       runNextQueuedJob();
     });
 }
 
 function enqueuePoolJob(config, priority) {
-  console.log("[enqueuePoolJob] priority=", priority, "activeJob=", activeJob, "highQueueLen=", highPriorityQueue.length, "lowQueueLen=", lowPriorityQueue.length);
   return new Promise((resolve, reject) => {
     (priority === "high" ? highPriorityQueue : lowPriorityQueue).push({ config, resolve, reject });
     runNextQueuedJob();
