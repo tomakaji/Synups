@@ -32,6 +32,7 @@ const POOL_SIZE = Math.max(
 const WORKER_SEED_STRIDE = 104_729;
 
 let pool = null; // Array<{ worker, pending, nextRequestId }>, créé au premier appel
+let debugPendingSeq = 0; // TEMPORAIRE (debug déploiement): compteur global pour tracer les écrasements de entry.pending
 
 function makeWorkerEntry(_unused, id) {
   const entry = { id, worker: null, pending: null, nextRequestId: 1 };
@@ -46,18 +47,35 @@ function makeWorkerEntry(_unused, id) {
   console.log("[infiniteClient] création Worker (pool) id=", id);
   entry.worker = new Worker(new URL("./generator.worker.js", import.meta.url), { type: "module" });
   entry.worker.onmessage = (event) => {
-    console.log("[infiniteClient] onmessage id=", entry.id, "requestId reçu=", event.data && event.data.requestId, "pending actuel=", entry.pending && { ...entry.pending, resolve: "fn", reject: "fn" });
-    const { type, requestId } = event.data || {};
-    if (!entry.pending || requestId !== entry.pending.requestId) {
-      console.log("[infiniteClient] IGNORÉ id=", entry.id, "hasPending=", !!entry.pending, "pendingRequestId=", entry.pending ? entry.pending.requestId : "n/a", "incomingRequestId=", requestId);
+    // Capture TOUT en primitifs, immédiatement, en un seul accès à
+    // event.data et entry.pending, avant tout console.log — pour éliminer
+    // toute ambiguïté d'affichage/live-reference dans la console.
+    const msgType = event.data ? event.data.type : undefined;
+    const msgRequestId = event.data ? event.data.requestId : undefined;
+    const msgSeq = event.data ? event.data.seq : undefined;
+    const pendingSnapshot = entry.pending;
+    const pendingExists = pendingSnapshot !== null && pendingSnapshot !== undefined;
+    const pendingRequestId = pendingExists ? pendingSnapshot.requestId : undefined;
+    const pendingSeq = pendingExists ? pendingSnapshot.seq : undefined;
+    console.log(
+      "[infiniteClient] onmessage id=" + entry.id +
+      " msgType=" + msgType +
+      " msgRequestId=" + msgRequestId +
+      " msgSeq=" + msgSeq +
+      " pendingExists=" + pendingExists +
+      " pendingRequestId=" + pendingRequestId +
+      " pendingSeq=" + pendingSeq
+    );
+    if (!pendingExists || msgRequestId !== pendingRequestId) {
+      console.log("[infiniteClient] IGNORÉ id=" + entry.id);
       return; // réponse obsolète: ignorée
     }
-    const { resolve, reject } = entry.pending;
+    const { resolve, reject } = pendingSnapshot;
     entry.pending = null;
-    console.log("[infiniteClient] appel de resolve/reject id=", entry.id, type);
-    if (type === "result") resolve(event.data.result);
-    else if (type === "error") reject(new Error(event.data.message || "Erreur du générateur"));
-    console.log("[infiniteClient] resolve/reject terminé id=", entry.id);
+    console.log("[infiniteClient] appel de resolve/reject id=" + entry.id + " type=" + msgType);
+    if (msgType === "result") resolve(event.data.result);
+    else if (msgType === "error") reject(new Error(event.data.message || "Erreur du générateur"));
+    console.log("[infiniteClient] resolve/reject terminé id=" + entry.id);
   };
   entry.worker.onerror = (event) => {
     console.log("[infiniteClient] onerror du Worker id=", entry.id, event);
@@ -80,12 +98,17 @@ function ensurePool() {
 
 function runOnWorker(entry, payload) {
   const requestId = entry.nextRequestId++;
+  const seq = ++debugPendingSeq;
   return new Promise((resolve, reject) => {
-    entry.pending = { requestId, resolve, reject };
+    entry.pending = { requestId, resolve, reject, seq };
     // TEMPORAIRE (debug déploiement) — à retirer une fois le problème identifié.
-    console.log("[infiniteClient] postMessage vers Worker id=", entry.id, "requestId=", requestId, payload);
-    entry.worker.postMessage({ type: "generate", requestId, ...payload });
-    console.log("[infiniteClient] postMessage envoyé (après appel) id=", entry.id, "entry.pending juste après=", entry.pending);
+    console.log("[infiniteClient] postMessage vers Worker id=" + entry.id + " requestId=" + requestId + " seq=" + seq);
+    entry.worker.postMessage({ type: "generate", requestId, seq, ...payload });
+    console.log(
+      "[infiniteClient] postMessage envoyé (après appel) id=" + entry.id +
+      " entry.pending.requestId=" + (entry.pending ? entry.pending.requestId : "null") +
+      " entry.pending.seq=" + (entry.pending ? entry.pending.seq : "null")
+    );
   });
 }
 

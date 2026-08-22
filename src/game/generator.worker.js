@@ -19,8 +19,8 @@ import { generateLevel } from "./generator.js";
 console.log("[generator.worker] script chargé et exécuté");
 
 self.onmessage = (event) => {
-  const { type, requestId } = event.data || {};
-  console.log("[generator.worker] message reçu", event.data);
+  const { type, requestId, seq } = event.data || {};
+  console.log("[generator.worker] message reçu requestId=" + requestId + " seq=" + seq);
   if (type !== "generate") return;
 
   let result = null;
@@ -29,9 +29,9 @@ self.onmessage = (event) => {
     result = generateLevel({ difficulty, enabledFeatureKeys, seed, maxAttempts, maxTimeMs });
   } catch (err) {
     console.log("[generator.worker] erreur, postMessage error", err);
-    self.postMessage({ type: "error", requestId, message: err?.message || String(err) });
+    self.postMessage({ type: "error", requestId, seq, message: err?.message || String(err) });
     return;
   }
-  console.log("[generator.worker] résultat prêt, postMessage result", requestId);
-  self.postMessage({ type: "result", requestId, result });
+  console.log("[generator.worker] résultat prêt, postMessage result requestId=" + requestId + " seq=" + seq);
+  self.postMessage({ type: "result", requestId, seq, result });
 };
