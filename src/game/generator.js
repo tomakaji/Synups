@@ -410,6 +410,25 @@ const MIRROR_DENSITY = 0.24;
 // écarter les emplacements qui ne l'auraient pas été, que la Couleur soit
 // cochée ou non pour cet essai.
 const PYRA_MAX_CANDIDATES = 3;
+// Rayon (distance de Manhattan) utilisé UNIQUEMENT par la Phase 2 (Couleur,
+// voir `orderCluesForRemoval`) pour biaiser QUELLES charges retirer/rouvrir
+// en priorité — ne contredit pas le paragraphe ci-dessus sur le PLACEMENT du
+// Pyra (toujours au hasard pur, aucune coordination géométrique à la pose).
+// Retour utilisateur : même corrigé (point 2 ci-dessus), un Pyra survit le
+// plus souvent grâce à SA PROPRE contrainte de filtre (`ignorePyra`), rarement
+// comme SOURCE de laser coloré nécessaire à une cible (l'autre moitié du test
+// dans `pruneUnnecessaryPyra`) — parce que la Couleur choisit quoi retirer
+// sans savoir qu'un Pyra existe à proximité. En rouvrant en priorité les
+// charges proches d'un Pyra, l'ambiguïté blanche rouverte a plus de chances
+// de faire varier le compte de lumières adjacentes AU Pyra lui-même entre
+// solutions candidates — condition nécessaire (pas suffisante) pour que
+// `tryDiscriminatingColoring`, déjà générique sur la source du signal
+// coloré, choisisse une cible qui dépend réellement de sa couleur. 2 cases :
+// assez large pour couvrir les indices qui contraignent typiquement le
+// compte de lumières d'un Pyra (voisins directs ET voisins-de-voisins),
+// assez restreint pour rester un biais local plutôt qu'un retrait
+// quasi-global.
+const PYRA_PROXIMITY_RADIUS = 2;
 // Volontairement 1 (aucun effet) : voir le commentaire ci-dessus — le
 // miroir ne doit plus jamais coûter de recherche supplémentaire, sa
 // fréquence repose entièrement sur le placement/la sélection biaisés, pas
@@ -1260,26 +1279,46 @@ function mirrorGenuinelyUsed(layout, rows, cols, solution) {
  * jamais un nettoyage par miroir individuel comme Garde-fou 2 le fait pour
  * la couleur).
  *
- * Convertit chaque miroir non traversé en VOID ("X") plutôt qu'en case vide :
- * un miroir est DÉJÀ, par construction, strictement équivalent à VOID pour
- * la propagation blanche (voir commentaire Phase 3 plus haut : "un miroir ne
- * se distingue de 'X' que pour les lasers colorés, jamais pour la
- * propagation blanche") — ce nettoyage ne change donc RIEN à la
- * solvabilité/unicité blanche déjà confirmée, et ne peut pas non plus
- * affecter un laser coloré de la solution gagnante puisque, par définition,
- * aucun ne traverse ce miroir précis. Aucun appel solveur, aucune
- * re-vérification nécessaire — sûr et gratuit, comme le reste du nettoyage
- * Phase 2/3.
+ * Convertit chaque miroir non traversé PAR LE GAGNANT en VOID ("X") — MAIS,
+ * contrairement à une version antérieure de ce commentaire, ceci N'EST PAS
+ * automatiquement sûr et exige une re-vérification par miroir (bug trouvé
+ * lors du travail sur le biais de retrait Pyra, voir seed reproductible
+ * 800027/3★/[color,mirror,pyra] dans l'historique de commit) : un miroir
+ * "non traversé par le gagnant" peut malgré tout être ce qui INVALIDE une
+ * solution ALTERNATE — le laser coloré de CETTE alternative-là, lui,
+ * traverse peut-être bien ce miroir précis, et sa déviation/son mélange de
+ * couleur est ce qui la fait échouer une cible. Une fois converti en VOID
+ * (transparent, ne dévie ni ne mélange rien), le laser de cette alternative
+ * change de trajectoire/couleur et peut soudain satisfaire la cible — la
+ * rendant valide, donc une 2e solution. `mirrorGenuinelyUsed`/le test
+ * "traversé par le gagnant" ne regarde QUE la solution gagnante, jamais les
+ * alternatives déjà écartées par la couleur — insuffisant pour garantir la
+ * sûreté du retrait, exactement le même écueil déjà rencontré (et corrigé)
+ * pour `pruneUnnecessaryPyra`. Corrigé ici avec le même remède : convertir,
+ * re-vérifier par un solve complet (couleur incluse), et REVENIR au miroir
+ * d'origine si l'unicité casse — un miroir par un miroir, jamais un lot
+ * entier à la fois, pour qu'un retrait qui casse ne masque pas la sûreté
+ * d'un autre retrait déjà appliqué avec succès.
  */
-function pruneUnusedMirrors(layout, rows, cols, solution) {
+function pruneUnusedMirrors(layout, rows, cols, solution, nodeBudget, deadline) {
   const grid = buildGridWithLights(layout, rows, cols, solution);
+  const candidates = [];
   for (let r = 0; r < rows; r++)
     for (let c = 0; c < cols; c++) {
       if (!isMirrorToken(layout[r][c])) continue;
       const mc = grid.cellAt(r, c)._mirrorColor;
       const used = mc && (mc.r || mc.g || mc.b);
-      if (!used) layout[r][c] = "X";
+      if (!used) candidates.push([r, c]);
     }
+  for (const [r, c] of candidates) {
+    if (deadline != null && Date.now() > deadline) return;
+    const prevToken = layout[r][c];
+    layout[r][c] = "X";
+    const finalLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
+    const verify = analyzeAndCount(finalLevel, 2, nodeBudget);
+    const stillUnique = verify && verify.exhausted && verify.count === 1;
+    if (!stillUnique) layout[r][c] = prevToken; // nécessaire malgré tout: on le remet
+  }
 }
 
 /**
@@ -1346,6 +1385,58 @@ function orderCluesByMirrorAlignment(clueCells, layout, rows, cols, rand) {
   shuffle(aligned, rand);
   shuffle(rest, rand);
   return [...aligned, ...rest];
+}
+
+/** Toutes les cases "Y" (Pyra) actuellement posées dans `layout` — calculé une
+ * fois par tentative de coloriage (voir `tryColorizeForNecessity`), jamais
+ * recalculé pendant les essais de retrait/coloriage qui suivent puisque
+ * aucun d'eux n'ajoute ni ne retire de Pyra (voir `PYRA_PROXIMITY_RADIUS`). */
+function collectPyraCells(layout, rows, cols) {
+  const cells = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (layout[r][c] === "Y") cells.push([r, c]);
+  return cells;
+}
+
+function manhattan(r1, c1, r2, c2) {
+  return Math.abs(r1 - r2) + Math.abs(c1 - c2);
+}
+
+/** Vrai si (r,c) est à distance de Manhattan <= PYRA_PROXIMITY_RADIUS d'au
+ * moins un Pyra — voir `orderCluesForRemoval`. */
+function isNearPyra(r, c, pyraCells) {
+  return pyraCells.some(([pr, pc]) => manhattan(r, c, pr, pc) <= PYRA_PROXIMITY_RADIUS);
+}
+
+/**
+ * Réordonne `clueCells` pour le RETRAIT (étape 1 de `tryColorizeForNecessity`)
+ * en combinant deux biais indépendants, chacun no-op si sa feature associée
+ * n'est pas demandée pour cet essai :
+ *   - Pyra (voir `PYRA_PROXIMITY_RADIUS`) : retirer EN PRIORITÉ les charges
+ *     proches d'un Pyra, pour que l'ambiguïté blanche rouverte ait plus de
+ *     chances de rejaillir sur SON compte de lumières adjacentes.
+ *   - Miroir (voir `orderCluesByMirrorAlignment`) : retirer EN DERNIER les
+ *     charges alignées avec un miroir, pour les garder disponibles au
+ *     coloriage qui suit (`tryDiscriminatingColoring`, qui lui les préfère).
+ * Les deux peuvent être actifs simultanément (ex: Couleur + Miroir + Pyra
+ * tous cochés) : 4 groupes, chacun mélangé indépendamment pour garder de la
+ * variété entre tentatives, dans l'ordre de priorité (proche Pyra, non
+ * aligné) > (proche Pyra, aligné) > (loin, non aligné) > (loin, aligné). Se
+ * réduit exactement à `shuffle` pur si ni Pyra ni Miroir ne sont demandés
+ * (`pyraCells` vide et `wantsMirror` faux ⇒ tout retombe dans le 3e groupe),
+ * et à l'équivalent en distribution de l'ancien
+ * `orderCluesByMirrorAlignment(...).reverse()` si seul Miroir est demandé.
+ */
+function orderCluesForRemoval(clueCells, layout, rows, cols, rand, wantsMirror, pyraCells) {
+  const buckets = [[], [], [], []]; // [prochePyra&&!aligné, prochePyra&&aligné, loin&&!aligné, loin&&aligné]
+  for (const cell of clueCells) {
+    const [r, c] = cell;
+    const near = pyraCells.length > 0 && isNearPyra(r, c, pyraCells);
+    const aligned = wantsMirror && alignedWithMirror(layout, r, c, rows, cols);
+    const idx = (near ? 0 : 2) + (aligned ? 1 : 0);
+    buckets[idx].push(cell);
+  }
+  for (const bucket of buckets) shuffle(bucket, rand);
+  return [...buckets[0], ...buckets[1], ...buckets[2], ...buckets[3]];
 }
 
 function tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand, deadline, wantsMirror = false) {
@@ -1496,9 +1587,30 @@ function tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand,
  * compte) en cas de succès, `null` sinon — dans ce cas l'appelant garde le
  * plateau non colorié tel quel (la couleur reste probabiliste, jamais
  * forcée: voir commentaire d'en-tête).
+ *
+ * `wantsPyra` (voir `PYRA_PROXIMITY_RADIUS`/`orderCluesForRemoval`) : biaise
+ * SEULEMENT quelles charges sont retirées en priorité, jamais le résultat
+ * — un Pyra qui finit par dépendre réellement d'une cible colorée reste
+ * entièrement découvert et confirmé par `pruneUnnecessaryPyra` en aval
+ * (aucun lien direct entre cette fonction et la nécessité finale d'un Pyra
+ * donné), c'est un simple coup de pouce statistique côté sélection.
  */
-function tryColorizeForNecessity(layout, rows, cols, referenceSolution, rand, preset, stars, deadline, wantsMirror = false) {
+function tryColorizeForNecessity(
+  layout,
+  rows,
+  cols,
+  referenceSolution,
+  rand,
+  preset,
+  stars,
+  deadline,
+  wantsMirror = false,
+  wantsPyra = false
+) {
   const removalPlan = COLOR_REMOVAL_PLAN_BY_STAR[stars] ?? [{ count: 1, candidates: 24 }];
+  // Calculé une seule fois (voir `collectPyraCells`) : aucun essai de
+  // retrait/coloriage ci-dessous n'ajoute ni ne retire de "Y".
+  const pyraCells = wantsPyra ? collectPyraCells(layout, rows, cols) : [];
 
   for (const { count: k, candidates: maxCandidates } of removalPlan) {
     const clueCells = collectPlainClueCells(layout, rows, cols);
@@ -1507,16 +1619,12 @@ function tryColorizeForNecessity(layout, rows, cols, referenceSolution, rand, pr
     for (let attempt = 0; attempt < maxCandidates; attempt++) {
       if (Date.now() > deadline) return null;
 
-      // Sans miroir demandé: shuffle pur, comportement inchangé. Avec
-      // miroir: retire en PRIORITÉ les charges NON alignées avec un miroir
-      // (ordre inversé par rapport à orderCluesByMirrorAlignment) pour
-      // garder le plus possible de charges alignées disponibles pour le
-      // coloriage juste après (tryDiscriminatingColoring, qui lui les
-      // préfère) — pas de retrait forcé, juste un tirage moins susceptible
-      // de gâcher les meilleurs candidats.
-      const removalOrder = wantsMirror
-        ? orderCluesByMirrorAlignment(clueCells, layout, rows, cols, rand).reverse()
-        : shuffle([...clueCells], rand);
+      // Voir `orderCluesForRemoval` : combine le biais Pyra (retirer en
+      // priorité près d'un Pyra) et le biais Miroir (retirer en dernier les
+      // charges alignées, pour les garder disponibles au coloriage) — pas de
+      // retrait forcé dans les deux cas, juste un tirage moins susceptible
+      // de gâcher les meilleurs candidats pour chaque feature active.
+      const removalOrder = orderCluesForRemoval(clueCells, layout, rows, cols, rand, wantsMirror, pyraCells);
       const subset = removalOrder.slice(0, k);
       if (wouldCreateDeadIsolationForSet(layout, subset, rows, cols)) continue; // voir commentaire dédié, aucun appel solveur gaspillé
       const prevTokens = subset.map(([r, c]) => layout[r][c]);
@@ -1676,7 +1784,8 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
       preset,
       stars,
       deadline,
-      wantsMirror
+      wantsMirror,
+      wantsPyra
     );
     if (colorAnalysis) {
       finalAnalysis = colorAnalysis;
@@ -1697,7 +1806,7 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
   // traversé par un laser dans LA solution gagnante finale est retiré (voir
   // pruneUnusedMirrors) — sinon il reste sur le plateau comme pur décor,
   // jamais nettoyé par aucune passe précédente.
-  if (wantsMirror) pruneUnusedMirrors(layout, rows, cols, finalAnalysis.solution);
+  if (wantsMirror) pruneUnusedMirrors(layout, rows, cols, finalAnalysis.solution, preset.nodeBudget, deadline);
 
   // Phase Pyra : chaque "Y" déjà présent dans `layout` a été validé au
   // moment même de sa dérivation (voir `resolveAndDeriveClues`), donc
