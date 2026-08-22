@@ -33,8 +33,8 @@ const WORKER_SEED_STRIDE = 104_729;
 
 let pool = null; // Array<{ worker, pending, nextRequestId }>, créé au premier appel
 
-function makeWorkerEntry() {
-  const entry = { worker: null, pending: null, nextRequestId: 1 };
+function makeWorkerEntry(_unused, id) {
+  const entry = { id, worker: null, pending: null, nextRequestId: 1 };
   // IMPORTANT: `new Worker(new URL(...), options)` doit rester un appel
   // inline en un seul statement — Vite détecte ce motif exact par analyse
   // statique pour émettre le worker comme un chunk séparé en build de
@@ -43,38 +43,31 @@ function makeWorkerEntry() {
   // détection et fait basculer Vite sur un inlining base64 du script, qui
   // échoue silencieusement une fois déployé — c'est very probablement LA
   // cause du bug de génération en prod. Voir commentaire ci-dessous.
-  console.log("[infiniteClient] création Worker (pool)");
+  console.log("[infiniteClient] création Worker (pool) id=", id);
   entry.worker = new Worker(new URL("./generator.worker.js", import.meta.url), { type: "module" });
   entry.worker.onmessage = (event) => {
-    console.log("[infiniteClient] onmessage reçu du Worker", event.data);
+    console.log("[infiniteClient] onmessage id=", entry.id, "requestId reçu=", event.data && event.data.requestId, "pending actuel=", entry.pending && { ...entry.pending, resolve: "fn", reject: "fn" });
     const { type, requestId } = event.data || {};
-    console.log("[infiniteClient] check pending", {
-      hasPending: !!entry.pending,
-      pendingRequestId: entry.pending && entry.pending.requestId,
-      incomingRequestId: requestId,
-      pendingRequestIdType: entry.pending && typeof entry.pending.requestId,
-      incomingRequestIdType: typeof requestId,
-    });
     if (!entry.pending || requestId !== entry.pending.requestId) {
-      console.log("[infiniteClient] IGNORÉ (réponse obsolète ou pending absent)");
+      console.log("[infiniteClient] IGNORÉ id=", entry.id, "hasPending=", !!entry.pending, "pendingRequestId=", entry.pending ? entry.pending.requestId : "n/a", "incomingRequestId=", requestId);
       return; // réponse obsolète: ignorée
     }
     const { resolve, reject } = entry.pending;
     entry.pending = null;
-    console.log("[infiniteClient] appel de resolve/reject", type);
+    console.log("[infiniteClient] appel de resolve/reject id=", entry.id, type);
     if (type === "result") resolve(event.data.result);
     else if (type === "error") reject(new Error(event.data.message || "Erreur du générateur"));
-    console.log("[infiniteClient] resolve/reject terminé");
+    console.log("[infiniteClient] resolve/reject terminé id=", entry.id);
   };
   entry.worker.onerror = (event) => {
-    console.log("[infiniteClient] onerror du Worker", event);
+    console.log("[infiniteClient] onerror du Worker id=", entry.id, event);
     if (!entry.pending) return;
     const { reject } = entry.pending;
     entry.pending = null;
     reject(event.error || new Error(event.message || "Erreur du Worker de génération"));
   };
   entry.worker.onmessageerror = (event) => {
-    console.log("[infiniteClient] onmessageerror du Worker", event);
+    console.log("[infiniteClient] onmessageerror du Worker id=", entry.id, event);
   };
   return entry;
 }
@@ -90,8 +83,9 @@ function runOnWorker(entry, payload) {
   return new Promise((resolve, reject) => {
     entry.pending = { requestId, resolve, reject };
     // TEMPORAIRE (debug déploiement) — à retirer une fois le problème identifié.
-    console.log("[infiniteClient] postMessage vers Worker", requestId, payload);
+    console.log("[infiniteClient] postMessage vers Worker id=", entry.id, "requestId=", requestId, payload);
     entry.worker.postMessage({ type: "generate", requestId, ...payload });
+    console.log("[infiniteClient] postMessage envoyé (après appel) id=", entry.id, "entry.pending juste après=", entry.pending);
   });
 }
 
@@ -256,6 +250,7 @@ function runNextQueuedJob() {
 }
 
 function enqueuePoolJob(config, priority) {
+  console.log("[enqueuePoolJob] priority=", priority, "activeJob=", activeJob, "highQueueLen=", highPriorityQueue.length, "lowQueueLen=", lowPriorityQueue.length);
   return new Promise((resolve, reject) => {
     (priority === "high" ? highPriorityQueue : lowPriorityQueue).push({ config, resolve, reject });
     runNextQueuedJob();
