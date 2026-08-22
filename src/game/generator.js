@@ -429,6 +429,19 @@ const PYRA_MAX_CANDIDATES = 3;
 // assez restreint pour rester un biais local plutôt qu'un retrait
 // quasi-global.
 const PYRA_PROXIMITY_RADIUS = 2;
+// Retour utilisateur (capture d'écran d'un niveau généré) : "le Pyra en haut
+// n'a qu'une case libre autour donc c'est évident". Un Pyra dont le nombre
+// de lumières adjacentes possibles n'a que 2 issues (0 ou 1, s'il n'a qu'UN
+// SEUL voisin orthogonal encore vide "." au moment du placement — voir
+// `pickPyraCandidates`) réduit tout "dilemme couleur" à un choix binaire
+// quasi gratuit, souvent déjà tranché par la géométrie locale (coin/bord de
+// grille + voisins déjà pleins) avant même de raisonner sur le reste du
+// plateau. Filtré dès la SÉLECTION des candidats plutôt qu'au nettoyage de
+// nécessité (`pruneUnnecessaryPyra`) : ce dernier teste "y a-t-il vraiment
+// ambiguïté ?", pas "l'espace des réponses possibles est-il assez riche
+// pour que trancher demande un minimum de raisonnement ?" — deux questions
+// différentes, qu'un seul mécanisme ne peut pas trancher correctement.
+const PYRA_MIN_FREE_NEIGHBORS = 2;
 // Volontairement 1 (aucun effet) : voir le commentaire ci-dessus — le
 // miroir ne doit plus jamais coûter de recherche supplémentaire, sa
 // fréquence repose entièrement sur le placement/la sélection biaisés, pas
@@ -634,6 +647,12 @@ function placeAlignedMirrors(layout, rows, cols, mirrorDensity, rand) {
  * `resolveAndDeriveClues`. Appelé une seule fois par tentative de
  * génération — la composition du sous-ensemble ne change plus ensuite,
  * seule sa dérivation effective est refaite à chaque passe.
+ *
+ * Exclut aussi les cases avec moins de `PYRA_MIN_FREE_NEIGHBORS` voisins
+ * orthogonaux "." (vides) À CE STADE — voir son commentaire. Une case "."
+ * ne change jamais plus de type après ce point (seules les "W" se résolvent
+ * en indice/Pyra/void plus tard), donc ce compte prédit exactement le
+ * nombre de voisins potentiellement lumineux dans le plateau final.
  */
 function pickPyraCandidates(layout, rows, cols, maxCount, rand) {
   const set = new Set();
@@ -641,7 +660,10 @@ function pickPyraCandidates(layout, rows, cols, maxCount, rand) {
   const wCells = [];
   for (let r = 0; r < rows; r++)
     for (let c = 0; c < cols; c++) {
-      if (layout[r][c] === "W") wCells.push(`${r},${c}`);
+      if (layout[r][c] !== "W") continue;
+      const freeNeighbors = orthogonalNeighbors(r, c, rows, cols).filter(([nr, nc]) => layout[nr][nc] === ".").length;
+      if (freeNeighbors < PYRA_MIN_FREE_NEIGHBORS) continue;
+      wCells.push(`${r},${c}`);
     }
   shuffle(wCells, rand);
   for (let i = 0; i < Math.min(maxCount, wCells.length); i++) set.add(wCells[i]);
@@ -685,10 +707,24 @@ function layoutHasPyra(layout) {
  *     lumières touchent cette case — la contrainte Pyra ne fait jamais la
  *     différence, le joueur n'a jamais besoin de choisir. Décoratif :
  *     candidat au retrait (voir plus bas pour le token de remplacement).
- *   - AU MOINS DEUX solutions trouvées ⇒ plusieurs remplissages du reste du
- *     plateau sont par ailleurs valides, et c'est LA CONTRAINTE PYRA
- *     elle-même (rejeter 0 et 4 lumières adjacentes) qui départage laquelle
- *     est la bonne — un vrai dilemme, "Y" reste intact.
+ *   - AU MOINS DEUX solutions trouvées ⇒ candidat à un vrai dilemme, MAIS
+ *     voir le correctif ci-dessous avant de conclure.
+ *
+ * BUG CORRIGÉ #2 (retour utilisateur, capture d'écran d'un niveau généré :
+ * "le Pyra en bas... il n'y a aucune case à colorer, il sert à rien") :
+ * "au moins deux solutions" ne prouve PAS que c'est LA CASE PYRA qui les
+ * distingue — ces solutions peuvent différer n'importe où ailleurs sur le
+ * plateau tout en s'accordant PARFAITEMENT sur le nombre de lumières
+ * adjacentes à CETTE case précise (ambiguïté réelle, mais sans aucun
+ * rapport avec ce Pyra). Dans ce cas, ignorer sa contrainte "aide"
+ * globalement à trancher le plateau, mais le joueur, LUI, n'a jamais besoin
+ * de raisonner sur ce Pyra pour connaître son compte : il est déjà fixé par
+ * les autres indices, quelle que soit l'ambiguïté qui subsiste ailleurs. Un
+ * "vrai dilemme" exige donc EN PLUS que le nombre de lumières adjacentes à
+ * (r,c) DIFFÈRE réellement entre au moins deux des solutions trouvées (voir
+ * `adjacentLightCount`) — sinon, traité comme décoratif EN TANT QUE FILTRE
+ * (comme le cas "une seule solution" ci-dessus), et seul le test laser
+ * (ci-dessous) peut encore le sauver.
  *
  * BUG CORRIGÉ (retour utilisateur, niveaux devenus insolubles après ce
  * nettoyage): la toute première implémentation remplaçait un "Y" décoratif
@@ -739,6 +775,23 @@ function layoutHasPyra(layout) {
  * retrait commité) ; `deadline` reste le garde-fou wall-clock si jamais une
  * itération devenait trop coûteuse.
  */
+/** Nombre de voisins orthogonaux de (r,c) allumés dans `solution` (un
+ * remplissage — voir `symmetricDifferenceCells`, même format `[[r,c], ...]`
+ * de coordonnées allumées). */
+function adjacentLightCount(solution, r, c, rows, cols) {
+  const lit = new Set(solution.map(([sr, sc]) => `${sr},${sc}`));
+  return orthogonalNeighbors(r, c, rows, cols).filter(([nr, nc]) => lit.has(`${nr},${nc}`)).length;
+}
+
+/** Vrai si `adjacentLightCount(., r, c, ...)` diffère entre AU MOINS deux
+ * `solutions` — voir BUG CORRIGÉ #2 dans `pruneUnnecessaryPyra` : distingue
+ * une ambiguïté qui concerne réellement (r,c) d'une ambiguïté purement
+ * ailleurs sur le plateau. */
+function adjacentLightCountVaries(solutions, r, c, rows, cols) {
+  const counts = new Set(solutions.map((sol) => adjacentLightCount(sol, r, c, rows, cols)));
+  return counts.size >= 2;
+}
+
 function pruneUnnecessaryPyra(layout, rows, cols, nodeBudget, deadline) {
   let changed = true;
   while (changed) {
@@ -748,12 +801,38 @@ function pruneUnnecessaryPyra(layout, rows, cols, nodeBudget, deadline) {
         if (layout[r][c] !== "Y") continue;
         if (Date.now() > deadline) return; // budget de temps global dépassé: on garde les "Y" pas encore retestés tels quels
 
-        const probeLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
-        const probe = enumerateSolutions(probeLevel, 2, nodeBudget, {
-          ignorePyra: new Set([`${r},${c}`]),
-        });
-        const seemsDecorative = probe.exhausted && probe.solutions.length === 1;
-        if (!seemsDecorative) continue; // nécessaire (>=2 solutions, ou résultat non concluant): "Y" reste tel quel
+        // BUG CORRIGÉ #3 (même capture d'écran) : `pickPyraCandidates` exige
+        // déjà >= PYRA_MIN_FREE_NEIGHBORS voisins "." AU MOMENT DU CHOIX du
+        // candidat, mais `repairToUnique` peut ensuite consommer l'un de ces
+        // voisins (le convertir en "W" pour casser une ambiguïté ailleurs)
+        // SANS savoir qu'il appartenait à un Pyra — la garantie de départ
+        // n'est donc pas toujours vraie sur le plateau FINAL. Retesté ici,
+        // sur le compte à CE stade : si trop peu de voisins libres restent,
+        // on tente le retrait D'OFFICE (sans même consulter le test filtre
+        // ci-dessous) — la revérification WALL plus bas reste le seul juge
+        // final: si ce Pyra s'avère malgré tout indispensable, elle annule
+        // le retrait et il survit (dilemme trivial mais réellement forcé,
+        // cas résiduel qu'on ne peut pas éliminer sans repenser le voisinage
+        // — voir le commentaire de PYRA_MIN_FREE_NEIGHBORS).
+        const freeNeighbors = orthogonalNeighbors(r, c, rows, cols).filter(
+          ([nr, nc]) => layout[nr][nc] === "."
+        ).length;
+        let seemsDecorative = freeNeighbors < PYRA_MIN_FREE_NEIGHBORS;
+
+        if (!seemsDecorative) {
+          const probeLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
+          const probe = enumerateSolutions(probeLevel, 2, nodeBudget, {
+            ignorePyra: new Set([`${r},${c}`]),
+          });
+          if (!probe.exhausted) continue; // résultat non concluant: "Y" reste tel quel par prudence
+          // Voir BUG CORRIGÉ #2 ci-dessus: "plusieurs solutions" ne suffit
+          // pas, il faut que SON PROPRE compte de lumières adjacentes varie
+          // parmi elles pour que ce soit un vrai dilemme SUR CE PYRA
+          // précisément.
+          seemsDecorative =
+            probe.solutions.length === 1 || !adjacentLightCountVaries(probe.solutions, r, c, rows, cols);
+          if (!seemsDecorative) continue; // vrai dilemme confirmé: "Y" reste tel quel
+        }
 
         // Voir le commentaire ci-dessus: "W" (WALL), jamais "X" (VOID), pour
         // préserver l'opacité aux lasers colorés — puis revérification
@@ -980,14 +1059,6 @@ function resolveAndDeriveClues(layout, rows, cols, useForbidden, pyraCandidates 
   return lights;
 }
 
-function randomEmptyCell(layout, rows, cols, rand) {
-  const empties = [];
-  for (let r = 0; r < rows; r++)
-    for (let c = 0; c < cols; c++) if (layout[r][c] === ".") empties.push([r, c]);
-  if (empties.length === 0) return null;
-  return empties[Math.floor(rand() * empties.length)];
-}
-
 /** Cases où deux solutions divergent (l'une allumée, l'autre non) — c'est
  * précisément là qu'ajouter une contrainte a le plus de chances de casser
  * l'ambiguïté (voir commentaire d'en-tête, recherche Borroot/akari). */
@@ -998,6 +1069,26 @@ function symmetricDifferenceCells(solutionA, solutionB) {
   for (const k of setA) if (!setB.has(k)) diff.push(k);
   for (const k of setB) if (!setA.has(k)) diff.push(k);
   return diff.map((k) => k.split(",").map(Number));
+}
+
+/** Vrai si murer (convertir en "W") la case vide (r,c) ferait chuter le
+ * nombre de voisins orthogonaux ENCORE "." d'un candidat Pyra voisin
+ * sous PYRA_MIN_FREE_NEIGHBORS — voir le commentaire de `repairToUnique`
+ * ("BUG CORRIGÉ #3" dans `pruneUnnecessaryPyra`). `pyraCandidates` peut
+ * contenir des clés de cases déjà dérivées en "Y" OU encore en attente
+ * ("W", pas encore repassées par `resolveAndDeriveClues`) — les deux sont
+ * protégées de la même façon, la case candidate ne change jamais de
+ * position une fois choisie par `pickPyraCandidates`. */
+function wouldStarvePyraNeighbor(layout, r, c, rows, cols, pyraCandidates) {
+  if (!pyraCandidates || pyraCandidates.size === 0) return false;
+  for (const [nr, nc] of orthogonalNeighbors(r, c, rows, cols)) {
+    if (!pyraCandidates.has(`${nr},${nc}`)) continue;
+    const remaining = orthogonalNeighbors(nr, nc, rows, cols).filter(
+      ([rr, cc]) => !(rr === r && cc === c) && layout[rr][cc] === "."
+    ).length;
+    if (remaining < PYRA_MIN_FREE_NEIGHBORS) return true;
+  }
+  return false;
 }
 
 /**
@@ -1014,6 +1105,19 @@ function symmetricDifferenceCells(solutionA, solutionB) {
  * sur toute la boucle). Retourne `true` si un état confirmé unique a été
  * atteint, `false` sinon (forme dégénérée, réparation non convergée, ou
  * deadline dépassée).
+ *
+ * BUG CORRIGÉ #3 (voir `pruneUnnecessaryPyra`, capture d'écran utilisateur
+ * d'un Pyra réduit à un seul voisin libre) : cette boucle mure des cases au
+ * hasard parmi celles où deux solutions divergent, SANS savoir qu'une case
+ * peut être le DERNIER voisin "." encore libre d'un candidat Pyra — la
+ * murer après coup réduit son espace de dilemme à un choix quasi-binaire
+ * (0 ou 1 lumière) que `pickPyraCandidates` avait pourtant explicitement
+ * essayé d'éviter en amont. `wouldStarvePyraNeighbor` écarte ces cases EN
+ * PRIORITÉ (pour les deux sources de `target` ci-dessous : divergence ET
+ * repli aléatoire), avec un repli sur l'ensemble complet si TOUTES les
+ * options menaceraient un Pyra (rare — mieux vaut réparer l'unicité que
+ * bloquer la convergence ; le résidu est de toute façon rattrapé, quand
+ * c'est sûr, par `pruneUnnecessaryPyra` en fin de génération).
  */
 function repairToUnique(layout, rows, cols, useForbidden, rand, repairNodeBudget, deadline, pyraCandidates = null) {
   if (!resolveAndDeriveClues(layout, rows, cols, useForbidden, pyraCandidates)) return false;
@@ -1029,9 +1133,17 @@ function repairToUnique(layout, rows, cols, useForbidden, rand, repairNodeBudget
     let target = null;
     if (solutions.length >= 2) {
       const diffCells = symmetricDifferenceCells(solutions[0], solutions[1]);
-      if (diffCells.length > 0) target = diffCells[Math.floor(rand() * diffCells.length)];
+      const safeCells = diffCells.filter(([r, c]) => !wouldStarvePyraNeighbor(layout, r, c, rows, cols, pyraCandidates));
+      const pool = safeCells.length > 0 ? safeCells : diffCells;
+      if (pool.length > 0) target = pool[Math.floor(rand() * pool.length)];
     }
-    if (!target) target = randomEmptyCell(layout, rows, cols, rand);
+    if (!target) {
+      const empties = [];
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (layout[r][c] === ".") empties.push([r, c]);
+      const safeEmpties = empties.filter(([r, c]) => !wouldStarvePyraNeighbor(layout, r, c, rows, cols, pyraCandidates));
+      const pool = safeEmpties.length > 0 ? safeEmpties : empties;
+      if (pool.length > 0) target = pool[Math.floor(rand() * pool.length)];
+    }
     if (!target) return false; // plus aucune case vide disponible: abandon
 
     layout[target[0]][target[1]] = "W";
