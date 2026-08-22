@@ -5,6 +5,12 @@
 import { CellType, PRISM_COLOR_SEQUENCE } from "./grid.js";
 import { colorFor, hexFor, illuminatedColor, lightColor } from "./colors.js";
 
+// Valeurs de repli seulement — voir `measureMetrics()` plus bas: en jeu, la
+// taille réelle des cases peut être plus petite que ça sur mobile (voir
+// style.css: #board définit --cell-size en fonction de la largeur d'écran
+// pour éviter tout débordement horizontal), donc le positionnement en
+// pixels des lasers ne peut PAS se fier à une constante fixe — il doit
+// mesurer la case telle qu'elle est réellement rendue.
 const CELL_SIZE = 56;
 const GAP = 6;
 
@@ -362,11 +368,31 @@ export function createBoardRenderer(boardEl) {
   let prevChargeState = new Map();
   let prevSynapseState = new Map();
   let prevTargetState = new Map();
+  let cellSize = CELL_SIZE; // voir measureMetrics(): remplacé par la taille RÉELLE rendue
+  let gapSize = GAP;
+
+  /** Mesure la taille de case et l'espacement effectivement rendus (au lieu
+   * de supposer CELL_SIZE/GAP fixes) — nécessaire depuis que #board peut
+   * réduire --cell-size en CSS pour tenir dans la largeur de l'écran (voir
+   * style.css). Sans ça, les lasers (positionnés en pixels absolus, voir
+   * cellCenter) resteraient calés sur l'ancienne taille fixe et
+   * désaligneraient dès que l'écran est plus étroit que ~56px/case. Prend
+   * l'avantage d'être mesuré sur le DOM réel plutôt que recalculé à la main
+   * (fiable quel que soit le calc()/min() utilisé côté CSS). Sans effet sur
+   * l'éditeur (#editor-board garde --cell-size fixe, jamais réduit). */
+  function measureMetrics() {
+    const sample = boardEl.querySelector(".cell");
+    if (!sample) return;
+    const rect = sample.getBoundingClientRect();
+    if (rect.width > 0) cellSize = rect.width;
+    const gapValue = parseFloat(getComputedStyle(boardEl).columnGap);
+    if (!Number.isNaN(gapValue)) gapSize = gapValue;
+  }
 
   function cellCenter(r, c) {
     return {
-      x: GAP + c * (CELL_SIZE + GAP) + CELL_SIZE / 2,
-      y: GAP + r * (CELL_SIZE + GAP) + CELL_SIZE / 2,
+      x: gapSize + c * (cellSize + gapSize) + cellSize / 2,
+      y: gapSize + r * (cellSize + gapSize) + cellSize / 2,
     };
   }
 
@@ -381,6 +407,10 @@ export function createBoardRenderer(boardEl) {
     boardEl.innerHTML = "";
     boardEl.style.gridTemplateColumns = `repeat(${grid.cols}, var(--cell-size))`;
     boardEl.style.gridTemplateRows = `repeat(${grid.rows}, var(--cell-size))`;
+    // Nombre de colonnes exposé en variable CSS — voir style.css: #board
+    // s'en sert pour calculer une --cell-size qui tient dans la largeur
+    // d'écran disponible (mobile), sans jamais dépasser 56px (desktop).
+    boardEl.style.setProperty("--cols", grid.cols);
 
     cellEls = [];
     for (let r = 0; r < grid.rows; r++) {
@@ -412,6 +442,12 @@ export function createBoardRenderer(boardEl) {
   function renderLasers() {
     laserEls.forEach((el) => el.remove());
     laserEls = [];
+
+    // Toujours mesurer juste avant de positionner quoi que ce soit en
+    // pixels: la taille réelle des cases peut avoir changé depuis le
+    // dernier appel (resize/rotation d'écran — voir main.js, listener
+    // "resize" qui redéclenche render()).
+    measureMetrics();
 
     for (const laser of grid.lasers) {
       // Un laser dévié par un miroir est un tracé en plusieurs segments
@@ -524,6 +560,7 @@ export function createBoardRenderer(boardEl) {
    * simple <svg><line></svg> positionné en overlay (même technique que les
    * lasers), qui se retire lui-même une fois l'animation terminée. */
   function spawnMirrorThread([r1, c1], [r2, c2], failMode) {
+    measureMetrics(); // voir renderLasers(): idem, la case a pu changer de taille depuis le dernier rendu
     const p1 = cellCenter(r1, c1);
     const p2 = cellCenter(r2, c2);
     const left = Math.min(p1.x, p2.x);

@@ -576,4 +576,18 @@ window.addEventListener("keydown", (e) => {
   undoLastMove();
 });
 
+// --cell-size est désormais responsive (voir style.css: #board), donc un
+// redimensionnement/changement d'orientation sur mobile peut faire changer
+// la taille réelle des cases après coup. Les lasers/fils de neurone miroir
+// sont positionnés en pixels absolus (voir game/render.js: cellCenter, qui
+// mesure la case via getBoundingClientRect) — sans ce re-rendu, ils
+// resteraient figés à l'ancienne taille jusqu'au prochain coup. Debounce
+// pour ne pas re-rendre à chaque pixel pendant un redimensionnement en
+// continu (resize de fenêtre desktop).
+let resizeDebounceId = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeDebounceId);
+  resizeDebounceId = setTimeout(() => renderer.render(), 120);
+});
+
 loadLevel(0);

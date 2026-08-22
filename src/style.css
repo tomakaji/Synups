@@ -19,9 +19,18 @@
   box-sizing: border-box;
 }
 
+/* Scroll vertical uniquement: la page ne doit jamais déborder
+   horizontalement sur mobile. L'éditeur a un besoin légitime de largeur
+   (voir .editor-layout plus bas) mais reste confiné à son propre défilement
+   interne (voir #editor-view) plutôt que de faire déborder toute la page. */
+html {
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+  overflow-x: hidden;
   background: radial-gradient(circle at 50% 0%, #171c2a 0%, var(--bg) 60%);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -59,6 +68,8 @@ body {
 
 .level-controls {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: 12px;
   font-size: 0.85rem;
@@ -208,6 +219,23 @@ body {
   gap: var(--gap);
   background: transparent;
   padding: var(--gap);
+  /* Cellule responsive: ne dépasse jamais 56px (taille de confort desktop),
+     mais rétrécit pour que la grille tienne dans la largeur d'écran
+     disponible sur mobile plutôt que de déborder horizontalement. `--cols`
+     est posé dynamiquement par render.js (build()) selon le niveau chargé.
+     32px = padding horizontal de #app (16px de chaque côté, voir plus
+     haut); (cols+1) gaps car #board a lui-même un padding de --gap en plus
+     des gaps entre cellules. Surchargé seulement ici (pas sur :root): grâce
+     à l'héritage des custom properties, #editor-board garde --cell-size
+     fixe (56px) — l'éditeur n'a volontairement pas besoin d'être
+     responsive (voir .editor-layout plus bas). */
+  --cell-size: min(
+    56px,
+    calc(
+      (min(100vw, 720px) - 32px - (var(--cols, 8) + 1) * var(--gap)) /
+        var(--cols, 8)
+    )
+  );
 }
 
 .cell {
@@ -889,6 +917,17 @@ body {
 }
 
 /* ---------- Éditeur de niveaux ---------- */
+
+/* L'éditeur garde son défilement horizontal volontaire (voir commentaire
+   sur .editor-layout ci-dessous), mais désormais confiné à sa propre
+   scrollbar plutôt qu'à celle de la page entière: body a overflow-x:hidden
+   (voir plus haut, pour le mobile en mode jeu), donc sans ce conteneur
+   dédié le débordement de .editor-layout serait tout simplement coupé au
+   lieu de rester accessible en scroll. */
+#editor-view {
+  width: 100%;
+  overflow-x: auto;
+}
 
 .editor-layout {
   /* Pas de flex-wrap ici volontairement: contrairement au jeu, l'éditeur
