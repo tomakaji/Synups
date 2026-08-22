@@ -145,7 +145,15 @@ export const FEATURES = {
   mirror: { label: "Miroir dévieur", weight: 2, implemented: true, requires: "color", pickProbability: 0.92 },
   filter: { label: "Filtre", weight: 2, implemented: false, requires: "color" },
   prism: { label: "Prisme", weight: 3, implemented: false, requires: "color" },
-  pyra: { label: "Pyra", weight: 3, implemented: false },
+  // Pas de `requires`: contrairement à Filtre/Prisme, Pyra est complet en
+  // lui-même — une contrainte "1 à 3 lumières adjacentes" (voir grid.js)
+  // qui fonctionne indépendamment de la Couleur. Son laser tricolore est
+  // tracé par recompute() qu'il y ait ou non des cases-cibles à satisfaire
+  // (voir tryGenerate/pickPyraCandidates plus bas: aucune coordination
+  // dédiée avec la Phase 2 Couleur n'est nécessaire, la simulation
+  // générique suffit déjà à en tenir compte si les deux se trouvent
+  // cochées ensemble).
+  pyra: { label: "Pyra", weight: 3, implemented: true },
   mirrorNeuron: { label: "Neurone miroir [expérimental]", weight: 5, implemented: false },
 };
 
@@ -346,6 +354,38 @@ const COLOR_BUDGET_MULTIPLIER = 2.2;
 // (voir MIRROR_BUDGET_MULTIPLIER) : il reste un bonus opportuniste
 // (isBetterCandidate), mais qui survient bien plus souvent naturellement.
 const MIRROR_DENSITY = 0.24;
+
+// Phase Pyra (voir grid.js pour la mécanique complète: activé dès 1 lumière
+// adjacente, jusqu'à 3 — surcharge à 4 comme une charge classique). À la
+// différence du Miroir (case fixe posée AVANT tout appel solveur, jamais
+// dérivée) et de la Couleur (recherche dédiée de solutions alternatives),
+// Pyra se greffe directement dans `resolveAndDeriveClues` — la même passe
+// qui dérive déjà le nombre de chaque charge classique depuis une solution
+// gloutonne fraîche (voir `greedySolve`): parmi les cases candidates "W",
+// un sous-ensemble est choisi une seule fois (voir `pickPyraCandidates`,
+// juste après `buildInitialLayout`) comme "éligible Pyra" — mais chaque
+// case éligible ne devient RÉELLEMENT "Y" QUE si son compte réel de
+// lumières adjacentes, dans la solution gloutonne DE CET APPEL précis,
+// tombe dans la plage valide [1,3] ; sinon elle retombe sur la dérivation
+// normale (charge classique ou case interdite/void), exactement comme un
+// candidat non-éligible. Un "Y" commité est donc TOUJOURS valide par
+// construction pour la solution qui vient de le produire (jamais de
+// surcharge/case morte figée par erreur) — et comme toute case candidate,
+// elle reste "vivante" (re-dérivée, potentiellement re-testée pour
+// l'éligibilité Pyra) à chaque nouvel appel de `resolveAndDeriveClues`
+// (typiquement après qu'un nouveau mur soit posé par `repairToUnique`),
+// SAUF si elle tombe un jour à 0 lumière adjacente: elle est alors voidée
+// DÉFINITIVEMENT comme n'importe quelle charge classique (voir le
+// commentaire de `resolveAndDeriveClues`, ce n'est pas spécifique à Pyra).
+//
+// Volontairement appliqué sur les candidats "W" au hasard (contrairement à
+// `placeAlignedMirrors`, qui biaise vers l'alignement pour maximiser les
+// chances qu'un laser coloré traverse effectivement le miroir): Pyra n'a
+// besoin d'aucune coordination géométrique avec autre chose pour être
+// "utile" — sa propre contrainte (1 à 3 lumières) suffit à le rendre
+// nécessaire au même titre qu'une charge classique, que la Couleur soit
+// cochée ou non pour cet essai.
+const PYRA_CANDIDATE_DENSITY = 0.4;
 // Volontairement 1 (aucun effet) : voir le commentaire ci-dessus — le
 // miroir ne doit plus jamais coûter de recherche supplémentaire, sa
 // fréquence repose entièrement sur le placement/la sélection biaisés, pas
@@ -535,6 +575,38 @@ function placeAlignedMirrors(layout, rows, cols, mirrorDensity, rand) {
     }
 }
 
+/**
+ * Choisit, parmi les cases "W" (candidates indice) du layout déjà stabilisé
+ * (après `buildInitialLayout`, donc après `relaxIsolatedCells` — pas avant,
+ * pour ne pas piocher un candidat qui serait ensuite rouvert en case vide),
+ * un sous-ensemble éligible Pyra — voir le commentaire de
+ * `PYRA_CANDIDATE_DENSITY` pour la sémantique exacte de cette éligibilité
+ * (une promesse de CANDIDATURE, pas une garantie de survie). Retourne un
+ * `Set` de clés `"r,c"`, consulté par `resolveAndDeriveClues`. Appelé une
+ * seule fois par tentative de génération — la composition du sous-ensemble
+ * ne change plus ensuite, seule sa dérivation effective est refaite à
+ * chaque passe.
+ */
+function pickPyraCandidates(layout, rows, cols, density, rand) {
+  const set = new Set();
+  if (density <= 0) return set;
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (layout[r][c] === "W" && rand() < density) set.add(`${r},${c}`);
+    }
+  return set;
+}
+
+/** Vrai si au moins une case Pyra ("Y") survit dans le layout final — voir
+ * `tryGenerate`, pendant de `mirrorGenuinelyUsed` pour le Miroir : Pyra n'a
+ * pas besoin d'une simulation de solution (sa validité est déjà garantie au
+ * moment de sa dérivation, voir `resolveAndDeriveClues`), un simple test de
+ * présence suffit à savoir si la feature a effectivement survécu à la
+ * réparation/minimisation. */
+function layoutHasPyra(layout) {
+  return layout.some((row) => row.includes("Y"));
+}
+
 // Distance 1 (orthogonale) uniquement : c'est la seule qui compte pour
 // l'isolement d'une case vide — un rayon lumineux posé sur une case '.' ne
 // peut illuminer une AUTRE case '.' que si rien d'opaque ne s'interpose
@@ -706,8 +778,19 @@ function greedySolve(cells, rows, cols) {
  * erreur un laser) plutôt que de l'utiliser ici comme un void déguisé.
  * Retourne la solution utilisée, ou `null` si la forme est dégénérée (rien
  * à éclairer).
+ *
+ * `pyraCandidates` (voir `pickPyraCandidates`/`PYRA_CANDIDATE_DENSITY`,
+ * `null`/absent si la feature Pyra n'est pas demandée) : une case candidate
+ * dont la clé `"r,c"` y figure devient "Y" au lieu d'une dérivation normale
+ * SI ET SEULEMENT SI son compte réel de lumières adjacentes dans CETTE
+ * solution tombe dans la plage valide [1,3] — sinon elle retombe sur la
+ * dérivation normale (charge classique si le compte est 4, interdite/void
+ * si le compte est 0), exactement comme un candidat non éligible. Comme un
+ * token numérique, "Y" n'est PAS exclu de cette boucle (contrairement au
+ * miroir, fixe) : il reste re-dérivé à chaque appel, potentiellement vers
+ * un état différent si le compte réel change entre deux passes.
  */
-function resolveAndDeriveClues(layout, rows, cols, useForbidden) {
+function resolveAndDeriveClues(layout, rows, cols, useForbidden, pyraCandidates = null) {
   const { grid, lights } = greedySolve(layoutToRows(layout), rows, cols);
   if (lights.length === 0) return null;
 
@@ -725,7 +808,11 @@ function resolveAndDeriveClues(layout, rows, cols, useForbidden) {
         const nCell = grid.cellAt(r + dr, c + dc);
         if (nCell && nCell.type === CellType.EMPTY && grid.hasLight(r + dr, c + dc)) count++;
       }
-      layout[r][c] = count === 0 ? (useForbidden ? "0" : "X") : String(count);
+      if (pyraCandidates && pyraCandidates.has(`${r},${c}`) && count >= 1 && count <= 3) {
+        layout[r][c] = "Y";
+      } else {
+        layout[r][c] = count === 0 ? (useForbidden ? "0" : "X") : String(count);
+      }
     }
   }
   return lights;
@@ -766,8 +853,8 @@ function symmetricDifferenceCells(solutionA, solutionB) {
  * atteint, `false` sinon (forme dégénérée, réparation non convergée, ou
  * deadline dépassée).
  */
-function repairToUnique(layout, rows, cols, useForbidden, rand, repairNodeBudget, deadline) {
-  if (!resolveAndDeriveClues(layout, rows, cols, useForbidden)) return false;
+function repairToUnique(layout, rows, cols, useForbidden, rand, repairNodeBudget, deadline, pyraCandidates = null) {
+  if (!resolveAndDeriveClues(layout, rows, cols, useForbidden, pyraCandidates)) return false;
 
   for (let iter = 0; iter < MAX_REPAIR_ITERATIONS; iter++) {
     if (Date.now() > deadline) return false; // budget de temps global dépassé: cet essai abandonne
@@ -786,7 +873,7 @@ function repairToUnique(layout, rows, cols, useForbidden, rand, repairNodeBudget
     if (!target) return false; // plus aucune case vide disponible: abandon
 
     layout[target[0]][target[1]] = "W";
-    if (!resolveAndDeriveClues(layout, rows, cols, useForbidden)) return false;
+    if (!resolveAndDeriveClues(layout, rows, cols, useForbidden, pyraCandidates)) return false;
   }
   return false; // budget de réparation épuisé sans converger
 }
@@ -1407,6 +1494,7 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
   // "color" l'est AUSSI pour CET essai précis (voir son commentaire) — un
   // miroir sans aucune charge colorée ne dévierait jamais rien.
   const wantsMirror = featureSubset.includes("mirror");
+  const wantsPyra = featureSubset.includes("pyra");
 
   const layout = buildInitialLayout({
     rows,
@@ -1416,7 +1504,14 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
     mirrorDensity: wantsMirror ? MIRROR_DENSITY : 0,
     rand,
   });
-  if (!repairToUnique(layout, rows, cols, useForbidden, rand, preset.repairNodeBudget, deadline)) return null;
+  // Voir PYRA_CANDIDATE_DENSITY: choisi une seule fois ici, APRÈS
+  // buildInitialLayout (donc après relaxIsolatedCells) pour ne piocher que
+  // parmi des candidats "W" qui resteront bien des candidats — passé
+  // ensuite tel quel à travers repairToUnique (qui seul rappelle
+  // resolveAndDeriveClues), jamais recalculé.
+  const pyraCandidates = wantsPyra ? pickPyraCandidates(layout, rows, cols, PYRA_CANDIDATE_DENSITY, rand) : null;
+  if (!repairToUnique(layout, rows, cols, useForbidden, rand, preset.repairNodeBudget, deadline, pyraCandidates))
+    return null;
 
   const analysis = stripToTargetTier(layout, rows, cols, solverTarget, preset.nodeBudget, rand, deadline);
   if (!analysis) return null;
@@ -1461,9 +1556,18 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
   // jamais nettoyé par aucune passe précédente.
   if (wantsMirror) pruneUnusedMirrors(layout, rows, cols, finalAnalysis.solution);
 
+  // Phase Pyra : aucune tentative supplémentaire non plus — chaque "Y" déjà
+  // présent dans `layout` a été validé au moment même de sa dérivation
+  // (voir `resolveAndDeriveClues`), donc contrairement au Miroir, aucune
+  // vérification a posteriori contre `finalAnalysis.solution` n'est
+  // nécessaire pour sa VALIDITÉ. Seule sa SURVIE (a-t-elle été minimisée ou
+  // colorée jusqu'à disparaître ?) reste à constater, via `layoutHasPyra`.
+  const pyraApplied = wantsPyra && layoutHasPyra(layout);
+
   const actualFeatureSubset = featureSubset.filter((k) => {
     if (k === "color") return colorApplied;
     if (k === "mirror") return mirrorApplied;
+    if (k === "pyra") return pyraApplied;
     return true;
   });
 
@@ -1479,10 +1583,12 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
  * demandé, puis — si `preferColor` (voir `generateLevel`, la couleur a été
  * cochée par le joueur) — la présence de couleur à palier égal, puis — si
  * `preferMirror` (même principe, voir Phase 3 Miroir) — la présence d'un
- * miroir RÉELLEMENT utilisé à palier ET couleur égaux, puis (à tout le reste
- * égal, imparfait) un `branchCount` qui pousse dans la direction demandée.
+ * miroir RÉELLEMENT utilisé à palier ET couleur égaux, puis `preferPyra`
+ * (même principe, voir Phase Pyra) — la présence d'au moins une case Pyra
+ * survivante à palier/couleur/miroir égaux, puis (à tout le reste égal,
+ * imparfait) un `branchCount` qui pousse dans la direction demandée.
  */
-export function isBetterCandidate(a, b, requestedTier, preferColor = false, preferMirror = false) {
+export function isBetterCandidate(a, b, requestedTier, preferColor = false, preferMirror = false, preferPyra = false) {
   if (!a) return true;
   const aUnique = a.solutionCount === 1;
   const bUnique = b.solutionCount === 1;
@@ -1502,6 +1608,12 @@ export function isBetterCandidate(a, b, requestedTier, preferColor = false, pref
     const aMirror = a.featureSubset?.includes("mirror") ?? false;
     const bMirror = b.featureSubset?.includes("mirror") ?? false;
     if (aMirror !== bMirror) return bMirror;
+  }
+
+  if (preferPyra) {
+    const aPyra = a.featureSubset?.includes("pyra") ?? false;
+    const bPyra = b.featureSubset?.includes("pyra") ?? false;
+    if (aPyra !== bPyra) return bPyra;
   }
 
   if (a.measuredTier != null && b.measuredTier != null && a.measuredTier === b.measuredTier) {
@@ -1533,6 +1645,7 @@ export function generateLevel({
   const solverTarget = SOLVER_TIER_FOR_STARS[stars]; // voir SOLVER_TIER_FOR_STARS: 1★→2, 2★→3, 3★→4
   const colorRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("color");
   const mirrorRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("mirror");
+  const pyraRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("pyra");
   const defaultBudget = getGenerationBudget(stars);
   // Voir COLOR_BUDGET_MULTIPLIER: viser À LA FOIS le bon palier ET une
   // couleur nécessaire est un objectif combiné plus dur qu'un seul des deux
@@ -1590,7 +1703,7 @@ export function generateLevel({
       best = candidate;
       break;
     }
-    if (isBetterCandidate(best, candidate, solverTarget, colorRequested, mirrorRequested)) best = candidate;
+    if (isBetterCandidate(best, candidate, solverTarget, colorRequested, mirrorRequested, pyraRequested)) best = candidate;
   }
 
   if (!best) return null; // n'arrive que si même le fallback échoue à générer une forme jouable
