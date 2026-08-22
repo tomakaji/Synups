@@ -380,27 +380,27 @@ const MIRROR_DENSITY = 0.24;
 // spécifique à Pyra).
 //
 // Retour utilisateur explicite (après une première version qui en plaçait
-// beaucoup trop, et surtout sans jamais vérifier leur utilité réelle):
-// "on ne veut pas beaucoup de pyras, mais à chaque fois ils doivent poser
-// un dilemme [...] actuellement leur couleur est déduite par les autres
-// indices" — càd qu'une fois le reste du plateau résolu par déduction
-// normale, le nombre de lumières autour de la case Pyra (donc sa couleur)
-// se trouvait déjà entièrement fixé PAR AILLEURS: le joueur n'avait jamais
-// besoin de choisir/déduire quoi que ce soit à cet endroit précis, la case
-// se "remplissait toute seule". Corrigé en deux volets :
+// beaucoup trop, ET dont le nettoyage confondait "nécessaire comme simple
+// obstacle" et "nécessaire comme mécanique Pyra" — voir le commentaire de
+// `pruneUnnecessaryPyra` pour le détail): "je trouve toujours la plupart des
+// pyra (voire tous) inutiles en tant que Pyra [...] ils sont utiles en tant
+// que Neurone, mais ni en tant que Pyra (devoir faire un choix pour la
+// couleur) ni en tant que couleur". Corrigé en deux volets :
 //   1. Un nombre de candidats désormais MINUSCULE (voir
 //      `PYRA_MAX_CANDIDATES`, un compte fixe plutôt qu'une densité) — moins
 //      de bruit à filtrer, et surtout aucun risque de devoir retirer après
 //      coup un Pyra qui se révélerait NÉCESSAIRE (voir point 2 : un retrait
 //      après coup casserait potentiellement l'unicité déjà garantie).
 //   2. Un nettoyage de NÉCESSITÉ (voir `pruneUnnecessaryPyra`, appelé en fin
-//      de `tryGenerate` comme `pruneUnusedMirrors`) : chaque "Y" survivant
-//      est retesté SEUL — retiré (VOID) sauf si son retrait rouvrirait une
-//      ambiguïté (le reste du plateau, SANS sa contrainte propre, admettrait
-//      alors plusieurs remplissages valides). Un "Y" qui survit ce
+//      de `tryGenerate` comme `pruneUnusedMirrors`) : chaque "Y" survivant a
+//      SA CONTRAINTE PROPRE ignorée (pas la case elle-même retirée — voir
+//      grid.js `isWon({ignorePyra})`) et on vérifie si le reste du plateau
+//      admet alors plusieurs remplissages valides. Un "Y" qui survit ce
 //      nettoyage est donc TOUJOURS un vrai dilemme par construction: sans
-//      lui, le joueur ne pourrait PAS déduire le bon remplissage par les
-//      seuls autres indices.
+//      SA contrainte précise (1 à 3 lumières), plusieurs remplissages du
+//      reste du plateau seraient par ailleurs valides — le joueur doit
+//      réellement choisir/déduire, pas juste constater une case qui se
+//      remplit toute seule.
 //
 // Volontairement appliqué sur les candidats "W" au hasard (contrairement à
 // `placeAlignedMirrors`, qui biaise vers l'alignement pour maximiser les
@@ -409,7 +409,7 @@ const MIRROR_DENSITY = 0.24;
 // "utile" — le nettoyage de nécessité (point 2 ci-dessus) suffit déjà à
 // écarter les emplacements qui ne l'auraient pas été, que la Couleur soit
 // cochée ou non pour cet essai.
-const PYRA_MAX_CANDIDATES = 2;
+const PYRA_MAX_CANDIDATES = 3;
 // Volontairement 1 (aucun effet) : voir le commentaire ci-dessus — le
 // miroir ne doit plus jamais coûter de recherche supplémentaire, sa
 // fréquence repose entièrement sur le placement/la sélection biaisés, pas
@@ -637,52 +637,115 @@ function layoutHasPyra(layout) {
 
 /**
  * Nettoie EN PLACE les Pyra décoratifs — retour utilisateur explicite (voir
- * le commentaire de `PYRA_MAX_CANDIDATES`): "actuellement leur couleur est
- * déduite par les autres indices", càd qu'une fois le reste résolu, le
- * nombre de lumières adjacentes à la case Pyra (donc sa couleur) se
- * trouvait déjà entièrement fixé PAR AILLEURS — le joueur n'a jamais besoin
- * de le déduire lui-même. Pendant de `pruneUnusedMirrors` pour le Miroir,
- * même philosophie que pour la Couleur ("nécessaire, jamais décoratif",
- * voir commentaire d'en-tête) — mais le TEST est différent, car
- * contrairement au Miroir (qui n'a lui-même AUCUNE contrainte de victoire,
- * seulement un effet optionnel sur des lasers), Pyra EST une contrainte de
- * victoire à part entière (`isWon`, voir grid.js) : la question n'est pas
- * "a-t-il été traversé par un laser ?" mais "sa contrainte propre a-t-elle
- * un jour été la SEULE chose qui empêchait une autre solution ?".
+ * le commentaire de `PYRA_MAX_CANDIDATES`): "je trouve toujours la plupart
+ * des pyra (voire tous) inutiles EN TANT QUE Pyra [...] ils sont utiles en
+ * tant que Neurone [obstacle qui compte des lumières adjacentes, comme une
+ * charge classique], mais ni en tant que Pyra (devoir faire un choix pour
+ * avoir la couleur dont on a besoin) ni en tant que couleur".
  *
- * Pour chaque "Y" survivant, teste si LE RETIRER (converti en VOID, donc
- * sans SA contrainte propre "1 à 3 lumières adjacentes") change quoi que ce
- * soit à l'unicité du plateau ENTIER (recalculée par le VRAI solveur —
- * `analyzeAndCount`, pas la solution gloutonne de `resolveAndDeriveClues` —
- * donc toute interaction avec la Couleur/les cibles déjà posées, si un
- * laser Pyra y contribuait, est nativement prise en compte: retirer un Pyra
- * dont dépendait une cible rendrait le plateau insolvable, `count` tomberait
- * à 0, donc `stillUnique` serait faux et le retrait serait annulé — jamais
- * besoin d'un traitement spécial pour ce cas).
+ * Une première version de ce nettoyage (voir historique) testait "retirer
+ * le Y (converti en VOID) casse-t-il l'unicité du plateau ?" — un test TROP
+ * LARGE : il confondait la nécessité de Pyra comme simple OBSTACLE OPAQUE
+ * (compter/bloquer, comme n'importe quelle case pleine — presque toujours
+ * "nécessaire" à ce titre, même sans rapport avec sa mécanique Pyra) avec
+ * sa nécessité comme MÉCANIQUE PYRA (le joueur doit réellement hésiter
+ * entre 1, 2 ou 3 lumières adjacentes pour obtenir la bonne couleur). Un
+ * "Y" pouvait donc survivre uniquement parce qu'une case pleine QUELCONQUE
+ * était nécessaire à cet endroit — jamais parce que son identité PYRA
+ * (plutôt qu'un chiffre fixe) apportait quoi que ce soit.
  *
- * Si le plateau reste unique SANS cette contrainte (`stillUnique`), c'est
- * que les AUTRES indices suffisaient déjà, seuls, à fixer un pattern de
- * lumière unique autour de cette case : le "Y" est décoratif, on laisse le
- * retrait (VOID, définitif — comme n'importe quelle charge classique
- * voidée). Sinon (retrait rouvre une ambiguïté, ou rend même le plateau
- * insolvable), il est réellement nécessaire : on le remet intact.
+ * Test corrigé : au lieu de retirer la case, on ignore SEULEMENT sa
+ * contrainte de victoire propre (voir grid.js `isWon({ ignorePyra })`) —
+ * elle reste un obstacle opaque identique en tout point (même position,
+ * même opacité aux lasers colorés, même participation à l'illumination),
+ * seul son état "1 à 3 lumières" n'est plus un motif de rejet côté
+ * solveur. On énumère alors (cap=2) les remplissages qui satisfont TOUT LE
+ * RESTE du plateau SANS cette contrainte précise :
+ *   - Une SEULE solution trouvée ⇒ le reste des indices (numériques,
+ *     couleur, miroir...) fixe déjà, à lui seul, EXACTEMENT combien de
+ *     lumières touchent cette case — la contrainte Pyra ne fait jamais la
+ *     différence, le joueur n'a jamais besoin de choisir. Décoratif :
+ *     candidat au retrait (voir plus bas pour le token de remplacement).
+ *   - AU MOINS DEUX solutions trouvées ⇒ plusieurs remplissages du reste du
+ *     plateau sont par ailleurs valides, et c'est LA CONTRAINTE PYRA
+ *     elle-même (rejeter 0 et 4 lumières adjacentes) qui départage laquelle
+ *     est la bonne — un vrai dilemme, "Y" reste intact.
  *
- * Sûr par construction, comme le reste du nettoyage Phase 2/3 : un retrait
- * n'est jamais commité sauf si `count===1` ET `exhausted` sont CONFIRMÉS
- * par le solveur — jamais de perte de l'invariant "toujours unique".
+ * BUG CORRIGÉ (retour utilisateur, niveaux devenus insolubles après ce
+ * nettoyage): la toute première implémentation remplaçait un "Y" décoratif
+ * par VOID ("X"). Or VOID est TRANSPARENT aux lasers colorés (voir grid.js,
+ * en-tête) alors que Pyra — comme tout obstacle plein — leur est OPAQUE :
+ * ce remplacement changeait donc silencieusement la trajectoire d'AUTRES
+ * lasers (charges classiques colorées, mirroirs...) qui passaient à côté
+ * sans jamais toucher ce Pyra, cassant des cibles couleur déjà posées par
+ * la Phase 2 (qui, elle, a tourné en supposant cette case opaque). Corrigé
+ * en remplaçant par un MUR ("W", -> CellType.WALL) plutôt qu'un Void: un
+ * mur est opaque à la lumière blanche ET aux lasers colorés.
+ *
+ * Ce remplacement révèle en fait un DEUXIÈME angle de nécessité, distinct
+ * du test `ignorePyra` ci-dessus et volontairement vérifié EN PLUS (pas
+ * juste un filet de sécurité) : le test `ignorePyra` répond à "sa
+ * contrainte de victoire (1 à 3) départage-t-elle l'unicité ?" (nécessaire
+ * COMME FILTRE — le dilemme "combien de lumières pour rester valide"), mais
+ * une case Pyra "success" est AUSSI une SOURCE DE LASER coloré (voir
+ * grid.js recompute(): `pyraReady`, exactement comme une charge colorée
+ * satisfaite) — un Mur, lui, n'émet jamais rien. Si une cible couleur
+ * posée par la Phase 2 dépend de CE laser précis, le convertir en Mur (qui
+ * tue le laser en même temps que le filtre) rend le plateau insoluble
+ * (`count` tombe à 0) même si le test `ignorePyra` seul avait dit
+ * "décoratif" — c'est donc une revérification complète (vrai solveur, pas
+ * seulement `ignorePyra`) qui tranche : nécessaire COMME FILTRE (test
+ * `ignorePyra`) OU COMME SOURCE DE LASER (cette revérification) suffit à
+ * garder "Y" intact ; retiré seulement si ni l'un ni l'autre ne s'applique.
+ * C'est précisément le second manque relevé par l'utilisateur ("ni en tant
+ * que couleur") : un Pyra peut désormais survivre pour CETTE raison aussi,
+ * pas seulement pour son rôle de filtre.
+ *
+ * Toujours prouvé sûr : la solution de référence du plateau (déjà connue
+ * valide AVEC la contrainte Pyra pleine) reste par construction une des
+ * solutions trouvées par le test `ignorePyra` (relâcher une contrainte ne
+ * peut jamais l'invalider), donc `solutions.length === 0` ne devrait jamais
+ * arriver là (garde-fou défensif : traité comme "nécessaire").
+ *
+ * Tourne jusqu'à POINT FIXE (pas une seule passe) : avec plusieurs Pyra sur
+ * le même plateau (voir `PYRA_MAX_CANDIDATES`), un "Y" peut sembler
+ * nécessaire uniquement parce qu'un AUTRE "Y", pas encore retiré à ce
+ * moment de la passe, maintenait artificiellement une ambiguïté — le
+ * retirer PEUT donc révéler qu'un "Y" déjà "confirmé nécessaire" plus tôt
+ * dans la même passe est en fait, lui aussi, décoratif une fois le premier
+ * retiré. Une seule passe gauche-à-droite laisserait ce genre de cas
+ * survivre par simple accident d'ordre de balayage. Termine forcément
+ * (chaque itération ne peut que RETIRER des "Y", jamais en rajouter — le
+ * nombre de candidats, déjà minuscule, décroît strictement à chaque
+ * retrait commité) ; `deadline` reste le garde-fou wall-clock si jamais une
+ * itération devenait trop coûteuse.
  */
 function pruneUnnecessaryPyra(layout, rows, cols, nodeBudget, deadline) {
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      if (layout[r][c] !== "Y") continue;
-      if (Date.now() > deadline) return; // budget de temps global dépassé: on garde les "Y" pas encore retestés tels quels
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (layout[r][c] !== "Y") continue;
+        if (Date.now() > deadline) return; // budget de temps global dépassé: on garde les "Y" pas encore retestés tels quels
 
-      layout[r][c] = "X"; // retrait test: sans sa contrainte propre, cette case redevient un void neutre
-      const level = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
-      const { count, exhausted } = analyzeAndCount(level, 2, nodeBudget);
-      const stillUnique = exhausted && count === 1;
+        const probeLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
+        const probe = enumerateSolutions(probeLevel, 2, nodeBudget, {
+          ignorePyra: new Set([`${r},${c}`]),
+        });
+        const seemsDecorative = probe.exhausted && probe.solutions.length === 1;
+        if (!seemsDecorative) continue; // nécessaire (>=2 solutions, ou résultat non concluant): "Y" reste tel quel
 
-      if (!stillUnique) layout[r][c] = "Y"; // nécessaire: on le remet (décoratif sinon, le retrait reste)
+        // Voir le commentaire ci-dessus: "W" (WALL), jamais "X" (VOID), pour
+        // préserver l'opacité aux lasers colorés — puis revérification
+        // complète avant de commiter.
+        layout[r][c] = "W";
+        const finalLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
+        const verify = analyzeAndCount(finalLevel, 2, nodeBudget);
+        const stillUnique = verify.exhausted && verify.count === 1;
+        if (stillUnique) changed = true; // retrait commité: relance une passe complète (voir point fixe ci-dessus)
+        else layout[r][c] = "Y"; // filet de sécurité: interaction imprévue, on annule le retrait
+      }
     }
   }
 }

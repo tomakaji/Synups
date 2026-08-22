@@ -1092,8 +1092,21 @@ export class LightUpGrid {
    * la couleur") : une case-cible n'a alors besoin que d'être illuminée,
    * sans exiger la couleur exacte. Sert à vérifier qu'un niveau a
    * plusieurs solutions en lumière blanche mais une seule en couleur.
+   *
+   * `ignorePyra` (générateur uniquement, voir generator.js:
+   * `pruneUnnecessaryPyra`) : `Set` de clés `"r,c"` de cases PYRA dont la
+   * contrainte propre (1 à 3 lumières adjacentes) est ignorée pour CET
+   * appel — la case reste un obstacle physique identique en tout point
+   * (opacité, laser tricolore si `_state==="success"`), seul son état
+   * n'est plus un motif de rejet. Sert à mesurer si le REMPLISSAGE
+   * correct autour d'une case Pyra est déjà entièrement dicté par les
+   * AUTRES contraintes du plateau (une seule solution même sans la
+   * contrainte Pyra ⇒ décoratif) ou si sa propre contrainte est ce qui
+   * départage plusieurs remplissages par ailleurs valides (⇒ nécessaire,
+   * un vrai dilemme pour le joueur) — voir le commentaire de
+   * `pruneUnnecessaryPyra` pour le raisonnement complet.
    */
-  isWon({ ignoreColor = false } = {}) {
+  isWon({ ignoreColor = false, ignorePyra = null } = {}) {
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
         const cell = this.cells[r][c];
@@ -1106,7 +1119,9 @@ export class LightUpGrid {
         }
         if (cell.type === CellType.CLUE && cell._state !== "success") return false;
         if (cell.type === CellType.FORBIDDEN && cell._state !== "success") return false;
-        if (cell.type === CellType.PYRA && cell._state !== "success") return false;
+        if (cell.type === CellType.PYRA && cell._state !== "success") {
+          if (!(ignorePyra && ignorePyra.has(`${r},${c}`))) return false;
+        }
       }
     }
     return true;
