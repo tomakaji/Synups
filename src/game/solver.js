@@ -372,9 +372,34 @@ function propagate(grid, excluded, mirrorReachable, stats) {
     }
   }
 
+  // Candidat de branchement (voir pickBranchCell): repéré À LA VOLÉE
+  // pendant CETTE même passe Stage 1 plutôt que par un rebalayage complet
+  // séparé de la grille après coup (c'est exactement ce que faisait
+  // l'appelant avant : `pickBranchCell` reparcourait toute la grille avec
+  // la même logique de sélection). Réinitialisé à chaque itération de
+  // `while(changed)` : si cette itération force quoi que ce soit
+  // (`changed = true`), les valeurs needed/free ci-dessous seront
+  // périmées à la prochaine itération donc sans intérêt ; seule la
+  // TOUT dernière itération — celle où Stage 1 ET Stage 1.5 ET Stage 2 ne
+  // trouvent plus rien à forcer, juste avant le `return { ok: true, ... }`
+  // final — a des valeurs garanties à jour, car rien ne change plus la
+  // grille entre le moment où elles sont mesurées et le retour de la
+  // fonction. C'est cette dernière itération qui compte : les autres sont
+  // écrasées avant d'être utilisées.
+  let branchCell = null;
+  let branchNeeded = 0;
+  let branchFree = null;
+  let branchScore = Infinity;
+  let branchFreeLen = Infinity;
+
   let changed = true;
   while (changed) {
     changed = false;
+    branchCell = null;
+    branchNeeded = 0;
+    branchFree = null;
+    branchScore = Infinity;
+    branchFreeLen = Infinity;
 
     // Stage 1: chaque indice/interdiction, isolément.
     for (let r = 0; r < grid.rows; r++) {
@@ -418,6 +443,17 @@ function propagate(grid, excluded, mirrorReachable, stats) {
             }
           }
           changed = true;
+        } else if (isClue && needed > 0 && free.length > 0) {
+          // Candidat de branchement potentiel — même critère que
+          // pickBranchCell (le moins de combinaisons possibles restantes).
+          const score = binom(free.length, needed);
+          if (score < branchScore || (score === branchScore && free.length < branchFreeLen)) {
+            branchScore = score;
+            branchFreeLen = free.length;
+            branchCell = free[0];
+            branchNeeded = needed;
+            branchFree = free;
+          }
         }
       }
     }
@@ -513,7 +549,15 @@ function propagate(grid, excluded, mirrorReachable, stats) {
     }
   }
 
-  return { ok: true, litAdded, excludedAdded };
+  return {
+    ok: true,
+    litAdded,
+    excludedAdded,
+    // Cellule de branchement déjà identifiée pendant Stage 1 (voir plus
+    // haut) — `null` si aucun indice actif n'en propose (zone ouverte,
+    // repli sur `undecided[0]` côté appelant, comme pickBranchCell).
+    branchCandidate: branchCell ? { cell: branchCell, needed: branchNeeded, free: branchFree } : null,
+  };
 }
 
 /**
@@ -580,6 +624,37 @@ function pickBranchCell(grid, undecided, excluded) {
   }
 
   return bestCell || undecided[0];
+}
+
+/**
+ * Décide quelle branche essayer EN PREMIER pour une case de branchement
+ * donnée ("exclue" ou "allumée") — les DEUX branches restent toujours
+ * explorées ensuite (voir enumerateSolutions/analyzeAndCount: sémantique
+ * "exhaustif jusqu'à cap", pas "premier trouvé" comme findSolution), donc
+ * ceci ne fait qu'influencer l'ORDRE, jamais le résultat final.
+ *
+ * Priorité 1 (indice de solution) : si une solution précédente est connue
+ * (`hintSet`, ensemble d'indices `idxOf` des cases allumées de cette
+ * solution — voir generator.js, qui la reconstruit à chaque appel depuis
+ * `analyzeAndCount`/`enumerateSolutions` précédent), on rejoue directement
+ * son choix pour cette case : statistiquement, la grille n'a que peu
+ * changé d'un appel à l'autre (un retrait/coloriage/nettoyage à la fois),
+ * donc la solution précédente reste très probablement encore valide.
+ *
+ * Priorité 2 (sens du branchement), utilisée seulement en l'absence
+ * d'indice : une charge à `needed === 1` est immédiatement satisfaite dès
+ * qu'ON ALLUME un candidat (Stage 1 exclut alors le reste au prochain
+ * passage) — essayer "allumée" en premier colle donc à la déduction la
+ * plus rapide. Symétriquement, `needed === free.length - 1` est
+ * immédiatement satisfaite en EXCLUANT un candidat (le reste devient
+ * needed === free.length, donc tous forcés allumés) — c'est déjà l'ordre
+ * par défaut ci-dessous. Aucun signal fort dans les autres cas : on garde
+ * "exclue d'abord", cohérent avec le comportement historique.
+ */
+function decideBranchOrder(hintSet, idx, needed) {
+  if (hintSet) return hintSet.has(idx) ? "lit" : "excluded";
+  if (needed === 1) return "lit";
+  return "excluded";
 }
 
 /**
@@ -653,6 +728,15 @@ export function enumerateSolutions(level, cap = 5, maxNodes = 3_000_000, options
   const found = [];
   let nodes = 0;
 
+  // Priorité 1 (indice de solution) : `options.hint`, si fourni, est une
+  // solution déjà connue (même format que ce que retourne cette fonction :
+  // liste de coordonnées [r, c]) — typiquement la solution de l'appel
+  // précédent sur une grille très voisine (un retrait/coloriage/nettoyage
+  // de plus). Convertie une fois ici en Set d'indices `idxOf` pour un
+  // lookup O(1) à chaque case de branchement (voir decideBranchOrder).
+  const { hint, ...winOptions } = options;
+  const hintSet = hint ? new Set(hint.map(([r, c]) => idxOf(grid, r, c))) : null;
+
   // Exclut les duplicatas de neurone miroir [expérimental]: ils
   // apparaissent automatiquement dès qu'on pose leur origine (voir
   // grid.js: toggleLight), une solution ne doit donc lister que les coups
@@ -672,21 +756,60 @@ export function enumerateSolutions(level, cap = 5, maxNodes = 3_000_000, options
 
     if (undecided.length === 0) {
       grid.recompute(); // léger pendant la descente (voir toggleLight{full:false}): isWon() a besoin de l'illumination à jour
-      if (grid.isWon(options)) found.push(currentLights());
+      if (grid.isWon(winOptions)) found.push(currentLights());
     } else {
-      const [r, c] = pickBranchCell(grid, undecided, excluded);
+      // pickBranchCell incrémental: la cellule de branchement a déjà été
+      // repérée par propagate() pendant sa dernière passe Stage 1 (voir
+      // commentaire dans propagate) — on ne relance un rebalayage complet
+      // que dans le cas rare où aucun indice actif n'en propose (zone
+      // ouverte).
+      let r, c, needed;
+      if (prop.branchCandidate) {
+        [r, c] = prop.branchCandidate.cell;
+        needed = prop.branchCandidate.needed;
+      } else {
+        [r, c] = pickBranchCell(grid, undecided, excluded);
+      }
       const idx = idxOf(grid, r, c);
 
-      excluded.add(idx);
-      search();
-      excluded.delete(idx);
-
-      if (found.length < cap) {
+      // Ordre exhaustif préservé dans les deux cas (voir decideBranchOrder):
+      // les DEUX branches sont toujours essayées, seul l'ORDRE change.
+      const order = decideBranchOrder(hintSet, idx, needed);
+      const tryExcludedFirst = () => {
+        excluded.add(idx);
+        search();
+        excluded.delete(idx);
+      };
+      const tryLitSecond = () => {
+        if (found.length < cap) {
+          const result = grid.toggleLight(r, c, { full: false });
+          if (result === "placed") {
+            if (!anyClueError(grid)) search();
+            grid.toggleLight(r, c, { full: false });
+          }
+        }
+      };
+      const tryLitFirst = () => {
         const result = grid.toggleLight(r, c, { full: false });
         if (result === "placed") {
           if (!anyClueError(grid)) search();
           grid.toggleLight(r, c, { full: false });
         }
+      };
+      const tryExcludedSecond = () => {
+        if (found.length < cap) {
+          excluded.add(idx);
+          search();
+          excluded.delete(idx);
+        }
+      };
+
+      if (order === "lit") {
+        tryLitFirst();
+        tryExcludedSecond();
+      } else {
+        tryExcludedFirst();
+        tryLitSecond();
       }
     }
 
@@ -925,6 +1048,22 @@ export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = 
   let count = 0;
   let nodes = 0;
 
+  // Priorité 1, cf. enumerateSolutions. IMPORTANT (voir decideSearchOrder
+  // ci-dessous) : contrairement à enumerateSolutions, cette réorganisation
+  // n'est appliquée ici QU'APRÈS le gel des stats (`frozen`) — tant que la
+  // 1re solution n'est pas trouvée, `stats.branchCount` alimente
+  // `computeTier` (calibré empiriquement sur l'ordre historique "exclue
+  // d'abord" — voir doc en tête de computeTier) ; changer l'ordre AVANT le
+  // gel changerait le nombre de retours-arrière nécessaires pour trouver
+  // cette 1re solution donc le palier mesuré, ce qui fausserait la
+  // difficulté réelle du niveau plutôt que juste sa vitesse de génération.
+  // Après le gel en revanche, ce qui reste à faire est soit confirmer
+  // l'unicité (explorer tout le reste sans rien compter), soit trouver vite
+  // une 2e solution pour plafonner à `cap` — l'ordre n'y change JAMAIS les
+  // stats, seulement la vitesse : sans risque, donc appliqué pleinement.
+  const { hint, ...winOptions } = options;
+  const hintSet = hint ? new Set(hint.map(([r, c]) => idxOf(grid, r, c))) : null;
+
   function currentLights() {
     return grid.getPlacedLights();
   }
@@ -940,7 +1079,7 @@ export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = 
 
     if (undecided.length === 0) {
       grid.recompute(); // léger pendant la descente (voir toggleLight{full:false}): isWon() a besoin de l'illumination à jour
-      if (grid.isWon(options)) {
+      if (grid.isWon(winOptions)) {
         count++;
         if (!frozen) {
           firstSolution = currentLights();
@@ -949,18 +1088,44 @@ export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = 
       }
     } else {
       if (!frozen) stats.branchCount++;
-      const [r, c] = pickBranchCell(grid, undecided, excluded);
+
+      // pickBranchCell incrémental (voir enumerateSolutions) : la cellule
+      // de branchement vient déjà de propagate() dans le cas commun.
+      let r, c, needed;
+      if (prop.branchCandidate) {
+        [r, c] = prop.branchCandidate.cell;
+        needed = prop.branchCandidate.needed;
+      } else {
+        [r, c] = pickBranchCell(grid, undecided, excluded);
+      }
       const idx = idxOf(grid, r, c);
 
-      excluded.add(idx);
-      search();
-      excluded.delete(idx);
+      // Voir commentaire plus haut: réordonnancement (indice/priorité 2)
+      // seulement une fois les stats gelées — avant, ordre historique figé.
+      const order = frozen ? decideBranchOrder(hintSet, idx, needed) : "excluded";
 
-      if (count < cap) {
+      if (order === "lit") {
         const result = grid.toggleLight(r, c, { full: false });
         if (result === "placed") {
           if (!anyClueError(grid)) search();
           grid.toggleLight(r, c, { full: false });
+        }
+        if (count < cap) {
+          excluded.add(idx);
+          search();
+          excluded.delete(idx);
+        }
+      } else {
+        excluded.add(idx);
+        search();
+        excluded.delete(idx);
+
+        if (count < cap) {
+          const result = grid.toggleLight(r, c, { full: false });
+          if (result === "placed") {
+            if (!anyClueError(grid)) search();
+            grid.toggleLight(r, c, { full: false });
+          }
         }
       }
     }

@@ -847,7 +847,7 @@ const PYRA_RICHNESS_NODE_BUDGET = 60_000;
  * confirmé unique par construction) ni de bloquer la génération (le budget
  * existant borne déjà le nombre de tentatives, best-effort comme le reste).
  */
-function countRichPyra(level, rows, cols) {
+function countRichPyra(level, rows, cols, hint) {
   const pyraCells = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -856,7 +856,15 @@ function countRichPyra(level, rows, cols) {
   }
   if (pyraCells.length === 0) return { total: 0, rich: 0 };
 
-  const { solutions } = enumerateSolutions(level, PYRA_RICHNESS_CAP, PYRA_RICHNESS_NODE_BUDGET, { ignoreColor: true });
+  // Indice de solution (voir solver.js decideBranchOrder): `hint`, quand
+  // fourni par l'appelant, est LA solution qu'on vient tout juste de
+  // mesurer sur ce même plateau final (voir generateLevel) — biaise la
+  // première solution retrouvée ici vers elle, sans rien changer au
+  // résultat (toujours exhaustif jusqu'à PYRA_RICHNESS_CAP).
+  const { solutions } = enumerateSolutions(level, PYRA_RICHNESS_CAP, PYRA_RICHNESS_NODE_BUDGET, {
+    ignoreColor: true,
+    hint,
+  });
   let rich = 0;
   for (const [pr, pc] of pyraCells) {
     const counts = new Set(solutions.map((sol) => adjacentLightCount(sol, pr, pc, rows, cols)));
@@ -930,13 +938,20 @@ function countRichPyra(level, rows, cols) {
  */
 function pruneUnnecessaryPyra(layout, rows, cols, nodeBudget, deadline) {
   let changed = true;
+  // Indice de solution: chaque démotion commitée dans une passe préserve
+  // EXACTEMENT `current.solution` (voir commentaire ci-dessus : `n` est
+  // dérivé de cette même solution, donc elle continue de la satisfaire) —
+  // reste donc valide comme point de départ pour la passe suivante, pas
+  // seulement une approximation.
+  let prevSolution = null;
   while (changed) {
     changed = false;
     if (Date.now() > deadline) return;
 
     const currentLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
-    const current = analyzeAndCount(currentLevel, 2, nodeBudget);
+    const current = analyzeAndCount(currentLevel, 2, nodeBudget, { hint: prevSolution });
     if (!current || !current.exhausted || !current.solution) return; // résultat non concluant: on arrête, "Y" restants inchangés
+    prevSolution = current.solution;
 
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
@@ -949,7 +964,11 @@ function pruneUnnecessaryPyra(layout, rows, cols, nodeBudget, deadline) {
         const prevToken = layout[r][c];
         layout[r][c] = String(n); // hypothèse: charge NORMALE de même compte, sans laser (voir commentaire)
         const finalLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
-        const verify = analyzeAndCount(finalLevel, 2, nodeBudget);
+        // Indice de solution: `current.solution` (mesurée juste au-dessus sur
+        // le plateau AVANT cette démotion) reste presque toujours valide ici
+        // — un seul "Y" a changé de type, tout le reste de la grille est
+        // identique (voir solver.js decideBranchOrder).
+        const verify = analyzeAndCount(finalLevel, 2, nodeBudget, { hint: current.solution });
         const stillUnique = verify && verify.exhausted && verify.count === 1;
         if (stillUnique) changed = true; // laser non nécessaire: démotion commitée, relance une passe complète
         else layout[r][c] = prevToken; // dilemme de couleur confirmé: "Y" reste tel quel
@@ -1284,10 +1303,20 @@ function wouldFragmentSmallIsland(layout, r, c, rows, cols, threshold) {
 function repairToUnique(layout, rows, cols, useForbidden, rand, repairNodeBudget, deadline, pyraCandidates = null) {
   if (!resolveAndDeriveClues(layout, rows, cols, useForbidden, pyraCandidates)) return false;
 
+  // Indice de solution: chaque itération ne mure qu'UNE case de plus (voir
+  // plus bas) — la solution trouvée à l'itération précédente reste donc un
+  // point de départ statistiquement pertinent pour la suivante, même si
+  // `resolveAndDeriveClues` re-dérive tous les indices à chaque passage
+  // (voir solver.js decideBranchOrder: un indice erroné ne coûte jamais
+  // plus cher que l'ordre par défaut, il ne fait qu'aider ou ne rien
+  // changer).
+  let prevSolution = null;
+
   for (let iter = 0; iter < MAX_REPAIR_ITERATIONS; iter++) {
     if (Date.now() > deadline) return false; // budget de temps global dépassé: cet essai abandonne
     const level = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
-    const { solutions, exhausted } = enumerateSolutions(level, 2, repairNodeBudget);
+    const { solutions, exhausted } = enumerateSolutions(level, 2, repairNodeBudget, { hint: prevSolution });
+    prevSolution = solutions.length > 0 ? solutions[0] : null;
 
     if (exhausted && solutions.length === 1) return true; // confirmé unique
     if (solutions.length === 0) return false; // garde-fou défensif: ne devrait jamais arriver
@@ -1406,7 +1435,10 @@ function stripToTargetTier(layout, rows, cols, targetTier, nodeBudget, rand, dea
     const prevToken = layout[r][c];
     layout[r][c] = "X"; // retrait tentatif: VOID (voir resolveAndDeriveClues, WALL réservé aux lasers)
     const level = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
-    const result = analyzeAndCount(level, 2, nodeBudget);
+    // Indice de solution: `best.solution` (dernier retrait accepté, un seul
+    // indice de plus a disparu depuis) reste presque toujours valide ici —
+    // voir solver.js decideBranchOrder.
+    const result = analyzeAndCount(level, 2, nodeBudget, { hint: best.solution });
     const stillUnique = result.exhausted && result.count === 1;
 
     if (stillUnique && result.tier != null && result.tier <= targetTier) {
@@ -1575,7 +1607,10 @@ function pruneUnusedMirrors(layout, rows, cols, solution, nodeBudget, deadline) 
     const prevToken = layout[r][c];
     layout[r][c] = "X";
     const finalLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
-    const verify = analyzeAndCount(finalLevel, 2, nodeBudget);
+    // Indice de solution: `solution` (le paramètre reçu, mesuré une seule
+    // fois avant cette boucle) — un seul miroir décoratif de moins à
+    // chaque itération, le reste du plateau est inchangé.
+    const verify = analyzeAndCount(finalLevel, 2, nodeBudget, { hint: solution });
     const stillUnique = verify && verify.exhausted && verify.count === 1;
     if (!stillUnique) layout[r][c] = prevToken; // nécessaire malgré tout: on le remet
   }
@@ -1891,8 +1926,13 @@ function tryColorizeForNecessity(
       for (const [r, c] of subset) layout[r][c] = "X"; // retrait tentatif: réintroduit potentiellement une ambiguïté blanche contrôlée
 
       const level = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
+      // Indice de solution: `referenceSolution` reste GARANTIE valide ici
+      // (retirer une charge ne peut qu'affaiblir les contraintes, jamais
+      // invalider une solution qui les satisfaisait déjà) — pas juste une
+      // approximation statistique comme les autres sites d'appel.
       const { solutions, exhausted } = enumerateSolutions(level, COLOR_AMBIGUITY_CAP, COLOR_AMBIGUITY_NODE_BUDGET, {
         ignoreColor: true,
+        hint: referenceSolution,
       });
 
       // On ne garde que les cas à ambiguïté CONTRÔLÉE (au moins
@@ -1912,8 +1952,12 @@ function tryColorizeForNecessity(
       const applied = tryDiscriminatingColoring(layout, rows, cols, winner, alternates, rand, deadline, wantsMirror);
       if (applied) {
         const finalLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
-        const verify = analyzeAndCount(finalLevel, 2, preset.nodeBudget);
-        const whiteCheck = enumerateSolutions(finalLevel, 2, preset.repairNodeBudget, { ignoreColor: true });
+        // Indice de solution: `winner` reste GARANTIE valide dans les deux
+        // appels ci-dessous — c'est exactement la solution que le coloriage
+        // vient de rendre gagnante (voir tryDiscriminatingColoring), rien de
+        // probabiliste ici.
+        const verify = analyzeAndCount(finalLevel, 2, preset.nodeBudget, { hint: winner });
+        const whiteCheck = enumerateSolutions(finalLevel, 2, preset.repairNodeBudget, { ignoreColor: true, hint: winner });
 
         if (
           verify &&
@@ -2215,7 +2259,7 @@ export function generateLevel({
     // écarté ceux qui ne l'étaient pas) — sert de départage dans
     // `isBetterCandidate` (`preferPyra`), jamais de motif de rejet.
     if (pyraRequested && candidate.featureSubset.includes("pyra")) {
-      const { total, rich } = countRichPyra(level, level.rows, level.cols);
+      const { total, rich } = countRichPyra(level, level.rows, level.cols, candidate.solution);
       candidate.pyraTotal = total;
       candidate.pyraRich = rich;
     }
