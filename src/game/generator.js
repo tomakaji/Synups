@@ -173,6 +173,12 @@ export const FEATURES = {
  * dont les clés 1/2/3 réfèrent aux ÉTOILES, pas aux paliers solveur.
  */
 const SOLVER_TIER_FOR_STARS = { 1: 2, 2: 3, 3: 4 };
+// Palier solveur maximum (voir solver.js `computeTier`, qui ne retourne
+// jamais plus que 4) — utilisé par `stripToTargetTier` pour savoir quand il
+// est sûr de continuer à minimiser AU-DELÀ du premier succès plutôt que de
+// s'arrêter dès la cible atteinte (voir son commentaire : retour utilisateur
+// "les niveaux 3★ sont pas assez difficiles").
+const MAX_SOLVER_TIER = 4;
 
 /**
  * Plages de génération par étoile (clés = étoiles affichées, PAS paliers
@@ -226,7 +232,13 @@ const DIFFICULTY_PRESETS = {
     repairNodeBudget: 150_000,
   },
   3: {
-    rowsRange: [9, 10],
+    // Retour utilisateur : +2 lignes (pas colonnes) pour un format plus
+    // vertical/mobile — voir le paragraphe ci-dessus sur le plafond ~80
+    // cellules, qu'un sweep empirique antérieur avait établi pour la
+    // LATENCE (pas la forme). Ce plafond monte donc mécaniquement à ~96
+    // cellules (12×8) pour ce palier — revalidé après coup (voir le
+    // commit qui a introduit ce changement pour les temps mesurés).
+    rowsRange: [11, 12],
     colsRange: [7, 8],
     initialClueDensity: [0.32, 0.4],
     cornerVoidRange: [0, 1],
@@ -389,16 +401,20 @@ const MIRROR_DENSITY = 0.24;
 // pyra (voire tous) inutiles en tant que Pyra [...] ils sont utiles en tant
 // que Neurone, mais ni en tant que Pyra (devoir faire un choix pour la
 // couleur) ni en tant que couleur". Corrigé en deux volets :
-//   1. Un nombre de candidats désormais MINUSCULE (voir
-//      `PYRA_MAX_CANDIDATES`, un compte fixe plutôt qu'une densité) — moins
-//      de bruit à filtrer, et surtout aucun risque de devoir retirer après
-//      coup un Pyra qui se révélerait NÉCESSAIRE (voir point 2 : un retrait
-//      après coup casserait potentiellement l'unicité déjà garantie).
+//   1. Un nombre de candidats initialement borné (voir `PYRA_MAX_CANDIDATES`,
+//      un compte fixe plutôt qu'une densité) — aucun risque de devoir
+//      retirer après coup un Pyra qui se révélerait NÉCESSAIRE (voir point
+//      2 : un retrait après coup casserait potentiellement l'unicité déjà
+//      garantie).
 //   2. Un nettoyage de NÉCESSITÉ (voir `pruneUnnecessaryPyra`, appelé en fin
 //      de `tryGenerate` comme `pruneUnusedMirrors`) — REDÉFINI depuis (voir
 //      son commentaire) pour ne garder QUE le rôle couleur : un "Y" qui
 //      survit ce nettoyage est TOUJOURS nécessaire à UNE CIBLE COULEUR
-//      précise, jamais juste "nécessaire" au sens générique du terme.
+//      précise, jamais juste "nécessaire" au sens générique du terme. Ce
+//      critère strict est ce qui permet de relever `PYRA_MAX_CANDIDATES`
+//      sans risque (voir son commentaire) : plus de candidats en jeu ne
+//      peut jamais réintroduire de Pyra décoratif, seulement augmenter la
+//      chance d'en trouver un ou plusieurs RÉELLEMENT nécessaires.
 //
 // Volontairement appliqué sur les candidats "W" au hasard (contrairement à
 // `placeAlignedMirrors`, qui biaise vers l'alignement pour maximiser les
@@ -408,7 +424,16 @@ const MIRROR_DENSITY = 0.24;
 // `PYRA_PROXIMITY_RADIUS` ci-dessous (qui, lui, coordonne activement avec la
 // Phase 2 Couleur) — le PLACEMENT initial n'a donc besoin d'aucune
 // coordination géométrique propre.
-const PYRA_MAX_CANDIDATES = 3;
+// Retour utilisateur (mesuré : 36% des niveaux 3★+couleur+miroir+pyra
+// avaient au moins un Pyra survivant, TOUJOURS exactement 1 — jamais 2 ni
+// 3 — malgré ce plafond déjà à 3) : "pas assez de niveaux générés avec
+// pyra... et pas assez de pyras". Relevé de 3 à 5 : chaque candidat a une
+// chance INDÉPENDANTE d'être confirmé nécessaire par `pruneUnnecessaryPyra`
+// (voir son commentaire, critère désormais strict — couleur uniquement),
+// donc plus de candidats en jeu augmente mécaniquement (a) la probabilité
+// qu'AU MOINS un survive et (b) la probabilité d'en avoir PLUSIEURS sur le
+// même plateau.
+const PYRA_MAX_CANDIDATES = 5;
 // Rayon (distance de Manhattan) utilisé UNIQUEMENT par la Phase 2 (Couleur,
 // voir `orderCluesForRemoval`) pour biaiser QUELLES charges retirer/rouvrir
 // en priorité — ne contredit pas le paragraphe ci-dessus sur le PLACEMENT du
@@ -595,7 +620,101 @@ function buildInitialLayout({ rows, cols, clueDensity, cornerVoid, mirrorDensity
   // les autres, AVANT tout appel solveur (donc sans risque pour l'unicité
   // et sans coût de recalcul).
   relaxIsolatedCells(layout, rows, cols, rand);
+  // Voir mergeSmallIslands : relaxIsolatedCells ne traite QUE les cases
+  // isolées à UN SEUL élément — un remplissage indépendant par case
+  // ("." avec probabilité 1-clueDensity, ~58-68%) est mathématiquement en
+  // dessous du seuil de percolation d'un maillage carré (~59.3%), donc les
+  // cases vides forment presque toujours une "poussière" de PLUSIEURS
+  // petites poches déconnectées, pas juste des cellules isolées uniques.
+  mergeSmallIslands(layout, rows, cols, rand, ISLAND_MERGE_THRESHOLD);
   return layout;
+}
+
+// Retour utilisateur ("il y a toujours un peu trop d'îlots (ilot = une
+// sous-zone détachée du puzzle par les voids, très facile a résoudre et
+// qui n'apporte pas grand chose voire rien)") — mesuré avant ce correctif :
+// en moyenne 6.15 composantes connexes de cases vides PAR NIVEAU généré
+// (20 niveaux 1-3★, color+mirror+pyra+forbidden), la plupart minuscules
+// (80 composantes de taille <=4 sur seulement 20 niveaux). Seuil de taille
+// (pas juste "existe-t-il plusieurs composantes ?") : une petite poche de
+// 1 à 5 cases est presque toujours triviale à déduire isolément (peu ou
+// pas d'ambiguïté possible sur si peu de cases) et n'ajoute donc rien au
+// défi d'ensemble — une composante secondaire plus grande (10+ cases avec
+// ses propres indices) reste, elle, un sous-puzzle légitime, pas fusionnée.
+const ISLAND_MERGE_THRESHOLD = 6;
+
+/** Toutes les composantes connexes (4-adjacence) de cases "." du plateau —
+ * simple flood-fill, voir `mergeSmallIslands`. Chaque composante est la
+ * liste de ses coordonnées `[[r,c], ...]`. */
+function findConnectedEmptyComponents(layout, rows, cols) {
+  const seen = Array.from({ length: rows }, () => new Array(cols).fill(false));
+  const components = [];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (seen[r][c] || layout[r][c] !== ".") continue;
+      const stack = [[r, c]];
+      seen[r][c] = true;
+      const cells = [];
+      while (stack.length) {
+        const [cr, cc] = stack.pop();
+        cells.push([cr, cc]);
+        for (const [nr, nc] of orthogonalNeighbors(cr, cc, rows, cols)) {
+          if (layout[nr][nc] === "." && !seen[nr][nc]) {
+            seen[nr][nc] = true;
+            stack.push([nr, nc]);
+          }
+        }
+      }
+      components.push(cells);
+    }
+  return components;
+}
+
+/**
+ * Fusionne EN PLACE les composantes connexes de cases vides plus petites que
+ * `threshold` avec un voisin — voir `ISLAND_MERGE_THRESHOLD` pour le retour
+ * utilisateur qui motive cette passe. Même logique de reconnexion que
+ * `relaxIsolatedCells` (rouvre un voisin opaque de la composante, JAMAIS un
+ * miroir — placé intentionnellement, voir son commentaire — avec préférence
+ * pour un "W" plutôt qu'un "X" de coin pour préserver le découpage
+ * `cornerVoid` autant que possible), généralisée à une composante entière
+ * plutôt qu'une seule case.
+ *
+ * Tourne jusqu'à POINT FIXE : recalcule les composantes après CHAQUE fusion
+ * (une fusion peut faire grandir une composante jusqu'à dépasser le seuil,
+ * ou au contraire n'en fusionner que deux petites entre elles — encore trop
+ * petites toutes les deux, à retenter au tour suivant) plutôt qu'une seule
+ * passe sur un instantané figé. Termine forcément : chaque fusion réduit
+ * strictement le nombre de composantes (ou la boucle s'arrête faute de
+ * frontière réparable, ex. composante entourée uniquement de miroirs) ;
+ * `rows*cols` reste une borne large mais sûre sur le nombre d'itérations.
+ * Coût : flood-fill pur (comme `relaxIsolatedCells`), appelé au même
+ * moment (avant tout appel solveur) — aucun risque pour une unicité qui
+ * n'existe pas encore à ce stade.
+ */
+function mergeSmallIslands(layout, rows, cols, rand, threshold) {
+  const maxIter = rows * cols;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const components = findConnectedEmptyComponents(layout, rows, cols);
+    let merged = false;
+    for (const comp of components) {
+      if (comp.length >= threshold) continue;
+      const boundary = [];
+      for (const [r, c] of comp) {
+        for (const [nr, nc] of orthogonalNeighbors(r, c, rows, cols)) {
+          if (layout[nr][nc] !== "." && !isMirrorToken(layout[nr][nc])) boundary.push([nr, nc]);
+        }
+      }
+      if (boundary.length === 0) continue; // rien à faire pour celle-ci (ex: cernée de miroirs): essaie la suivante
+      const wBoundary = boundary.filter(([r, c]) => layout[r][c] === "W");
+      const pool = wBoundary.length > 0 ? wBoundary : boundary;
+      const [nr, nc] = pool[Math.floor(rand() * pool.length)];
+      layout[nr][nc] = ".";
+      merged = true;
+      break; // composantes changées: on repart d'un flood-fill frais au tour suivant
+    }
+    if (!merged) return; // plus aucune petite composante réparable
+  }
 }
 
 /** Vrai si (r,c) partage sa ligne OU sa colonne avec au moins une case
@@ -1019,6 +1138,49 @@ function wouldStarvePyraNeighbor(layout, r, c, rows, cols, pyraCandidates) {
   return false;
 }
 
+/** Vrai si murer (convertir en "W") la case vide (r,c) FRAGMENTERAIT sa
+ * composante connexe de cases "." en au moins deux morceaux dont un est plus
+ * petit que `threshold` — voir `mergeSmallIslands`, qui traite ce même
+ * problème mais UNE SEULE FOIS, avant tout appel solveur (`buildInitialLayout`).
+ * Ce garde-fou complète cette passe : `repairToUnique` mure des cases APRÈS
+ * coup, sur un plateau déjà fusionné, et peut donc lui-même recréer de
+ * nouveaux petits îlots que `mergeSmallIslands` n'a jamais vus. Simulation
+ * légère (retire temporairement la case, flood-fill depuis chaque voisin "."
+ * restant, restaure) — aucun appel solveur, coût borné par la taille de la
+ * composante (au plus rows*cols). Si (r,c) n'a qu'au plus un voisin ".", la
+ * murer ne peut PAS scinder quoi que ce soit en plusieurs morceaux (c'est déjà
+ * une extrémité), donc retourne `false` immédiatement sans flood-fill. */
+function wouldFragmentSmallIsland(layout, r, c, rows, cols, threshold) {
+  const neighbors = orthogonalNeighbors(r, c, rows, cols).filter(([nr, nc]) => layout[nr][nc] === ".");
+  if (neighbors.length <= 1) return false;
+  layout[r][c] = "W";
+  const seen = new Set();
+  let fragments = 0;
+  let hasSmallFragment = false;
+  for (const [nr, nc] of neighbors) {
+    const startKey = `${nr},${nc}`;
+    if (seen.has(startKey)) continue;
+    const stack = [[nr, nc]];
+    seen.add(startKey);
+    let size = 0;
+    while (stack.length) {
+      const [cr, cc] = stack.pop();
+      size++;
+      for (const [xr, xc] of orthogonalNeighbors(cr, cc, rows, cols)) {
+        const key = `${xr},${xc}`;
+        if (layout[xr][xc] === "." && !seen.has(key)) {
+          seen.add(key);
+          stack.push([xr, xc]);
+        }
+      }
+    }
+    fragments++;
+    if (size < threshold) hasSmallFragment = true;
+  }
+  layout[r][c] = ".";
+  return fragments > 1 && hasSmallFragment;
+}
+
 /**
  * Phase de réparation ciblée (voir commentaire d'en-tête) : dérive un
  * plateau plein dense, puis tant qu'il n'est pas confirmé unique, ajoute un
@@ -1046,6 +1208,15 @@ function wouldStarvePyraNeighbor(layout, r, c, rows, cols, pyraCandidates) {
  * options menaceraient un Pyra (rare — mieux vaut réparer l'unicité que
  * bloquer la convergence ; le résidu est de toute façon rattrapé, quand
  * c'est sûr, par `pruneUnnecessaryPyra` en fin de génération).
+ *
+ * DEUXIÈME GARDE-FOU (retour utilisateur : "il y a toujours un peu trop
+ * d'îlots") : `mergeSmallIslands` ne tourne qu'une fois, dans
+ * `buildInitialLayout`, avant tout mur ajouté ici — cette boucle peut donc
+ * recréer de nouveaux petits îlots en murant une case qui était le seul pont
+ * entre deux morceaux d'une même zone. `wouldFragmentSmallIsland` écarte ces
+ * cases EN PRIORITÉ elle aussi (même politique de repli que pour Pyra :
+ * préférer une case sûre, mais ne jamais bloquer la convergence si aucune ne
+ * l'est).
  */
 function repairToUnique(layout, rows, cols, useForbidden, rand, repairNodeBudget, deadline, pyraCandidates = null) {
   if (!resolveAndDeriveClues(layout, rows, cols, useForbidden, pyraCandidates)) return false;
@@ -1058,17 +1229,21 @@ function repairToUnique(layout, rows, cols, useForbidden, rand, repairNodeBudget
     if (exhausted && solutions.length === 1) return true; // confirmé unique
     if (solutions.length === 0) return false; // garde-fou défensif: ne devrait jamais arriver
 
+    const isSafeTarget = ([r, c]) =>
+      !wouldStarvePyraNeighbor(layout, r, c, rows, cols, pyraCandidates) &&
+      !wouldFragmentSmallIsland(layout, r, c, rows, cols, ISLAND_MERGE_THRESHOLD);
+
     let target = null;
     if (solutions.length >= 2) {
       const diffCells = symmetricDifferenceCells(solutions[0], solutions[1]);
-      const safeCells = diffCells.filter(([r, c]) => !wouldStarvePyraNeighbor(layout, r, c, rows, cols, pyraCandidates));
+      const safeCells = diffCells.filter(isSafeTarget);
       const pool = safeCells.length > 0 ? safeCells : diffCells;
       if (pool.length > 0) target = pool[Math.floor(rand() * pool.length)];
     }
     if (!target) {
       const empties = [];
       for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (layout[r][c] === ".") empties.push([r, c]);
-      const safeEmpties = empties.filter(([r, c]) => !wouldStarvePyraNeighbor(layout, r, c, rows, cols, pyraCandidates));
+      const safeEmpties = empties.filter(isSafeTarget);
       const pool = safeEmpties.length > 0 ? safeEmpties : empties;
       if (pool.length > 0) target = pool[Math.floor(rand() * pool.length)];
     }
@@ -1085,9 +1260,10 @@ function repairToUnique(layout, rows, cols, useForbidden, rand, repairNodeBudget
  * par un (ordre aléatoire, chaque retrait devient un VOID neutre — voir
  * resolveAndDeriveClues), ne gardant chaque retrait QUE s'il préserve
  * l'unicité ET que le palier mesuré ne dépasse pas le palier demandé.
- * S'arrête dès que le palier demandé est atteint OU que `deadline` (même
- * timestamp partagé qu'ailleurs, voir `repairToUnique`) est dépassée — sans
- * ce garde-fou, un plateau qui approche du palier 3 peut enchaîner des
+ * S'arrête dès que le palier demandé est atteint (SAUF au palier MAXIMUM,
+ * voir `MAX_SOLVER_TIER` ci-dessous) OU que `deadline` (même timestamp
+ * partagé qu'ailleurs, voir `repairToUnique`) est dépassée — sans ce
+ * garde-fou, un plateau qui approche du palier 3 peut enchaîner des
  * dizaines d'appels solveur de plus en plus coûteux (mesuré : jusqu'à ~30s
  * cumulés sur un essai malchanceux) alors que chaque appel individuel
  * respecte pourtant son propre `nodeBudget`. `layout` doit déjà être
@@ -1095,6 +1271,20 @@ function repairToUnique(layout, rows, cols, useForbidden, rand, repairNodeBudget
  * dernier résultat `analyzeAndCount` valide (toujours confirmé unique), ou
  * `null` seulement si l'état de départ n'était déjà pas mesurable (ne
  * devrait pas arriver après `repairToUnique`, garde-fou défensif).
+ *
+ * BUG CORRIGÉ (retour utilisateur : "les niveaux 3★ sont pas assez
+ * difficiles") : "s'arrêter dès la cible atteinte" est correct pour un
+ * palier < `MAX_SOLVER_TIER` — continuer retirerait le risque de dépasser
+ * la cible (overshoot vers le palier suivant, non désiré : chaque étoile
+ * doit rester dans SA fourchette). Mais pour `targetTier === MAX_SOLVER_TIER`
+ * (3★ actuellement), il n'existe PAS de palier suivant à éviter de dépasser
+ * — chaque retrait supplémentaire qui reste dans ce palier ne fait donc que
+ * RENFORCER la difficulté (`branchCount` plus élevé), jamais la dépasser.
+ * S'arrêter au tout premier succès y laissait donc systématiquement de la
+ * difficulté sur la table (3★ tout juste au-dessus du seuil, pas
+ * "profondément" dans le palier) — corrigé en continuant d'essayer TOUS les
+ * candidats restants (toujours borné par `deadline`) dans ce cas précis,
+ * chaque retrait accepté ne faisant qu'accumuler sur les précédents.
  */
 /**
  * Vrai si convertir TOUTES les cases-indice de `cells` en VOID (en une seule
@@ -1134,43 +1324,6 @@ function wouldCreateDeadIsolation(layout, r, c, rows, cols) {
   return wouldCreateDeadIsolationForSet(layout, [[r, c]], rows, cols);
 }
 
-// EXPÉRIMENTAL (mesure en cours, voir tryColorizeForNecessity): taille de la
-// plus grande région connexe de cases vides SANS AUCUN voisin indice — ces
-// zones sont précisément celles où pickBranchCell perd son heuristique de
-// guidage (voir solver.js: "sans indice actif à proximité, on retombe sur la
-// première case non décidée") et où l'énumération d'ambiguïté devient chère,
-// pas parce qu'elle est inefficace mais parce qu'il existe réellement
-// beaucoup de remplissages valides différents à distinguer. Coût: un simple
-// flood-fill, O(lignes×colonnes), aucun appel solveur.
-const REGION_FILTER_THRESHOLD = 0; // 0 = désactivé; mis à une valeur >0 pour activer le filtre pendant la mesure
-
-function largestClueSparseRegionSize(layout, rows, cols) {
-  const seen = Array.from({ length: rows }, () => new Array(cols).fill(false));
-  let best = 0;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      if (seen[r][c] || layout[r][c] !== ".") continue;
-      const stack = [[r, c]];
-      seen[r][c] = true;
-      let size = 0;
-      let touchesClue = false;
-      while (stack.length) {
-        const [cr, cc] = stack.pop();
-        size++;
-        for (const [nr, nc] of orthogonalNeighbors(cr, cc, rows, cols)) {
-          if (isClueToken(layout[nr][nc])) touchesClue = true;
-          if (layout[nr][nc] === "." && !seen[nr][nc]) {
-            seen[nr][nc] = true;
-            stack.push([nr, nc]);
-          }
-        }
-      }
-      if (!touchesClue) best = Math.max(best, size);
-    }
-  }
-  return best;
-}
-
 function stripToTargetTier(layout, rows, cols, targetTier, nodeBudget, rand, deadline) {
   const startLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
   let best = analyzeAndCount(startLevel, 2, nodeBudget);
@@ -1195,7 +1348,11 @@ function stripToTargetTier(layout, rows, cols, targetTier, nodeBudget, rand, dea
 
     if (stillUnique && result.tier != null && result.tier <= targetTier) {
       best = result;
-      if (result.tier === targetTier) break; // cible atteinte: inutile de continuer
+      // Voir le commentaire ci-dessus: s'arrêter au premier succès est
+      // correct pour éviter l'overshoot SAUF au palier maximum, où
+      // continuer ne peut plus jamais dépasser la cible — seulement la
+      // renforcer.
+      if (result.tier === targetTier && targetTier < MAX_SOLVER_TIER) break;
     } else {
       layout[r][c] = prevToken; // revert: ce retrait cassait l'unicité ou dépassait la cible
     }
@@ -1669,14 +1826,6 @@ function tryColorizeForNecessity(
       if (wouldCreateDeadIsolationForSet(layout, subset, rows, cols)) continue; // voir commentaire dédié, aucun appel solveur gaspillé
       const prevTokens = subset.map(([r, c]) => layout[r][c]);
       for (const [r, c] of subset) layout[r][c] = "X"; // retrait tentatif: réintroduit potentiellement une ambiguïté blanche contrôlée
-
-      // EXPÉRIMENTAL (voir REGION_FILTER_THRESHOLD): écarte les candidats
-      // qui ouvrent une zone clue-sparse trop large AVANT de payer le coût
-      // du solveur dessus.
-      if (REGION_FILTER_THRESHOLD > 0 && largestClueSparseRegionSize(layout, rows, cols) > REGION_FILTER_THRESHOLD) {
-        subset.forEach(([r, c], i) => (layout[r][c] = prevTokens[i]));
-        continue;
-      }
 
       const level = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
       const { solutions, exhausted } = enumerateSolutions(level, COLOR_AMBIGUITY_CAP, COLOR_AMBIGUITY_NODE_BUDGET, {
