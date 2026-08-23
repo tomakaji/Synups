@@ -813,6 +813,58 @@ function adjacentLightCount(solution, r, c, rows, cols) {
   return orthogonalNeighbors(r, c, rows, cols).filter(([nr, nc]) => lit.has(`${nr},${nc}`)).length;
 }
 
+const PYRA_RICHNESS_CAP = 6;
+const PYRA_RICHNESS_NODE_BUDGET = 60_000;
+
+/**
+ * Retour utilisateur ("pas assez difficile avec les Pyra... je veux que la
+ * complexité vienne DE la mécanique de couleur ambiguë du Pyra" ; puis
+ * "c'est pas possible de s'assurer plus tôt que les dilemmes soient plus
+ * forts ?") : compte, parmi les Pyra ("Y") encore présents dans `cells`
+ * (déjà passés par `pruneUnnecessaryPyra` — donc chacun garanti nécessaire
+ * à l'unicité), combien offrent un VRAI dilemme — au moins 2 comptes de
+ * lumières adjacentes distincts parmi les solutions blanches (couleur
+ * ignorée) encore possibles sur ce plateau — plutôt qu'une couleur qui ne
+ * fait que confirmer un placement déjà entièrement pinné par la déduction
+ * ordinaire.
+ *
+ * Essayé D'ABORD en aval, dans `pruneUnnecessaryPyra` : démoter un Pyra
+ * "nécessaire mais pas riche" en charge numérique casse l'unicité PAR
+ * DÉFINITION de "nécessaire" (mesuré : 5/25 niveaux rendus totalement
+ * insolubles). Essayé ensuite en amont, dans `tryColorizeForNecessity` (au
+ * choix du retrait/coloriage) : mesuré sans effet réel (27% avant → 29-30%
+ * après sur plusieurs centaines de niveaux) car la richesse finale d'un
+ * Pyra dépend de l'ÉTAT COMPLET du plateau après TOUTE la Phase 2, pas
+ * seulement du retrait local en cours d'évaluation.
+ *
+ * Utilisé ICI à la place : comme simple SIGNAL DE QUALITÉ ajouté au
+ * candidat déjà généré par `tryGenerate` (voir `generateLevel`), sans
+ * jamais rien démoter ni rejeter en place — `generateLevel` retente déjà
+ * naturellement plusieurs seeds dans son budget existant (voir
+ * `attemptsBudget`/`timeBudgetMs`) ; on se contente de préférer, à palier
+ * et couleur égaux, le candidat dont les Pyra sont réellement riches
+ * (`isBetterCandidate`) — aucun risque de casser l'unicité (candidat déjà
+ * confirmé unique par construction) ni de bloquer la génération (le budget
+ * existant borne déjà le nombre de tentatives, best-effort comme le reste).
+ */
+function countRichPyra(level, rows, cols) {
+  const pyraCells = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (level.cells[r][c] === "Y") pyraCells.push([r, c]);
+    }
+  }
+  if (pyraCells.length === 0) return { total: 0, rich: 0 };
+
+  const { solutions } = enumerateSolutions(level, PYRA_RICHNESS_CAP, PYRA_RICHNESS_NODE_BUDGET, { ignoreColor: true });
+  let rich = 0;
+  for (const [pr, pc] of pyraCells) {
+    const counts = new Set(solutions.map((sol) => adjacentLightCount(sol, pr, pc, rows, cols)));
+    if (counts.size >= 2) rich++;
+  }
+  return { total: pyraCells.length, rich };
+}
+
 /**
  * Nettoie EN PLACE les Pyra décoratifs — retour utilisateur explicite (voir
  * le commentaire de `PYRA_MAX_CANDIDATES`): "je trouve toujours la plupart
@@ -2072,6 +2124,17 @@ export function isBetterCandidate(a, b, requestedTier, preferColor = false, pref
     const aPyra = a.featureSubset?.includes("pyra") ?? false;
     const bPyra = b.featureSubset?.includes("pyra") ?? false;
     if (aPyra !== bPyra) return bPyra;
+
+    // Retour utilisateur ("s'assurer plus tôt que les dilemmes soient plus
+    // forts") : à présence de Pyra égale, préfère le candidat dont les Pyra
+    // sont de VRAIS dilemmes de couleur (voir `countRichPyra`) plutôt qu'un
+    // simple constat après coup. `pyraRich`/`pyraTotal` ne sont posés sur le
+    // candidat QUE quand `aPyra`/`bPyra` sont vrais (voir `generateLevel`).
+    if (aPyra && bPyra) {
+      const aRich = a.pyraTotal ? a.pyraRich / a.pyraTotal : 0;
+      const bRich = b.pyraTotal ? b.pyraRich / b.pyraTotal : 0;
+      if (aRich !== bRich) return bRich > aRich;
+    }
   }
 
   if (a.measuredTier != null && b.measuredTier != null && a.measuredTier === b.measuredTier) {
@@ -2147,6 +2210,16 @@ export function generateLevel({
       attempts,
     };
 
+    // Voir `countRichPyra` : mesure best-effort, seulement quand ce candidat
+    // a effectivement un Pyra survivant (`pruneUnnecessaryPyra` a déjà
+    // écarté ceux qui ne l'étaient pas) — sert de départage dans
+    // `isBetterCandidate` (`preferPyra`), jamais de motif de rejet.
+    if (pyraRequested && candidate.featureSubset.includes("pyra")) {
+      const { total, rich } = countRichPyra(level, level.rows, level.cols);
+      candidate.pyraTotal = total;
+      candidate.pyraRich = rich;
+    }
+
     // "Parfait" (arrêt immédiat) exige désormais AUSSI la couleur quand elle
     // a été demandée par le joueur (voir commentaire ci-dessus) — un
     // candidat au bon palier mais sans couleur reste un excellent filet de
@@ -2156,7 +2229,18 @@ export function generateLevel({
     // ce critère (voir MIRROR_DENSITY/MIRROR_BUDGET_MULTIPLIER pour le
     // pourquoi) — il reste un bonus opportuniste, jamais un motif de
     // prolonger la recherche.
-    const isPerfect = measuredTier === solverTarget && (!colorRequested || candidate.featureSubset.includes("color"));
+    // Retour utilisateur ("s'assurer plus tôt que les dilemmes soient plus
+    // forts") : quand CE candidat a effectivement un Pyra, "parfait" exige
+    // maintenant AUSSI que tous ses Pyra soient riches (voir
+    // `countRichPyra`) — sinon on continue à retenter dans le budget
+    // existant plutôt que de s'arrêter sur un Pyra purement décoratif. Un
+    // candidat SANS Pyra n'est jamais bloqué par ce critère (comme le
+    // Miroir : la fréquence de Pyra elle-même reste un bonus opportuniste
+    // départagé par `preferPyra`, pas une exigence dure).
+    const hasPyraThisCandidate = candidate.featureSubset.includes("pyra");
+    const pyraRichEnough = !hasPyraThisCandidate || (candidate.pyraTotal > 0 && candidate.pyraRich === candidate.pyraTotal);
+    const isPerfect =
+      measuredTier === solverTarget && (!colorRequested || candidate.featureSubset.includes("color")) && pyraRichEnough;
     if (isPerfect) {
       best = candidate;
       break;
