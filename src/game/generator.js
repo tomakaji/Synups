@@ -465,7 +465,18 @@ const PYRA_PROXIMITY_RADIUS = 2;
 // ambiguïté ?", pas "l'espace des réponses possibles est-il assez riche
 // pour que trancher demande un minimum de raisonnement ?" — deux questions
 // différentes, qu'un seul mécanisme ne peut pas trancher correctement.
-const PYRA_MIN_FREE_NEIGHBORS = 2;
+//
+// Relevé de 2 à 3 (nouveau retour utilisateur : "le Pyra agit comme un
+// simple neurone coloré, une seule possibilité lisible de poser les
+// lumières") — mesuré : avec le seuil à 2, 62% des Pyra survivants (15/24,
+// 17 niveaux échantillonnés) n'avaient QUE 2 voisins libres au plateau
+// final, donc au mieux un choix binaire neutre/rouge — jamais vert ni bleu
+// atteignable (2 voisins ⇒ compte adjacent ∈ {0,1,2}, la palette complète
+// {0,1,2,3} exige 3 voisins simultanément allumables — aucun conflit
+// "lumières qui se voient" entre eux, ce sont tous des voisins directs du
+// Pyra, jamais entre eux). Passer à 3 rend donc la palette complète
+// (neutre/rouge/vert/bleu) structurellement atteignable, pas juste binaire.
+const PYRA_MIN_FREE_NEIGHBORS = 3;
 // Volontairement 1 (aucun effet) : voir le commentaire ci-dessus — le
 // miroir ne doit plus jamais coûter de recherche supplémentaire, sa
 // fréquence repose entièrement sur le placement/la sélection biaisés, pas
