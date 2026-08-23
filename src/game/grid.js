@@ -930,6 +930,28 @@ export class LightUpGrid {
               g: current.g || mirrorColor.g,
               b: current.b || mirrorColor.b,
             };
+            // BUG CORRIGÉ (retour utilisateur: "le rayon qu'il renvoie est de
+            // la bonne couleur (violet) mais sa couleur à lui (le style) est
+            // rouge") : la Passe A (plus haut, `nCell._mirrorColor[baseColor]
+            // = true`) ne tague chaque miroir qu'avec la couleur D'ORIGINE du
+            // rayon (celle de la charge/Pyra de départ), jamais avec sa
+            // couleur RÉELLEMENT ACCUMULÉE à ce point précis du tracé — un
+            // rayon rouge qui devient violet en traversant un premier miroir
+            // (mélangé là avec un rayon bleu d'une autre charge) continue
+            // ensuite d'être tagué "rouge" sur chaque miroir SUIVANT qu'il
+            // traverse, alors qu'il transporte déjà du violet. La Passe B
+            // ci-dessus calcule pourtant déjà `current` correctement (c'est
+            // ELLE qui alimente `colors[]`, donc le SEGMENT de rayon rendu
+            // était déjà juste) — il manquait juste de reporter cette valeur
+            // corrigée dans `_mirrorColor` du miroir lui-même, seule source
+            // que `render.js`/`mirrorIcon` lit pour la couleur de l'ICÔNE.
+            // Union monotone (n'enlève jamais un canal déjà vrai) — aucun
+            // risque de régression sur le mélange déjà correct entre rayons
+            // indépendants partageant un même miroir, seulement un
+            // enrichissement pour les miroirs enchaînés sur un même tracé.
+            mirrorColor.r = mirrorColor.r || current.r;
+            mirrorColor.g = mirrorColor.g || current.g;
+            mirrorColor.b = mirrorColor.b || current.b;
           } else if (waypoint.type === CellType.FILTER) {
             current = {
               r: current.r && waypoint.filterColor === "r",
