@@ -3,9 +3,12 @@
 // mécanique qu'on démute la première fois qu'elle s'active dans le niveau en
 // cours (neurone/neurone de couleur/miroir/neurone miroir/prisme), plus une
 // piste d'échec. Tant qu'une synapse est rompue ou qu'un neurone est en
-// surcharge, TOUT se coupe (base comprise) et seule échec.wav joue — elle
-// est conçue pour tenir seule (nappe grave + tritone en dessous de
-// l'alarme), pas comme une couche de plus par-dessus la base.
+// surcharge, base + couches débloquées ne sont plus COUPÉES mais ÉTOUFFÉES
+// (voir `duckFilter`/FAILURE_MUFFLE_GAIN ci-dessous — retour utilisateur:
+// "plutôt que de couper la musique qui se joue actuellement, l'étouffer pour
+// qu'elle paraisse loin") pendant qu'échec.wav (non filtrée, voir
+// `ensureBuilt`) monte par-dessus — elle est conçue pour dominer largement
+// ce fond assourdi, pas pour jouer seule dans un silence complet.
 //
 // Toutes les pistes sont des fichiers WAV bouclables SANS perte (voir
 // public/music/ — durée exacte 24.000000s à 44.1kHz, aucun padding
@@ -91,7 +94,25 @@ const FADE = 0.35; // secondes, montée/descente de gain par calque — évite t
 // immédiate — c'est le signal d'alarme, il doit rester FADE (0.35s).
 const LAYER_FADE = 1.1;
 
+// Retour utilisateur : "plutôt que de couper la musique qui se joue
+// actuellement, l'étouffer pour qu'elle paraisse loin" — au lieu de ramener
+// le gain de base/des couches débloquées à 0 pendant une erreur, on les
+// ramène à ce niveau réduit (jamais silencieux) ET on les fait passer par
+// `duckFilter` (passe-bas partagé, voir ci-dessous), qui simule
+// l'éloignement/l'étouffement plutôt qu'une coupure nette. Valeurs choisies
+// par écoute sur les démos ("wobble prononcé") validées par l'utilisateur.
+const FAILURE_MUFFLE_GAIN = 0.4;
+const FAILURE_MUFFLE_CUTOFF_HZ = 420;
+const NORMAL_CUTOFF_HZ = 20000; // au-delà du spectre audible: filtre inactif en pratique
+
 const musicBus = new Tone.Volume(0).toDestination();
+
+// Passe-bas PARTAGÉ pour base + couches mécaniques uniquement — échec.wav
+// (voir ensureBuilt) NE PASSE PAS par ce filtre: elle doit rester pleinement
+// claire/nette pendant que le reste s'étouffe derrière elle. Cutoff au repos
+// à NORMAL_CUTOFF_HZ (inaudible, filtre neutre) — voir enterFailure/
+// exitFailure pour la rampe vers/depuis FAILURE_MUFFLE_CUTOFF_HZ.
+const duckFilter = new Tone.Filter(NORMAL_CUTOFF_HZ, "lowpass").connect(musicBus);
 
 /** Volume musique (0 à 1, linéaire) — bus SÉPARÉ de setMasterVolume dans
  * sound.js (qui reste le volume des effets de jeu: pose/retrait/victoire/
@@ -113,7 +134,10 @@ function ensureBuilt() {
   players = {};
   gains = {};
   for (const key of Object.keys(LAYER_URLS)) {
-    const gain = new Tone.Gain(key === "base" ? 1 : 0).connect(musicBus);
+    // échec.wav se branche directement sur musicBus (jamais étouffée, voir
+    // duckFilter ci-dessus) — base + toutes les couches mécaniques passent
+    // par le passe-bas partagé, neutre hors état d'échec.
+    const gain = new Tone.Gain(key === "base" ? 1 : 0).connect(key === "echec" ? musicBus : duckFilter);
     const player = new Tone.Player({ url: LAYER_URLS[key], loop: true }).connect(gain);
     players[key] = player;
     gains[key] = gain;
@@ -154,6 +178,7 @@ export function resetLayers() {
   gains.base.gain.rampTo(1, FADE); // garde-fou: au cas où un niveau se termine en pleine erreur
   for (const key of MECHANIC_LAYERS) gains[key].gain.rampTo(0, FADE);
   gains.echec.gain.rampTo(0, FADE);
+  duckFilter.frequency.rampTo(NORMAL_CUTOFF_HZ, FADE); // même garde-fou pour l'étouffement
 }
 
 /** Démute OU remute une couche mécanique selon `active` (no-op si déjà dans
@@ -161,8 +186,8 @@ export function resetLayers() {
  * `applyMechanicCounts` ci-dessous appelle cette fonction en continu). Si
  * une erreur est en cours (voir enterFailure), `unlocked` est quand même
  * tenu à jour mais le gain ne bouge pas avant la résolution de l'erreur
- * (voir exitFailure) — cohérent avec "couper toutes les pistes sauf la
- * base" pendant une erreur. */
+ * (voir exitFailure) — cohérent avec "toutes les pistes étouffées derrière
+ * échec.wav" pendant une erreur (voir enterFailure). */
 function setLayerActive(key, active) {
   if (!MECHANIC_LAYERS.includes(key)) return;
   const wasActive = unlocked.has(key);
@@ -186,16 +211,18 @@ export function applyMechanicCounts(counts) {
   }
 }
 
-/** Synapse rompue ou neurone en surcharge: coupe TOUT (y compris la base —
- * échec.wav est conçue pour tenir seule, voir music-demos/couches/notes-
- * couches.md) et joue la piste d'échec en boucle. Un compteur (pas un
- * booléen) car plusieurs erreurs peuvent être actives en même temps — seule
- * la PREMIÈRE fait vraiment quelque chose. */
+/** Synapse rompue ou neurone en surcharge: ÉTOUFFE tout (base comprise —
+ * voir FAILURE_MUFFLE_GAIN/duckFilter en tête de fichier) au lieu de couper,
+ * pour que la musique en cours paraisse s'éloigner plutôt que disparaître,
+ * et joue la piste d'échec (non filtrée) en boucle par-dessus. Un compteur
+ * (pas un booléen) car plusieurs erreurs peuvent être actives en même temps
+ * — seule la PREMIÈRE fait vraiment quelque chose. */
 export function enterFailure() {
   failureCount++;
   if (failureCount !== 1 || !gains) return;
-  gains.base.gain.rampTo(0, FADE);
-  for (const key of unlocked) gains[key].gain.rampTo(0, FADE);
+  gains.base.gain.rampTo(FAILURE_MUFFLE_GAIN, FADE);
+  for (const key of unlocked) gains[key].gain.rampTo(FAILURE_MUFFLE_GAIN, FADE);
+  duckFilter.frequency.rampTo(FAILURE_MUFFLE_CUTOFF_HZ, FADE);
   gains.echec.gain.rampTo(1, FADE);
 }
 
@@ -214,6 +241,7 @@ export function exitFailure() {
   failureCount--;
   if (failureCount !== 0 || !gains) return;
   gains.echec.gain.rampTo(0, FADE);
+  duckFilter.frequency.rampTo(NORMAL_CUTOFF_HZ, FADE);
   gains.base.gain.rampTo(1, FADE);
   for (const key of unlocked) gains[key].gain.rampTo(LAYER_ACTIVE_GAIN[key] ?? 1, FADE);
 }
