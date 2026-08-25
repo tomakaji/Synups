@@ -6,22 +6,188 @@
     <title>Synups</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
-  <body>
+  <body data-theme="synapse">
     <div id="app">
-      <header class="topbar">
-        <h1>Synups</h1>
-        <div id="play-view-controls" class="level-controls">
-          <span id="nav-static" class="nav-group">
-            <button id="btn-prev" aria-label="Niveau précédent">&larr;</button>
-            <span id="level-name">1</span>
-            <button id="btn-next" aria-label="Niveau suivant">&rarr;</button>
-          </span>
-          <span id="nav-infinite" class="nav-group hidden">
-            <span id="infinite-level-label">∞</span>
-            <span id="infinite-badge" class="infinite-badge hidden" title="Ce niveau n'a pas de solution unique confirmée — plusieurs façons de le résoudre existent peut-être">variante multiple</span>
-            <button id="btn-infinite-settings">Réglages</button>
-            <button id="btn-infinite-next">Nouveau niveau</button>
-          </span>
+      <!-- Bouton mute global: PAS un écran, visible en permanence au-dessus de
+           tous les autres (voir style.css: position fixed) — coupe/rétablit
+           sons+musique en un clic sans toucher aux réglages détaillés
+           d'Options (curseur de volume, mute son/musique indépendants). -->
+      <button id="btn-global-mute" class="global-mute-btn" aria-label="Couper/rétablir le son" title="Couper/rétablir le son">
+        <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"></polygon>
+          <path class="icon-wave icon-wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          <path class="icon-wave icon-wave-2" d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+          <line class="icon-mute-slash" x1="2" y1="2" x2="22" y2="22"></line>
+        </svg>
+      </button>
+
+      <!-- Éditeur: outil de développement temporaire, volontairement à part
+           du menu principal — un simple bouton flottant, visible seulement à
+           l'écran titre (voir style.css/main.js). -->
+      <button id="btn-floating-editor" class="floating-editor-btn" aria-label="Éditeur de niveaux (développeur)" title="Éditeur de niveaux (développeur)">
+        <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+        </svg>
+      </button>
+
+      <!-- ================= ÉCRAN TITRE ================= -->
+      <section id="view-title" class="screen screen--title">
+        <h1 class="game-logo">Synups</h1>
+        <p class="game-tagline">Reconnecte le réseau</p>
+
+        <nav class="menu-cards">
+          <button id="menu-story" class="menu-card menu-card--story">
+            <span class="menu-card-top">
+              <svg viewBox="0 0 24 24" class="menu-card-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+              </svg>
+              <span class="menu-card-label">Histoire</span>
+            </span>
+            <span class="menu-card-progress" aria-hidden="true">
+              <span id="story-progress-fill" class="menu-card-progress-fill"></span>
+            </span>
+            <span id="story-progress-text" class="menu-card-sub">0 / 0</span>
+          </button>
+
+          <button id="menu-infinite" class="menu-card menu-card--infinite">
+            <span class="menu-card-top">
+              <svg viewBox="0 0 24 24" class="menu-card-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18.18 8a4 4 0 1 0 0 8 6 6 0 0 0 0-12 8 8 0 0 0-8 8 6 6 0 0 1-6 6 4 4 0 1 1 0-8 6 6 0 0 1 6 6 8 8 0 0 0 8-8 6 6 0 0 0-6-6 4 4 0 0 0-4 4"></path>
+              </svg>
+              <span class="menu-card-label">Infini</span>
+            </span>
+            <span class="menu-card-sub">Un niveau différent à chaque partie</span>
+          </button>
+
+          <button id="menu-community" class="menu-card menu-card--community">
+            <span class="menu-card-top">
+              <svg viewBox="0 0 24 24" class="menu-card-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="9" cy="7" r="3"></circle>
+                <path d="M2.5 21v-1a5.5 5.5 0 0 1 5.5-5.5h2a5.5 5.5 0 0 1 5.5 5.5v1"></path>
+                <circle cx="17.5" cy="8.5" r="2.5"></circle>
+                <path d="M16 13.2a4.3 4.3 0 0 1 5.5 4.1V18"></path>
+              </svg>
+              <span class="menu-card-label">Communauté</span>
+            </span>
+            <span class="menu-card-sub">Crée, partage et joue les grilles des autres joueurs</span>
+          </button>
+
+          <button id="menu-secrets" class="menu-card menu-card--secrets">
+            <span class="menu-card-top">
+              <svg viewBox="0 0 24 24" class="menu-card-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="7.5" cy="15.5" r="5.5"></circle>
+                <path d="M11.6 11.6 21 2.3M21 2.3v5M21 2.3h-5M15 7l3 3"></path>
+              </svg>
+              <span class="menu-card-label">Secrets</span>
+            </span>
+            <span id="menu-points-badge" class="menu-card-sub menu-card-points">0 pt</span>
+          </button>
+
+          <button id="menu-options" class="menu-card menu-card--options">
+            <span class="menu-card-top">
+              <svg viewBox="0 0 24 24" class="menu-card-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+              <span class="menu-card-label">Options</span>
+            </span>
+          </button>
+        </nav>
+      </section>
+
+      <!-- ================= SÉLECTION DE NIVEAU ================= -->
+      <section id="view-story-select" class="screen hidden">
+        <header class="screen-header">
+          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <h2 class="screen-title">Sélection de niveau</h2>
+        </header>
+        <div id="level-grid" class="level-grid"></div>
+      </section>
+
+      <!-- ================= JEU (partagé Histoire / Infini) ================= -->
+      <section id="view-play" class="screen hidden">
+        <header class="screen-header">
+          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <!-- Titre/infos juste à côté du Retour (retour utilisateur: "à
+               gauche du titre/informations, toutes les autres boutons à
+               droite") — plus de flex:1/centrage, voir style.css:
+               .play-controls. -->
+          <div class="play-controls">
+            <span id="nav-static" class="nav-group">
+              <!-- Prev/Suivant: gardés pour le confort du développement, seront
+                   retirés à terme (voir demande utilisateur) une fois la
+                   sélection de niveau jugée suffisante pour naviguer. -->
+              <button id="btn-prev" aria-label="Niveau précédent" title="Précédent (dev)">&larr;</button>
+              <span id="level-name">1</span>
+              <button id="btn-next" aria-label="Niveau suivant" title="Suivant (dev)">&rarr;</button>
+            </span>
+            <span id="nav-infinite" class="nav-group hidden">
+              <span id="infinite-level-label">∞</span>
+              <span id="infinite-badge" class="infinite-badge hidden" title="Ce niveau n'a pas de solution unique confirmée — plusieurs façons de le résoudre existent peut-être">variante multiple</span>
+              <span id="infinite-points" class="infinite-points" title="Points gagnés en mode Infini">0 pt</span>
+            </span>
+            <span id="nav-community" class="nav-group hidden">
+              <span id="community-level-title" class="community-level-title"></span>
+              <span id="community-level-author" class="community-level-author"></span>
+            </span>
+          </div>
+          <!-- Toutes les AUTRES actions du bandeau, groupées à droite (retour
+               utilisateur) — chaque bouton reste visible uniquement dans son
+               mode (voir main.js: setMode()), jamais plusieurs à la fois. -->
+          <div class="header-actions">
+            <button id="btn-level-grid" class="icon-btn" aria-label="Sélection de niveau" title="Sélection de niveau">
+              <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>
+            </button>
+            <button id="btn-infinite-settings" class="icon-btn hidden" aria-label="Réglages" title="Réglages">
+              <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </button>
+            <!-- Reprend l'icône "rafraîchir" qu'utilisait Réinitialiser
+                 (retour utilisateur: illustre mieux "nouvelle grille" que
+                 les flèches diagonales précédentes) — voir btn-reset
+                 ci-dessous pour son remplacement. -->
+            <button id="btn-infinite-next" class="icon-btn hidden" aria-label="Nouveau niveau" title="Nouveau niveau">
+              <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <div id="play-view">
+          <main id="board-container">
+            <div id="board"></div>
+          </main>
+        </div>
+
+        <!-- Barre d'actions FIXE en bas de l'ÉCRAN (retour utilisateur: "pas
+             en bas de la grille, en bas de l'écran, de manière fixed") —
+             position:fixed relative au viewport, mais reste un descendant de
+             #view-play : masquée automatiquement avec le reste de l'écran
+             (voir style.css/.screen.hidden), sans logique JS séparée. -->
+        <div class="play-action-bar">
+          <button id="btn-community-like" class="icon-btn community-like-btn hidden" aria-label="Aimer cette grille" title="Aimer cette grille">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20.8 4.9a5.5 5.5 0 0 0-7.8 0L12 5.9l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21.5l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8Z"></path>
+            </svg>
+          </button>
+          <button id="btn-hint" class="icon-btn hint-btn" aria-label="Indice" title="Indice">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 18h6"></path>
+              <path d="M10 21h4"></path>
+              <path d="M12 3a6 6 0 0 0-4 10.47c.53.5.86 1.17.9 1.87v.16a1 1 0 0 0 1 1h4.2a1 1 0 0 0 1-1v-.16c.04-.7.37-1.37.9-1.87A6 6 0 0 0 12 3Z"></path>
+            </svg>
+            <span id="hint-count" class="hint-count">10</span>
+          </button>
           <button id="btn-undo" class="icon-btn" disabled aria-label="Annuler" title="Annuler">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="1 4 1 10 7 10"></polyline>
@@ -29,119 +195,281 @@
             </svg>
           </button>
           <button id="btn-reset" class="icon-btn" aria-label="Réinitialiser" title="Réinitialiser">
+            <!-- Gomme: efface les lumières posées sur CE niveau sans rien
+                 supprimer de définitif (retour utilisateur: une croix/
+                 poubelle suggérerait plutôt "annuler"/"supprimer le
+                 niveau", ambigu ici). -->
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="23 4 23 10 17 10"></polyline>
-              <polyline points="1 20 1 14 7 14"></polyline>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path>
+              <path d="M22 21H7"></path>
+              <path d="m5 11 9 9"></path>
             </svg>
           </button>
         </div>
-        <div class="audio-controls-row">
-          <button id="btn-sound-toggle" class="icon-toggle" aria-label="Activer/couper les sons" title="Sons">
-            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"></polygon>
-              <path class="icon-wave icon-wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-              <path class="icon-wave icon-wave-2" d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
-              <line class="icon-mute-slash" x1="2" y1="2" x2="22" y2="22"></line>
-            </svg>
+      </section>
+
+      <!-- ================= MODE INFINI : RÉGLAGES ================= -->
+      <section id="view-infinite-config" class="screen hidden">
+        <header class="screen-header">
+          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
-          <button id="btn-music-toggle" class="icon-toggle" aria-label="Activer/couper la musique" title="Musique">
-            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M9 18V5l12-2v13"></path>
-              <circle cx="6" cy="18" r="3"></circle>
-              <circle cx="18" cy="16" r="3"></circle>
-              <line class="icon-mute-slash" x1="2" y1="2" x2="22" y2="22"></line>
-            </svg>
-          </button>
-          <input id="volume-slider" type="range" min="0" max="100" value="80" step="1" aria-label="Volume (sons et musique)" />
-        </div>
-        <div id="infinite-points" class="infinite-points" title="Points gagnés en mode Infini">0 pt</div>
-        <div class="mode-switch" id="mode-switch">
-          <button data-mode="play" class="mode-switch-btn active">Jouer</button>
-          <button data-mode="infinite" class="mode-switch-btn">Infini</button>
-          <button data-mode="editor" class="mode-switch-btn">Éditeur</button>
-        </div>
-      </header>
-
-      <div id="play-view">
-        <main id="board-container">
-          <div id="board"></div>
-        </main>
-      </div>
-
-      <div id="infinite-config-view" class="hidden">
-        <div class="infinite-config">
-          <h2>Mode Infini <span class="infinite-config-tag">expérimental</span></h2>
-          <p class="infinite-config-hint">
-            Un niveau différent à chaque génération. Choisis une difficulté et les
-            mécaniques autorisées — tout cocher ne veut pas dire que tout sera
-            utilisé, juste que tout est permis.
-          </p>
-
-          <div class="infinite-config-section">
-            <span class="infinite-config-label">Difficulté</span>
+          <h2 class="screen-title">Infini</h2>
+        </header>
+        <div id="infinite-config-view">
+          <div class="infinite-config">
             <div id="infinite-difficulty" class="infinite-difficulty">
               <button data-difficulty="1" class="infinite-star-btn active" aria-label="1 étoile">★☆☆</button>
               <button data-difficulty="2" class="infinite-star-btn" aria-label="2 étoiles">★★☆</button>
               <button data-difficulty="3" class="infinite-star-btn" aria-label="3 étoiles">★★★</button>
             </div>
-          </div>
 
-          <div class="infinite-config-section">
-            <span class="infinite-config-label">Mécaniques autorisées</span>
             <div id="infinite-features" class="infinite-features"></div>
+
+            <button id="btn-infinite-generate" class="infinite-generate-btn">Générer</button>
+            <p id="infinite-status" class="infinite-status" aria-live="polite"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= OPTIONS ================= -->
+      <section id="view-options" class="screen hidden">
+        <header class="screen-header">
+          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <h2 class="screen-title">Options</h2>
+        </header>
+
+        <div class="options-panel">
+          <div class="options-section">
+            <span class="options-label">Son</span>
+            <div class="audio-toggles-row">
+              <button id="btn-sound-toggle" class="icon-toggle" aria-label="Activer/couper les sons" title="Effets sonores">
+                <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"></polygon>
+                  <path class="icon-wave icon-wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                  <path class="icon-wave icon-wave-2" d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                  <line class="icon-mute-slash" x1="2" y1="2" x2="22" y2="22"></line>
+                </svg>
+              </button>
+              <button id="btn-music-toggle" class="icon-toggle" aria-label="Activer/couper la musique" title="Musique">
+                <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 18V5l12-2v13"></path>
+                  <circle cx="6" cy="18" r="3"></circle>
+                  <circle cx="18" cy="16" r="3"></circle>
+                  <line class="icon-mute-slash" x1="2" y1="2" x2="22" y2="22"></line>
+                </svg>
+              </button>
+              <input id="volume-slider" class="volume-slider-full" type="range" min="0" max="100" value="80" step="1" aria-label="Volume (sons et musique)" />
+            </div>
           </div>
 
-          <button id="btn-infinite-generate" class="infinite-generate-btn">Générer</button>
-          <p id="infinite-status" class="infinite-status" aria-live="polite"></p>
+          <div class="options-section">
+            <span class="options-label">Le jeu</span>
+            <button id="btn-buy-game" class="options-btn options-btn--accent">
+              Débloquer la version complète <span class="options-btn-sub">retire les publicités</span>
+            </button>
+          </div>
+
+          <div class="options-section">
+            <span class="options-label">Données</span>
+            <button id="btn-reset-save" class="options-btn options-btn--danger">Réinitialiser le jeu</button>
+            <p class="options-hint">Efface la progression Histoire, les points et les achats de la boutique Secrets. Impossible à annuler.</p>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div id="editor-view" class="hidden">
-        <div class="editor-layout">
-          <aside class="editor-panel">
-            <div class="editor-section">
-              <label class="editor-field">Nom
-                <input id="ed-name" type="text" value="" placeholder="Nom du niveau (obligatoire)" />
-              </label>
-              <div class="editor-row editor-row--resize">
-                <label class="editor-field editor-field--compact">Lignes
-                  <input id="ed-rows" type="number" min="1" max="16" value="5" />
-                </label>
-                <label class="editor-field editor-field--compact">Colonnes
-                  <input id="ed-cols" type="number" min="1" max="16" value="5" />
-                </label>
-                <button id="ed-resize" class="editor-btn" title="Redimensionne en ajoutant/retirant de l'espace en bas et à droite">Redimensionner</button>
-              </div>
-            </div>
+      <!-- ================= SECRETS (boutique à points) ================= -->
+      <section id="view-secrets" class="screen hidden">
+        <header class="screen-header">
+          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <h2 class="screen-title">Secrets</h2>
+          <span id="secrets-points" class="infinite-points">0 pt</span>
+        </header>
 
-            <!-- Boutons d'insertion/retrait de ligne/colonne disposés en croix
-                 autour de la grille qu'ils affectent: haut au-dessus, bas
-                 en-dessous, gauche/droite de part et d'autre au milieu — la
-                 disposition spatiale rend leur effet évident sans avoir à
-                 relire les libellés. -->
-            <div class="editor-section resize-frame">
-              <div class="resize-row-top">
-                <button id="ed-insert-row-top" class="editor-btn" title="Insérer une ligne en haut">+ ligne haut</button>
-                <button id="ed-remove-row-top" class="editor-btn" title="Retirer la ligne du haut">− ligne haut</button>
-              </div>
-              <div class="resize-row-middle">
-                <div class="resize-col-group">
-                  <button id="ed-insert-col-left" class="editor-btn editor-btn--col" title="Insérer une colonne à gauche">+ colonne gauche</button>
-                  <button id="ed-remove-col-left" class="editor-btn editor-btn--col" title="Retirer la colonne de gauche">− colonne gauche</button>
+        <p class="secrets-hint">Dépense les points gagnés en mode Infini pour débloquer des thèmes visuels et des ambiances sonores.</p>
+
+        <div class="shop-section">
+          <span class="options-label">Thèmes du plateau</span>
+          <div id="shop-themes" class="shop-grid"></div>
+        </div>
+
+        <div class="shop-section">
+          <span class="options-label">Ambiances musicales</span>
+          <div id="shop-music" class="shop-grid"></div>
+        </div>
+      </section>
+
+      <!-- ================= COMMUNAUTÉ (fil, tout local) ================= -->
+      <section id="view-community" class="screen hidden">
+        <header class="screen-header">
+          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <h2 class="screen-title">Communauté</h2>
+          <button id="btn-community-profile" class="icon-btn" aria-label="Mon profil" title="Mon profil">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="8" r="4"></circle>
+              <path d="M4 20v-.5A6.5 6.5 0 0 1 10.5 13h3A6.5 6.5 0 0 1 20 19.5V20"></path>
+            </svg>
+          </button>
+        </header>
+
+        <div class="community-toolbar">
+          <input id="community-search" type="search" class="community-search" placeholder="Rechercher un titre ou un auteur…" />
+          <select id="community-sort" class="community-sort">
+            <option value="recent">Plus récentes</option>
+            <option value="likes">Plus aimées</option>
+            <option value="plays">Plus jouées</option>
+          </select>
+        </div>
+
+        <div class="community-actions-row">
+          <button id="btn-community-create" class="options-btn options-btn--accent">Créer une grille</button>
+          <button id="btn-community-import" class="options-btn">Importer un code</button>
+        </div>
+
+        <!-- Seule cette zone défile (retour utilisateur: "le scroll doit se
+             faire uniquement sur la liste des grilles, pas sur tout le menu
+             du haut") — le header/la recherche/le tri/les actions restent
+             fixes au-dessus, voir style.css: #view-community/.community-scroll. -->
+        <div class="community-scroll">
+          <div id="community-feed" class="community-feed"></div>
+          <p id="community-empty" class="community-empty hidden">Aucune grille ne correspond à cette recherche.</p>
+        </div>
+      </section>
+
+      <!-- ================= COMMUNAUTÉ : MON PROFIL ================= -->
+      <section id="view-community-profile" class="screen hidden">
+        <header class="screen-header">
+          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <h2 class="screen-title">Mon profil</h2>
+        </header>
+
+        <div class="profile-panel">
+          <div class="profile-identity">
+            <div id="profile-avatar-preview" class="profile-avatar-preview">🙂</div>
+            <label class="editor-field profile-pseudo-field">Pseudo
+              <input id="profile-pseudo" type="text" maxlength="20" placeholder="Ton pseudo" />
+            </label>
+          </div>
+          <div id="profile-avatar-picker" class="profile-avatar-picker"></div>
+          <button id="btn-profile-save" class="options-btn options-btn--accent">Enregistrer</button>
+          <p id="profile-status" class="editor-status"></p>
+        </div>
+
+        <div class="options-section">
+          <span class="options-label">Mes grilles publiées</span>
+          <div id="profile-published" class="community-feed community-feed--compact"></div>
+          <p id="profile-published-empty" class="community-empty hidden">Tu n'as encore rien publié.</p>
+        </div>
+
+        <div class="options-section">
+          <span class="options-label">Mes favoris</span>
+          <div id="profile-liked" class="community-feed community-feed--compact"></div>
+          <p id="profile-liked-empty" class="community-empty hidden">Aucun favori pour l'instant.</p>
+        </div>
+      </section>
+
+      <!-- ================= ÉDITEUR (création de grille) ================= -->
+      <section id="view-editor" class="screen hidden">
+        <header class="screen-header">
+          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <h2 class="screen-title">Éditeur</h2>
+          <div class="header-actions">
+            <button id="ed-solve" class="icon-btn hidden" aria-label="Résoudre" title="Trouve et pose automatiquement une solution">
+              <svg viewBox="0 0 24 24" class="icon-svg" fill="currentColor" stroke="none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+            </button>
+            <button id="ed-test-reset" class="icon-btn hidden" aria-label="Réinitialiser le test" title="Réinitialiser le test">
+              <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>
+            </button>
+            <button id="ed-test" class="icon-btn" aria-label="Tester" title="Tester">
+              <svg viewBox="0 0 24 24" class="icon-svg" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+            </button>
+          </div>
+        </header>
+
+        <div id="editor-view">
+          <div class="editor-board-wrap">
+            <div id="editor-board"></div>
+          </div>
+
+          <div class="editor-bottom-panel" id="editor-bottom-panel">
+            <div class="editor-bottom-panel-handle" aria-hidden="true"></div>
+            <div class="editor-tab-panel" id="editor-tab-panel">
+              <section class="editor-tab" id="ed-tab-grid" data-tab="grid">
+              <div class="grid-size-row">
+                <div class="stepper" data-target="ed-rows">
+                  <button type="button" class="stepper-btn" data-step="-1" data-step-target="ed-rows" aria-label="Moins de lignes" title="Moins de lignes">
+                    <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  </button>
+                  <span class="stepper-label">Lignes<input id="ed-rows" type="number" min="1" max="16" value="5" /></span>
+                  <button type="button" class="stepper-btn" data-step="1" data-step-target="ed-rows" aria-label="Plus de lignes" title="Plus de lignes">
+                    <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  </button>
                 </div>
-                <div class="resize-col-group">
-                  <button id="ed-insert-col-right" class="editor-btn editor-btn--col" title="Insérer une colonne à droite">+ colonne droite</button>
-                  <button id="ed-remove-col-right" class="editor-btn editor-btn--col" title="Retirer la colonne de droite">− colonne droite</button>
+                <div class="stepper" data-target="ed-cols">
+                  <button type="button" class="stepper-btn" data-step="-1" data-step-target="ed-cols" aria-label="Moins de colonnes" title="Moins de colonnes">
+                    <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  </button>
+                  <span class="stepper-label">Colonnes<input id="ed-cols" type="number" min="1" max="16" value="5" /></span>
+                  <button type="button" class="stepper-btn" data-step="1" data-step-target="ed-cols" aria-label="Plus de colonnes" title="Plus de colonnes">
+                    <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  </button>
+                </div>
+                <button id="ed-resize" class="icon-btn" aria-label="Appliquer la taille" title="Appliquer la taille (ajoute/retire de l'espace en bas et à droite)">
+                  <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </button>
+              </div>
+
+              <p class="grid-frame-hint">Insérer/retirer une ligne ou une colonne sur un bord précis :</p>
+              <div class="resize-frame">
+                <div class="resize-edge-duo" data-edge="top">
+                  <button id="ed-remove-row-top" class="frame-btn" title="Retirer la ligne du haut" aria-label="Retirer la ligne du haut">
+                    <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  </button>
+                  <button id="ed-insert-row-top" class="frame-btn" title="Insérer une ligne en haut" aria-label="Insérer une ligne en haut">
+                    <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  </button>
+                </div>
+                <div class="resize-row-middle">
+                  <div class="resize-edge-duo" data-edge="left">
+                    <button id="ed-remove-col-left" class="frame-btn" title="Retirer la colonne de gauche" aria-label="Retirer la colonne de gauche">
+                      <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
+                    <button id="ed-insert-col-left" class="frame-btn" title="Insérer une colonne à gauche" aria-label="Insérer une colonne à gauche">
+                      <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
+                  </div>
+                  <span class="resize-frame-center" id="ed-size-readout" aria-hidden="true">5×5</span>
+                  <div class="resize-edge-duo" data-edge="right">
+                    <button id="ed-remove-col-right" class="frame-btn" title="Retirer la colonne de droite" aria-label="Retirer la colonne de droite">
+                      <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
+                    <button id="ed-insert-col-right" class="frame-btn" title="Insérer une colonne à droite" aria-label="Insérer une colonne à droite">
+                      <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="resize-edge-duo" data-edge="bottom">
+                  <button id="ed-remove-row-bottom" class="frame-btn" title="Retirer la ligne du bas" aria-label="Retirer la ligne du bas">
+                    <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  </button>
+                  <button id="ed-insert-row-bottom" class="frame-btn" title="Insérer une ligne en bas" aria-label="Insérer une ligne en bas">
+                    <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  </button>
                 </div>
               </div>
-              <div class="resize-row-bottom">
-                <button id="ed-insert-row-bottom" class="editor-btn" title="Insérer une ligne en bas">+ ligne bas</button>
-                <button id="ed-remove-row-bottom" class="editor-btn" title="Retirer la ligne du bas">− ligne bas</button>
-              </div>
-            </div>
+            </section>
 
-            <div class="editor-section">
+            <section class="editor-tab hidden" id="ed-tab-features" data-tab="features">
               <div class="tool-palette" id="ed-tools">
                 <button data-tool="empty" class="tool-btn active" title="Normal">
                   <svg class="tool-icon" viewBox="0 0 100 100"><rect x="18" y="18" width="64" height="64" rx="10" fill="none" stroke="#c9d3e6" stroke-width="7"/></svg>
@@ -191,42 +519,6 @@
                 </button>
               </div>
 
-              <p class="tool-experimental-label">Expérimental — pas encore recommandé dans un niveau destiné à être publié</p>
-              <div class="tool-palette tool-palette--experimental" id="ed-tools-experimental">
-                <button data-tool="filter" class="tool-btn" title="Filtre">
-                  <svg class="tool-icon" viewBox="0 0 100 100">
-                    <path d="M15,25 85,25 60,50 60,80 40,80 40,50 Z" fill="none" stroke="#9aa6bc" stroke-width="6" stroke-linejoin="round"/>
-                  </svg>
-                  <span class="tool-label">Filtre</span>
-                </button>
-                <button data-tool="prism" class="tool-btn" title="Prisme">
-                  <svg class="tool-icon" viewBox="0 0 100 100">
-                    <polygon points="50,50 50,10 90,50" fill="#ff5d6c"/>
-                    <polygon points="50,50 90,50 50,90" fill="#59e39d"/>
-                    <polygon points="50,50 50,90 10,50" fill="#5da9ff"/>
-                    <polygon points="50,50 10,50 50,10" fill="#eef1f8"/>
-                  </svg>
-                  <span class="tool-label">Prisme</span>
-                </button>
-                <button data-tool="mirror_neuron" class="tool-btn" title="Neurone miroir">
-                  <svg class="tool-icon" viewBox="0 0 100 100">
-                    <line x1="50" y1="10" x2="50" y2="90" stroke="#b98fe0" stroke-width="5" stroke-dasharray="7 6" stroke-linecap="round"/>
-                    <circle cx="26" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
-                    <circle cx="74" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
-                  </svg>
-                  <span class="tool-label">Neurone miroir</span>
-                </button>
-                <button data-tool="pyra" class="tool-btn" title="Pyra">
-                  <svg class="tool-icon" viewBox="0 0 100 100">
-                    <polygon points="50,15 85,80 15,80" fill="none" stroke="#8a97a3" stroke-width="6" stroke-linejoin="round"/>
-                    <circle cx="50" cy="15" r="5" fill="#ff5d6c"/>
-                    <circle cx="85" cy="80" r="5" fill="#59e39d"/>
-                    <circle cx="15" cy="80" r="5" fill="#5da9ff"/>
-                  </svg>
-                  <span class="tool-label">Pyra</span>
-                </button>
-              </div>
-
               <div id="ed-charge-options" class="tool-options hidden">
                 <label class="editor-field">Nombre
                   <select id="ed-charge-number">
@@ -268,6 +560,44 @@
                   </select>
                 </label>
               </div>
+            </section>
+
+            <section class="editor-tab hidden" id="ed-tab-experimental" data-tab="experimental">
+              <p class="tool-experimental-label">Expérimental — pas encore recommandé dans un niveau destiné à être publié</p>
+              <div class="tool-palette" id="ed-tools-experimental">
+                <button data-tool="filter" class="tool-btn" title="Filtre">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <path d="M15,25 85,25 60,50 60,80 40,80 40,50 Z" fill="none" stroke="#9aa6bc" stroke-width="6" stroke-linejoin="round"/>
+                  </svg>
+                  <span class="tool-label">Filtre</span>
+                </button>
+                <button data-tool="prism" class="tool-btn" title="Prisme">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <polygon points="50,50 50,10 90,50" fill="#ff5d6c"/>
+                    <polygon points="50,50 90,50 50,90" fill="#59e39d"/>
+                    <polygon points="50,50 50,90 10,50" fill="#5da9ff"/>
+                    <polygon points="50,50 10,50 50,10" fill="#eef1f8"/>
+                  </svg>
+                  <span class="tool-label">Prisme</span>
+                </button>
+                <button data-tool="mirror_neuron" class="tool-btn" title="Neurone miroir">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <line x1="50" y1="10" x2="50" y2="90" stroke="#b98fe0" stroke-width="5" stroke-dasharray="7 6" stroke-linecap="round"/>
+                    <circle cx="26" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
+                    <circle cx="74" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
+                  </svg>
+                  <span class="tool-label">Neurone miroir</span>
+                </button>
+                <button data-tool="pyra" class="tool-btn" title="Pyra">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <polygon points="50,15 85,80 15,80" fill="none" stroke="#8a97a3" stroke-width="6" stroke-linejoin="round"/>
+                    <circle cx="50" cy="15" r="5" fill="#ff5d6c"/>
+                    <circle cx="85" cy="80" r="5" fill="#59e39d"/>
+                    <circle cx="15" cy="80" r="5" fill="#5da9ff"/>
+                  </svg>
+                  <span class="tool-label">Pyra</span>
+                </button>
+              </div>
 
               <div id="ed-filter-options" class="tool-options hidden">
                 <label class="editor-field">Canal conservé
@@ -289,45 +619,168 @@
                   </select>
                 </label>
               </div>
-            </div>
+            </section>
 
-            <div class="editor-section editor-actions">
-              <button id="ed-test">Tester</button>
-              <button id="ed-solve" class="editor-btn" disabled title="Trouve et pose automatiquement une solution — utilisable seulement en mode Test">Résoudre</button>
-              <button id="ed-test-reset" class="editor-btn">Réinitialiser le test</button>
-              <button id="ed-new">Nouveau</button>
-              <button id="ed-save">Sauvegarder</button>
-              <button id="ed-delete">Supprimer</button>
-              <button id="ed-export">Exporter</button>
-              <button id="ed-import" class="editor-btn" title="Colle le code d'un niveau (généré par Exporter) pour le charger dans l'éditeur">Importer</button>
-            </div>
+            <section class="editor-tab hidden" id="ed-tab-options" data-tab="options">
+              <label class="editor-field">Titre
+                <input id="ed-name" type="text" value="" placeholder="Nom du niveau (obligatoire)" />
+              </label>
 
-            <div class="editor-section">
               <label class="editor-field">Mes niveaux
                 <select id="ed-level-list"></select>
               </label>
               <label class="editor-field">Repartir d'un niveau du jeu
                 <select id="ed-template-list"></select>
               </label>
-            </div>
 
-            <p id="ed-status" class="editor-status"></p>
-            <textarea id="ed-export-output" class="hidden" readonly rows="8"></textarea>
-
-            <div id="ed-import-panel" class="editor-section hidden">
-              <label class="editor-field">Coller l'objet JS d'un niveau (ex: le résultat d'Exporter)
-                <textarea id="ed-import-input" rows="8" placeholder='{ name: "...", rows: 5, cols: 5, cells: [...] }'></textarea>
-              </label>
-              <div class="editor-row">
-                <button id="ed-import-confirm" class="editor-btn">Charger ce niveau</button>
-                <button id="ed-import-cancel" class="editor-btn">Annuler</button>
+              <div class="options-actions">
+                <button id="ed-new" class="icon-btn" aria-label="Effacer (nouveau niveau)" title="Effacer (nouveau niveau)">
+                  <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="12" x2="12" y2="18"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                </button>
+                <button id="ed-save" class="icon-btn" aria-label="Sauvegarder" title="Sauvegarder">
+                  <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                </button>
+                <button id="ed-delete" class="icon-btn" aria-label="Supprimer" title="Supprimer">
+                  <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
+                </button>
+                <button id="ed-export" class="icon-btn" aria-label="Exporter le code" title="Exporter le code">
+                  <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                </button>
+                <button id="ed-import" class="icon-btn" aria-label="Importer" title="Colle le code d'un niveau (généré par Exporter) pour le charger dans l'éditeur">
+                  <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                </button>
+                <button id="ed-publish" class="icon-btn icon-btn--accent" aria-label="Publier" title="Publie ce niveau dans la Communauté (nécessite qu'il ait une solution)">
+                  <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                </button>
               </div>
-            </div>
-          </aside>
 
-          <main class="editor-board-wrap">
-            <div id="editor-board"></div>
-          </main>
+              <p id="ed-status" class="editor-status"></p>
+              <textarea id="ed-export-output" class="hidden" readonly rows="6"></textarea>
+
+              <div id="ed-import-panel" class="editor-section hidden">
+                <label class="editor-field">Coller l'objet JS d'un niveau (ex: le résultat d'Exporter)
+                  <textarea id="ed-import-input" rows="6" placeholder='{ name: "...", rows: 5, cols: 5, cells: [...] }'></textarea>
+                </label>
+                <div class="editor-row">
+                  <button id="ed-import-confirm" class="editor-btn">Charger ce niveau</button>
+                  <button id="ed-import-cancel" class="editor-btn">Annuler</button>
+                </div>
+              </div>
+              </section>
+            </div>
+
+            <nav class="editor-tabbar" id="editor-tabbar">
+              <button class="editor-tab-btn active" data-tab-target="grid" aria-label="Format grille" title="Format grille">
+                <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1"></rect><rect x="13" y="3" width="8" height="8" rx="1"></rect><rect x="3" y="13" width="8" height="8" rx="1"></rect><rect x="13" y="13" width="8" height="8" rx="1"></rect></svg>
+              </button>
+              <button class="editor-tab-btn" data-tab-target="features" aria-label="Features" title="Features">
+                <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.07"></path><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"></path></svg>
+              </button>
+              <button class="editor-tab-btn" data-tab-target="experimental" aria-label="Expérimentales" title="Expérimentales">
+                <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6.5L4.5 17a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L15 8.5V2"></path><line x1="9" y1="2" x2="15" y2="2"></line><line x1="9.5" y1="13" x2="14.5" y2="13"></line></svg>
+              </button>
+              <button class="editor-tab-btn" data-tab-target="options" aria-label="Options" title="Options">
+                <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              </button>
+            </nav>
+          </div>
+        </div>
+      </section>
+
+      <!-- Modale "plus d'indices": PAS un écran (pas dans SCREEN_IDS/viewStack),
+           un simple overlay affiché/masqué par-dessus l'écran courant — voir
+           main.js. -->
+      <div id="hint-modal" class="modal hidden">
+        <div class="modal-backdrop" data-hint-modal-close></div>
+        <div class="modal-card">
+          <h3 class="modal-title">Plus d'indices</h3>
+          <p class="modal-text">Regarde une pub pour récupérer 10 indices.</p>
+          <div class="modal-actions">
+            <button id="btn-hint-cancel" class="options-btn" data-hint-modal-close>Annuler</button>
+            <button id="btn-hint-watch-ad" class="options-btn options-btn--accent">Regarder la pub (+10)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modale de confirmation "réinitialiser le jeu": remplace
+           window.confirm() (retour utilisateur: "doit être une modale
+           intégrée, pas une vraie pop-up de navigateur"), même principe que
+           hint-modal ci-dessus. -->
+      <div id="reset-confirm-modal" class="modal hidden">
+        <div class="modal-backdrop" data-reset-modal-close></div>
+        <div class="modal-card">
+          <h3 class="modal-title">Réinitialiser le jeu ?</h3>
+          <p class="modal-text">Toute la progression Histoire, les points et les achats de la boutique Secrets seront définitivement effacés.</p>
+          <div class="modal-actions">
+            <button id="btn-reset-cancel" class="options-btn" data-reset-modal-close>Annuler</button>
+            <button id="btn-reset-confirm" class="options-btn options-btn--danger">Réinitialiser</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modale "Publier" (éditeur -> Communauté): demande un pseudo/avatar
+           la toute première fois seulement (voir editor.js/storage.js:
+           loadProfile) — les publications suivantes ne la rouvrent plus. -->
+      <div id="editor-publish-modal" class="modal hidden">
+        <div class="modal-backdrop" data-editor-publish-close></div>
+        <div class="modal-card">
+          <h3 class="modal-title">Publier dans la Communauté</h3>
+          <p class="modal-text">Choisis un pseudo pour signer tes créations — modifiable plus tard depuis "Mon profil".</p>
+          <label class="editor-field">Pseudo
+            <input id="editor-publish-pseudo" type="text" maxlength="20" placeholder="Ton pseudo" />
+          </label>
+          <div id="editor-publish-avatar-picker" class="profile-avatar-picker"></div>
+          <p id="editor-publish-status" class="editor-status"></p>
+          <div class="modal-actions">
+            <button class="options-btn" data-editor-publish-close>Annuler</button>
+            <button id="btn-editor-publish-confirm" class="options-btn options-btn--accent">Publier</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modale "Importer un code" (Communauté -> ajoute à votre espace
+           local, voir community-store.js: decodeShareCode/importSharedLevel). -->
+      <div id="community-import-modal" class="modal hidden">
+        <div class="modal-backdrop" data-community-import-close></div>
+        <div class="modal-card">
+          <h3 class="modal-title">Importer un code</h3>
+          <p class="modal-text">Colle ci-dessous le code de partage reçu d'un autre joueur.</p>
+          <textarea id="community-import-input" class="community-code-textarea" rows="4" placeholder="SYN1-…"></textarea>
+          <p id="community-import-status" class="editor-status"></p>
+          <div class="modal-actions">
+            <button class="options-btn" data-community-import-close>Annuler</button>
+            <button id="btn-community-import-confirm" class="options-btn options-btn--accent">Importer</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modale "Partager cette grille" (Communauté, vos propres grilles):
+           affiche le code généré par community-store.js: encodeShareCode. -->
+      <div id="community-share-modal" class="modal hidden">
+        <div class="modal-backdrop" data-community-share-close></div>
+        <div class="modal-card">
+          <h3 class="modal-title">Partager cette grille</h3>
+          <p class="modal-text">Envoie ce code à un autre joueur (Discord, message…) — il pourra l'importer depuis la Communauté.</p>
+          <textarea id="community-share-output" class="community-code-textarea" rows="4" readonly></textarea>
+          <div class="modal-actions">
+            <button class="options-btn" data-community-share-close>Fermer</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modale posée après la résolution d'une grille COMMUNAUTAIRE (voir
+           main.js: advanceAfterWin) — ne s'affiche que si vous n'avez pas
+           déjà aimé cette grille pendant la partie (sinon on revient
+           directement au fil, pas la peine de redemander). -->
+      <div id="community-rate-modal" class="modal hidden">
+        <div class="modal-backdrop" data-community-rate-skip></div>
+        <div class="modal-card">
+          <h3 class="modal-title">Tu as aimé cette grille ?</h3>
+          <p id="community-rate-text" class="modal-text"></p>
+          <div class="modal-actions">
+            <button id="btn-community-rate-skip" class="options-btn" data-community-rate-skip>Passer</button>
+            <button id="btn-community-rate-like" class="options-btn options-btn--accent">❤ J'aime</button>
+          </div>
         </div>
       </div>
     </div>
