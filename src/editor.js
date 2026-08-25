@@ -19,10 +19,19 @@ import {
   playChargeEmptied,
   playChargeOverload,
 } from "./game/sound.js";
+import { validatePlayableLevel, publishLevel, AVATAR_CHOICES } from "./game/community-store.js";
+import { loadProfile, saveProfile } from "./game/storage.js";
 
 const STORAGE_KEY = "lightup_custom_levels";
 const MAX_SIZE = 16;
 const MIN_SIZE = 1;
+
+// Icônes du bouton Tester/Éditer (voir index.html: markup initial identique
+// à PLAY_ICON) — permutées via innerHTML plutôt que deux <svg> imbriqués,
+// même approche que #btn-infinite-next/#btn-reset (voir main.js) pour rester
+// cohérent avec le reste de l'appli.
+const PLAY_ICON = '<svg viewBox="0 0 24 24" class="icon-svg" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>';
+const EDIT_ICON = '<svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>';
 
 const sounds = {
   targetSuccess: playTargetSuccess,
@@ -137,9 +146,18 @@ function parseLevelFromCode(rawText) {
 
 export function initEditor({ levels }) {
   const boardEl = document.getElementById("editor-board");
+  // Conteneur dont dépend le layout plein écran mobile (voir style.css:
+  // #editor-view.editor--testing) — bascule entre "panneau d'onglets +
+  // plateau borné" (édition) et "plateau plein écran" (test), exactement
+  // comme le vrai plateau de jeu.
+  const editorViewEl = document.getElementById("editor-view");
   const nameInput = document.getElementById("ed-name");
   const rowsInput = document.getElementById("ed-rows");
   const colsInput = document.getElementById("ed-cols");
+  const sizeReadoutEl = document.getElementById("ed-size-readout");
+  const stepperBtns = document.querySelectorAll(".stepper-btn");
+  const tabBtns = document.querySelectorAll(".editor-tab-btn");
+  const tabSections = document.querySelectorAll(".editor-tab");
   const resizeBtn = document.getElementById("ed-resize");
   // Deux groupes de boutons-outils (courants + expérimentaux, voir
   // index.html): on les traite comme un seul ensemble pour le câblage des
@@ -171,6 +189,12 @@ export function initEditor({ levels }) {
   const saveBtn = document.getElementById("ed-save");
   const deleteBtn = document.getElementById("ed-delete");
   const exportBtn = document.getElementById("ed-export");
+  const publishBtn = document.getElementById("ed-publish");
+  const publishModal = document.getElementById("editor-publish-modal");
+  const publishPseudoInput = document.getElementById("editor-publish-pseudo");
+  const publishAvatarPicker = document.getElementById("editor-publish-avatar-picker");
+  const publishStatusEl = document.getElementById("editor-publish-status");
+  const publishConfirmBtn = document.getElementById("btn-editor-publish-confirm");
   const importBtn = document.getElementById("ed-import");
   const importPanel = document.getElementById("ed-import-panel");
   const importInput = document.getElementById("ed-import-input");
@@ -197,6 +221,36 @@ export function initEditor({ levels }) {
 
   function setStatus(msg) {
     statusEl.textContent = msg;
+  }
+
+  // Onglets du bas (Format grille / Features / Expérimentales / Options,
+  // voir index.html: .editor-tabbar) : un seul visible à la fois, purement
+  // de la présentation — aucun état de l'édition elle-même n'en dépend.
+  function setActiveTab(tab) {
+    tabBtns.forEach((btn) => btn.classList.toggle("active", btn.dataset.tabTarget === tab));
+    tabSections.forEach((section) => section.classList.toggle("hidden", section.dataset.tab !== tab));
+  }
+
+  tabBtns.forEach((btn) => {
+    btn.addEventListener("click", () => setActiveTab(btn.dataset.tabTarget));
+  });
+
+  // Compteurs −/+ à côté de Lignes/Colonnes (voir style.css: .stepper) :
+  // n'ajustent QUE la valeur affichée, comme si le joueur avait tapé au
+  // clavier — il faut toujours valider avec "Appliquer" (ed-resize) pour
+  // que le redimensionnement ait réellement lieu, aucun changement
+  // silencieux de la grille.
+  stepperBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const input = document.getElementById(btn.dataset.stepTarget);
+      const step = parseInt(btn.dataset.step, 10);
+      const next = Math.min(MAX_SIZE, Math.max(MIN_SIZE, (parseInt(input.value, 10) || 0) + step));
+      input.value = next;
+    });
+  });
+
+  function updateSizeReadout() {
+    sizeReadoutEl.textContent = `${editLevel.rows}×${editLevel.cols}`;
   }
 
   function refreshLevelList() {
@@ -270,6 +324,7 @@ export function initEditor({ levels }) {
   }
 
   function rebuildEditGrid() {
+    updateSizeReadout();
     const grid = new LightUpGrid(buildLevelObject());
     boardEl.classList.toggle("board--paint", !testMode);
     if (testMode) {
@@ -518,6 +573,26 @@ export function initEditor({ levels }) {
     editLevel.name = nameInput.value;
   });
 
+  // Centralise tout ce qui dépend du mode Test (icône Play/Edit du header,
+  // visibilité de Résoudre/Réinitialiser le test, et la classe qui fait
+  // passer le plateau en plein écran — voir style.css:
+  // #editor-view.editor--testing) : un seul endroit à mettre à jour plutôt
+  // que de dupliquer ces 5 effets à chaque appelant (toggle manuel, retour
+  // au mode édition via loadLevelIntoEditor, etc.).
+  function setTestMode(active) {
+    testMode = active;
+    testBtn.innerHTML = testMode ? EDIT_ICON : PLAY_ICON;
+    testBtn.setAttribute("aria-label", testMode ? "Éditer" : "Tester");
+    testBtn.setAttribute("title", testMode ? "Éditer" : "Tester");
+    // Le solveur n'a de sens qu'en mode test : cette icône n'apparaît même
+    // pas en édition, pour éviter de suggérer qu'il modifierait le niveau
+    // lui-même.
+    solveBtn.classList.toggle("hidden", !testMode);
+    solveBtn.disabled = !testMode;
+    testResetBtn.classList.toggle("hidden", !testMode);
+    editorViewEl.classList.toggle("editor--testing", testMode);
+  }
+
   function loadLevelIntoEditor(level, customIndex = -1) {
     editLevel = {
       name: level.name,
@@ -529,10 +604,8 @@ export function initEditor({ levels }) {
     nameInput.value = editLevel.name;
     rowsInput.value = editLevel.rows;
     colsInput.value = editLevel.cols;
-    testMode = false;
     testLights = new Set();
-    testBtn.textContent = "Tester";
-    solveBtn.disabled = true;
+    setTestMode(false);
     exportOutput.classList.add("hidden");
     importPanel.classList.add("hidden");
     rebuildEditGrid();
@@ -545,12 +618,7 @@ export function initEditor({ levels }) {
   });
 
   testBtn.addEventListener("click", () => {
-    testMode = !testMode;
-    testBtn.textContent = testMode ? "Éditer" : "Tester";
-    // Le solveur n'a de sens qu'en mode test (voir solveBtn ci-dessous):
-    // grisé en édition pour éviter de suggérer qu'il modifierait le
-    // niveau lui-même.
-    solveBtn.disabled = !testMode;
+    setTestMode(!testMode);
     setStatus(testMode ? "Mode test : clique pour poser/retirer une lumière." : "Mode édition.");
     rebuildEditGrid();
   });
@@ -628,6 +696,93 @@ export function initEditor({ levels }) {
     }
   });
 
+  // Publier: envoie le niveau courant dans la Communauté (voir
+  // community-store.js) — valide d'abord qu'il a une solution (même exigence
+  // qu'Exporter/Sauvegarder, plus stricte: une grille sans solution n'a
+  // simplement aucun sens à proposer à d'autres joueurs). La toute première
+  // publication demande un pseudo/avatar (voir openPublishModal), les
+  // suivantes réutilisent le profil déjà enregistré sans rouvrir la modale.
+  let selectedPublishAvatar = AVATAR_CHOICES[0];
+
+  function refreshPublishAvatarPicker() {
+    publishAvatarPicker.innerHTML = "";
+    for (const avatar of AVATAR_CHOICES) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "profile-avatar-btn" + (avatar === selectedPublishAvatar ? " active" : "");
+      btn.textContent = avatar;
+      btn.addEventListener("click", () => {
+        selectedPublishAvatar = avatar;
+        refreshPublishAvatarPicker();
+      });
+      publishAvatarPicker.appendChild(btn);
+    }
+  }
+
+  function openPublishModal() {
+    publishPseudoInput.value = "";
+    selectedPublishAvatar = AVATAR_CHOICES[0];
+    refreshPublishAvatarPicker();
+    publishStatusEl.textContent = "";
+    publishModal.classList.remove("hidden");
+  }
+
+  function closePublishModal() {
+    publishModal.classList.add("hidden");
+  }
+
+  function doPublish(profile) {
+    // Revalide à chaque publication (pas seulement mis en cache depuis le
+    // clic sur "Publier"): couvre le cas rare où la modale de profil est
+    // restée ouverte pendant qu'on aurait modifié la grille — impossible
+    // dans l'UI actuelle (l'éditeur est masqué derrière la modale), mais ne
+    // coûte rien à revérifier plutôt qu'à supposer.
+    const levelObj = buildLevelObject();
+    const check = validatePlayableLevel(levelObj);
+    if (check.error) {
+      setStatus(`Publication impossible : ${check.error}`);
+      return;
+    }
+    publishLevel({
+      title: editLevel.name,
+      rows: levelObj.rows,
+      cols: levelObj.cols,
+      cells: levelObj.cells,
+      author: profile,
+      difficulty: check.difficulty,
+    });
+    setStatus(`"${editLevel.name}" publié dans la Communauté !`);
+  }
+
+  publishBtn.addEventListener("click", () => {
+    if (!editLevel.name.trim()) {
+      setStatus("Donne un nom au niveau avant de le publier.");
+      return;
+    }
+    const check = validatePlayableLevel(buildLevelObject());
+    if (check.error) {
+      setStatus(`Publication impossible : ${check.error}`);
+      return;
+    }
+    const profile = loadProfile();
+    if (profile) doPublish(profile);
+    else openPublishModal();
+  });
+
+  document.querySelectorAll("[data-editor-publish-close]").forEach((el) => (el.onclick = closePublishModal));
+
+  publishConfirmBtn.addEventListener("click", () => {
+    const pseudo = publishPseudoInput.value.trim();
+    if (!pseudo) {
+      publishStatusEl.textContent = "Choisis un pseudo avant de publier.";
+      return;
+    }
+    const profile = { pseudo, avatar: selectedPublishAvatar };
+    saveProfile(profile);
+    closePublishModal();
+    doPublish(profile);
+  });
+
   // Importer: colle le code d'un niveau (typiquement le résultat
   // d'Exporter, ou une entrée copiée depuis levels.js) et le charge dans
   // l'éditeur comme point de départ — pas encore sauvegardé, exactement
@@ -683,8 +838,10 @@ export function initEditor({ levels }) {
   });
 
   setTool("empty");
+  setActiveTab("grid");
   refreshTemplateList();
   refreshLevelList();
+  updateSizeReadout();
 
   return {
     onShow() {
