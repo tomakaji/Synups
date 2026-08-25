@@ -129,6 +129,33 @@ let failureCount = 0; // compteur (pas booléen): plusieurs synapses/surcharges 
 let started = false;
 let loadPromise = null;
 
+// Ambiance (boutique "Secrets", voir storage.js/main.js): un socle de
+// couches TOUJOURS démutées, par-dessus lesquelles les déblocages normaux du
+// niveau en cours (unlocked, ci-dessus) continuent de s'ajouter comme avant.
+// Réutilise les couches mécaniques déjà composées plutôt que de nouveaux
+// morceaux dédiés — une vraie composition originale par ambiance serait un
+// chantier audio à part entière (voir l'historique de base.wav/echec.wav...,
+// plusieurs jours d'itération). Défini ici (pas juste dans MECHANIC_LAYERS)
+// pour que `setLayerActive` sache ne JAMAIS re-couper une couche d'ambiance
+// au gré des déblocages/déverrouillages du niveau — c'est un socle permanent
+// pour la session, pas un événement de jeu.
+export const MUSIC_AMBIANCES = {
+  "signal-clair": { label: "Signal clair", layers: [] }, // par défaut: comportement inchangé
+  "echo-profond": { label: "Écho profond", layers: ["neuroneCouleur"] },
+  "reseau-eveille": { label: "Réseau éveillé", layers: ["miroirs", "prismes"] },
+};
+
+let ambianceLayers = new Set();
+
+/** Change le socle de couches toujours actives (voir MUSIC_AMBIANCES) — sans
+ * effet sur les couches actuellement débloquées par le niveau en cours tant
+ * que resetLayers() n'a pas tourné (prochain niveau/chargement), pour ne
+ * jamais couper une couche EN PLEIN NIVEAU juste parce que le joueur change
+ * d'ambiance dans Options entre deux niveaux. */
+export function setMusicAmbiance(key) {
+  ambianceLayers = new Set(MUSIC_AMBIANCES[key]?.layers ?? []);
+}
+
 function ensureBuilt() {
   if (players) return;
   players = {};
@@ -172,11 +199,15 @@ export async function startMusic() {
  * pas un cumul entre niveaux. Ne touche pas à la lecture elle-même (aucun
  * redémarrage, donc aucun risque de désynchronisation). */
 export function resetLayers() {
-  unlocked = new Set();
+  // Voir MUSIC_AMBIANCES: le socle d'ambiance (boutique Secrets) reste
+  // démuté même au reset — seules les couches HORS ambiance retombent à 0.
+  unlocked = new Set(ambianceLayers);
   failureCount = 0;
   if (!gains) return;
   gains.base.gain.rampTo(1, FADE); // garde-fou: au cas où un niveau se termine en pleine erreur
-  for (const key of MECHANIC_LAYERS) gains[key].gain.rampTo(0, FADE);
+  for (const key of MECHANIC_LAYERS) {
+    gains[key].gain.rampTo(ambianceLayers.has(key) ? (LAYER_ACTIVE_GAIN[key] ?? 1) : 0, FADE);
+  }
   gains.echec.gain.rampTo(0, FADE);
   duckFilter.frequency.rampTo(NORMAL_CUTOFF_HZ, FADE); // même garde-fou pour l'étouffement
 }
@@ -190,6 +221,7 @@ export function resetLayers() {
  * échec.wav" pendant une erreur (voir enterFailure). */
 function setLayerActive(key, active) {
   if (!MECHANIC_LAYERS.includes(key)) return;
+  if (!active && ambianceLayers.has(key)) return; // socle d'ambiance: jamais re-coupée par la logique de jeu
   const wasActive = unlocked.has(key);
   if (wasActive === active) return;
   if (active) unlocked.add(key);
