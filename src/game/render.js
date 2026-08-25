@@ -77,7 +77,12 @@ function neuronDuplicateIcon(lit) {
   </svg>`;
 }
 
-function chargeIcon(cell) {
+/** Exportée (comme les autres icônes ci-dessous): réutilisée telle quelle
+ * par l'écran de réglages Infini (voir main.js) pour que les tuiles de
+ * sélection des mécaniques montrent EXACTEMENT les mêmes images qu'en jeu
+ * (retour utilisateur), plutôt que des glyphes simplifiés redessinés à
+ * part qui risqueraient de diverger du rendu réel. */
+export function chargeIcon(cell) {
   const n = cell.number;
   const count = cell._adjacentLights || 0;
   const satisfied = count === n;
@@ -142,7 +147,7 @@ function chargeIcon(cell) {
   return `<svg viewBox="0 0 100 100" class="cell-icon-svg">${core}${slots}${overflow}</svg>`;
 }
 
-function synapseIcon(state) {
+export function synapseIcon(state) {
   if (state === "success") {
     return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
       <circle cx="32" cy="32" r="16" fill="#4a3f9a" opacity="0.3"/>
@@ -201,7 +206,7 @@ function targetIcon(cell) {
 /** Icône d'un miroir: barre diagonale qui dévie un laser de 90°. Neutre au
  * repos, tintée de la couleur du dernier laser qui la traverse (voir
  * grid.js: `_mirrorColor`), pour que le joueur voie où l'impulsion rebondit. */
-function mirrorIcon(cell) {
+export function mirrorIcon(cell) {
   const active = cell._mirrorColor && (cell._mirrorColor.r || cell._mirrorColor.g || cell._mirrorColor.b);
   const stroke = active ? hexFor(cell._mirrorColor) || "#9fb4d8" : "#4a5468";
   const glow = active ? colorFor(cell._mirrorColor, 0.35) || "rgba(159,180,216,0.35)" : "rgba(74,84,104,0.18)";
@@ -231,7 +236,7 @@ function wallIcon() {
  * "étoile" que chargeIcon en surcharge, pour rester cohérent avec le
  * langage visuel des autres charges plutôt que d'inventer un nouveau
  * signe d'erreur. */
-function pyraIcon(cell) {
+export function pyraIcon(cell) {
   const active = cell._activeColor;
   const fillHex = (active && hexFor(channelColor(active))) || "#888";
   const fillOpacity = cell._state === "success" && active ? 0.75 : 0;
@@ -265,7 +270,7 @@ function pyraIcon(cell) {
  * part et d'autre, pour évoquer "ce qui touche un côté se reproduit de
  * l'autre" — voir grid.js: MIRROR_NEURON. Couleur violette distincte du
  * reste du langage visuel pour signaler le statut expérimental. */
-function mirrorNeuronIcon() {
+export function mirrorNeuronIcon() {
   return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
     <line x1="50" y1="10" x2="50" y2="90" stroke="#b98fe0" stroke-width="5" stroke-dasharray="7 6" stroke-linecap="round"/>
     <circle cx="26" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
@@ -277,7 +282,7 @@ function mirrorNeuronIcon() {
  * level-design, jamais changée en jeu) — même technique de double-contour
  * (sombre plein derrière, couleur devant) que les autres icônes, pour
  * rester lisible même sur un fond de la même teinte. */
-function filterIcon(cell) {
+export function filterIcon(cell) {
   const hex = hexFor(channelColor(cell.filterColor)) || "#888";
   const shape = "M15,25 85,25 60,50 60,80 40,80 40,50 Z";
   return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
@@ -311,7 +316,7 @@ function filterIcon(cell) {
  * transition CSS — voir render(): le <g> est mis à jour en place (son
  * `transform`, pas son innerHTML) pour que la transition s'applique.
  */
-function prismIcon(cell) {
+export function prismIcon(cell) {
   const baseIndex = PRISM_COLOR_SEQUENCE.indexOf(cell.firstColor || "r");
   const base = [0, 1, 2, 3].map((i) => PRISM_COLOR_SEQUENCE[(baseIndex + i) % 4]);
   const left = hexFor(PRISM_LETTER_COLORS[base[0]]) || "#888";
@@ -834,6 +839,12 @@ export function createBoardRenderer(boardEl) {
     render,
     playMirrorSuccess,
     playMirrorFailure,
+    /** Élément DOM d'une case (r, c) — utilisé par main.js pour poser une
+     * mise en valeur temporaire (indice) sans dupliquer ici l'accès à
+     * `cellEls`, qui reste privé au module. */
+    cellElementAt(r, c) {
+      return cellEls[r]?.[c] || null;
+    },
     get grid() {
       return grid;
     },
