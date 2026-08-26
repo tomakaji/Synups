@@ -1849,6 +1849,47 @@ body {
   color: var(--text-dim);
 }
 
+/* Badges Sommation dans le profil (voir sommation.js: getSommationBadges) */
+.profile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-badge-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+.profile-badge-chip.earned {
+  opacity: 1;
+  filter: none;
+  border-color: var(--accent);
+  background: rgba(110, 231, 255, 0.08);
+}
+
+.profile-badge-icon {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.profile-badge-name {
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+
+.profile-badge-chip.earned .profile-badge-name {
+  color: var(--accent);
+}
+
 .options-btn {
   background: var(--panel);
   border: 1px solid #2a3040;
@@ -2768,6 +2809,38 @@ body {
   animation: som-idle-glow 3.2s ease-in-out infinite;
 }
 
+/* Rotation indéfinie — réutilisée pour les pips d'une lumière au rang MAX
+   (voir .som-light-pips ci-dessous) ET pour l'anneau d'un générateur au
+   niveau MAX (voir .som-gen-halo ci-dessous) — même langage visuel "orbite"
+   pour les deux formes de plafond (retour utilisateur round 8: "il faut
+   trouver quelque chose de similaire" pour le générateur). `transform-box:
+   fill-box` recentre la rotation sur la bbox de l'élément plutôt que sur
+   l'origine du viewBox SVG (0,0), sinon la rotation tourne autour du coin. */
+@keyframes som-orbit-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.som-light-svg-max .som-light-pips {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: som-orbit-spin 5s linear infinite;
+}
+.som-gen-halo {
+  /* Couleur posée en attribut SVG inline (voir sommation.js: neuronSvg) —
+     currentColor ne fonctionnerait pas ici (le stroke du neurone est un
+     attribut de présentation, pas la couleur CSS héritée). */
+  fill: none;
+  stroke-width: 1;
+  opacity: 0.65;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: som-orbit-spin 7s linear infinite;
+}
+
 /* Léger frétillement du morceau de générateur (contour pointillé) en
    attente — suggère une pièce instable/incomplète. */
 @keyframes som-frag-spin {
@@ -2837,6 +2910,23 @@ body {
 .som-obj-orb-filled {
   background: var(--som-obj-color, #7b869c);
   box-shadow: 0 0 7px var(--som-obj-color, transparent);
+}
+
+/* Exigence de type "generator" (objectif FINAL uniquement — voir
+   sommation.js: buildObjectiveScript/genReq) — même cercle que
+   .som-obj-orb mais avec un petit neurone dedans plutôt que vide/plein,
+   estompé tant que le générateur au niveau max n'a pas été fourni. */
+.som-obj-orb-gen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+.som-obj-orb-gen svg {
+  opacity: 0.35;
+}
+.som-obj-orb-gen.som-obj-orb-filled svg {
+  opacity: 1;
 }
 
 .som-obj-req-tier {
@@ -2922,12 +3012,14 @@ body {
 
 /* Camembert de probabilités de spawn — retour utilisateur: "un graphique
    fromage plutôt que des informations écrites, avec juste les couleurs,
-   c'est suffisant". Voir sommation.js: spawnRatiosChart(). Agrandi (retour
-   utilisateur: "on peut augmenter un peu la taille du fromage pour que ça
-   soit plus lisible") pour laisser respirer la légende à côté. */
+   c'est suffisant". Voir sommation.js: spawnRatiosChart(). Agrandi X2 au
+   round 8 (retour utilisateur: "j'aimerais aussi augmenter sa taille x2
+   [fromage + texte]") — corrige au passage le texte de la légende du
+   générateur blanc qui était coupé en haut/bas (5 lignes ne tenaient plus
+   dans l'ancienne hauteur contrainte, voir .som-spawn-legend ci-dessous). */
 .som-spawn-pie {
-  width: 52px;
-  height: 52px;
+  width: 104px;
+  height: 104px;
   flex: none;
   margin-top: 2px;
   border-radius: 50%;
@@ -2935,32 +3027,31 @@ body {
   animation: som-pulse-spawn 0.3s ease-out;
 }
 
-/* Légende en colonne À CÔTÉ du camembert (retour utilisateur: "ajoute une
-   légende des probas en colonne à droite... ça ne prenne pas plus que la
-   hauteur du fromage") — texte minuscule pour tenir jusqu'à 5 lignes
-   (couleurs + "???" pour le morceau de générateur) dans cette hauteur. */
+/* Légende en colonne À CÔTÉ du camembert (retour utilisateur round 7:
+   "ajoute une légende des probas en colonne à droite... ça ne prenne pas
+   plus que la hauteur du fromage") — plus de contrainte de hauteur stricte
+   (retour utilisateur round 8: le texte était coupé), la hauteur du
+   camembert x2 suffit largement à contenir les 5 lignes sans découpage. */
 .som-spawn-legend {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
-  max-height: 52px;
-  overflow: hidden;
+  gap: 4px;
 }
 
 .som-spawn-legend-row {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 0.58rem;
-  line-height: 1.15;
+  gap: 7px;
+  font-size: 0.8rem;
+  line-height: 1.2;
   color: var(--text-dim);
   white-space: nowrap;
 }
 
 .som-spawn-legend-dot {
-  width: 7px;
-  height: 7px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   flex: none;
   box-sizing: border-box;
@@ -2968,7 +3059,7 @@ body {
 
 .som-spawn-legend-pct {
   margin-left: auto;
-  padding-left: 6px;
+  padding-left: 8px;
   color: var(--text);
   font-weight: 600;
 }

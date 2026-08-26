@@ -37,7 +37,7 @@ import {
   mirrorNeuronIcon,
 } from "./game/render.js";
 import { initEditor } from "./editor.js";
-import { initSommation } from "./sommation.js";
+import { initSommation, getSommationBadges } from "./sommation.js";
 import { FEATURES } from "./game/generator.js";
 import { requestLevel, ensureLevelBuffer, takeBufferedLevel } from "./game/infiniteClient.js";
 import {
@@ -1004,6 +1004,7 @@ const profilePublishedEl = document.getElementById("profile-published");
 const profilePublishedEmptyEl = document.getElementById("profile-published-empty");
 const profileLikedEl = document.getElementById("profile-liked");
 const profileLikedEmptyEl = document.getElementById("profile-liked-empty");
+const profileSommationBadgesEl = document.getElementById("profile-sommation-badges");
 
 let communitySearch = "";
 let communitySort = "recent";
@@ -1277,6 +1278,19 @@ function renderCommunityProfile() {
     profileLikedEl.appendChild(buildCommunityCard(level, { onChange: renderCommunityProfile }));
   }
   profileLikedEmptyEl.classList.toggle("hidden", liked.length > 0);
+
+  if (profileSommationBadgesEl) {
+    profileSommationBadgesEl.innerHTML = "";
+    for (const badge of getSommationBadges()) {
+      const chip = document.createElement("div");
+      chip.className = "profile-badge-chip" + (badge.earned ? " earned" : "");
+      chip.innerHTML = `
+        <span class="profile-badge-icon">${badge.earned ? "🏅" : "🔒"}</span>
+        <span class="profile-badge-name">${badge.name}</span>
+      `;
+      profileSommationBadgesEl.appendChild(chip);
+    }
+  }
 }
 
 btnProfileSave.onclick = () => {

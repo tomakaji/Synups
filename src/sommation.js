@@ -84,44 +84,146 @@ const MIN_LIGHT_TIER_FOR_FRAGMENT = 2;
 const MAX_GEN_LEVEL = 10;
 
 // Coût en points d'une génération — affiché sur le bouton "Générer" (retour
-// utilisateur: "indiquer le prix en points"). Simple et progressif: plus le
-// générateur est de haut niveau (donc plus rentable), plus il coûte cher à
-// actionner.
-function genCost(level) {
-  return 5 * level;
+// utilisateur: "indiquer le prix en points"). Retour utilisateur round 8:
+// "le coût pour utiliser un générateur sera de 1 point" — coût FIXE, quel
+// que soit le niveau du générateur (l'ancien coût progressif 5×niveau est
+// abandonné : au coût de 1pt, spammer un générateur haut niveau reste
+// rentable, ce qui est le but recherché désormais).
+function genCost() {
+  return 1;
 }
 
 // Récompense de la modale "regarder une pub" — retour utilisateur: "si on
 // essaye de générer alors qu'on n'a plus assez de points, on ouvre une
 // modale qui propose de regarder une pub... afin de regagner des points".
 // Placeholder gratuit, même principe que hint-modal (voir main.js) — pas de
-// vraie intégration publicitaire. Valeur choisie pour rester proportionnée
-// à l'échelle des coûts (genCost va de 5 à 50 selon le niveau).
+// vraie intégration publicitaire. Solde partagé avec le mode Infini: cette
+// valeur reste utile même après le passage au coût fixe de 1pt/génération
+// (round 8) puisqu'elle peut aussi être drainée depuis Infini/Secrets.
 const AD_WATCH_REWARD = 200;
 
-// Séquence scriptée d'objectifs précis (premier jet: on boucle une fois le
-// dernier atteint — bac à sable de test, pas une progression finie). Chaque
-// objectif liste des exigences EXACTES couleur+rang (retour utilisateur:
-// "l'objectif est multiple et précis, ex: 1 blanche de niveau 3 et une
-// rouge de niveau 1") — `fulfilled` est ajouté à l'instanciation
-// (cloneObjective), jamais stocké ici pour que chaque cycle reparte à zéro.
-// `name`: sert de badge (voir META_KEY/badges plus bas) — premier choix de
-// l'utilisateur pour "faire progresser quelque chose de plus global".
-const OBJECTIVE_SCRIPT = [
-  { name: "Premier éclat", requirements: [{ color: "w", tier: 1, qty: 1 }] },
-  { name: "Éclat affiné", requirements: [{ color: "w", tier: 2, qty: 1 }] },
-  { name: "Duo naissant", requirements: [{ color: "r", tier: 1, qty: 1 }, { color: "w", tier: 1, qty: 1 }] },
-  { name: "Noyau et étincelle", requirements: [{ color: "w", tier: 3, qty: 1 }, { color: "r", tier: 1, qty: 1 }] },
-  { name: "Onde jumelle", requirements: [{ color: "g", tier: 2, qty: 1 }, { color: "b", tier: 2, qty: 1 }] },
-  { name: "Écho doré", requirements: [{ color: "y", tier: 1, qty: 2 }] },
-  { name: "Spectre complet", requirements: [{ color: "m", tier: 2, qty: 1 }, { color: "c", tier: 1, qty: 1 }] },
+// ---------- Objectifs: 50 objectifs progressifs + 1 objectif final ----------
+// Retour utilisateur round 8: "on peut dire qu'on programme 50 objectifs +
+// l'objectif final (donc 51)... je te laisse étalonner la difficulté" —
+// générés PROGRAMMATIQUEMENT (formule ci-dessous) plutôt qu'écrits à la
+// main un par un: `name` n'est plus affiché nulle part dans l'UI (l'ancien
+// message "Nouveau badge débloqué : « nom »" a été retiré au round 7 avec
+// tout texte explicatif), il ne sert qu'au débogage — donc un nommage
+// systématique "Palier N" est honnête plutôt qu'artificiellement poétique.
+function req(color, tier, qty = 1) {
+  return { kind: "light", color, tier, qty };
+}
+function genReq(color, level, qty = 1) {
+  return { kind: "generator", color, level, qty };
+}
+
+/** Choisit une couleur en favorisant le BLANC — retour utilisateur: "n'hésite
+ * pas à demander davantage de blanc dans les objectifs, actuellement c'est
+ * un peu rare". Cycle déterministe (pas de hasard: la séquence doit être
+ * reproductible d'une partie à l'autre) où le blanc revient environ une
+ * exigence sur deux ; `includeMixed` ouvre aussi aux couleurs mélangées
+ * (jaune/cyan/magenta, toujours atteignables en mélangeant deux couleurs
+ * PURES différentes malgré le round 8 qui bloque les re-mélanges). */
+function pickColor(i, includeMixed) {
+  const cycle = includeMixed
+    ? ["w", "r", "w", "g", "y", "w", "b", "w", "c", "w", "r", "m", "w", "g", "w"]
+    : ["w", "r", "w", "g", "w", "b", "w", "r", "w", "g", "w", "b", "w", "r", "w"];
+  return cycle[i % cycle.length];
+}
+
+/** Construit la séquence complète — 5 bandes de 10 objectifs (rang et
+ * nombre d'exigences croissants), puis l'objectif final (le 51e). */
+function buildObjectiveScript() {
+  const list = [];
+  let n = 0;
+
+  // Bande 1 (objectifs 1-10): une seule exigence, rang 1-3.
+  for (let i = 0; i < 10; i++) {
+    const tier = 1 + Math.floor(i / 4);
+    list.push({ name: `Palier ${n + 1}`, requirements: [req(pickColor(n, false), tier, 1)] });
+    n++;
+  }
+  // Bande 2 (11-20): deux exigences, rang 2-4, qty 1-2.
+  for (let i = 0; i < 10; i++) {
+    const tier = 2 + Math.floor(i / 4);
+    const qty = i % 5 === 4 ? 2 : 1;
+    list.push({
+      name: `Palier ${n + 1}`,
+      requirements: [req(pickColor(n, false), tier, qty), req(pickColor(n + 3, true), tier, 1)],
+    });
+    n++;
+  }
+  // Bande 3 (21-30): deux à trois exigences, rang 3-6.
+  for (let i = 0; i < 10; i++) {
+    const tier = 3 + Math.floor(i / 3);
+    const reqs = [req(pickColor(n, true), tier, i % 3 === 2 ? 2 : 1), req(pickColor(n + 5, true), Math.max(1, tier - 1), 1)];
+    if (i % 4 === 3) reqs.push(req("w", tier, 1));
+    list.push({ name: `Palier ${n + 1}`, requirements: reqs });
+    n++;
+  }
+  // Bande 4 (31-40): trois exigences, rang 5-8, qty 2-3.
+  for (let i = 0; i < 10; i++) {
+    const tier = 5 + Math.floor(i / 3);
+    const reqs = [
+      req("w", tier, i % 3 === 0 ? 2 : 1),
+      req(pickColor(n, false), tier, 1),
+      req(pickColor(n + 7, true), Math.max(1, tier - 2), i % 4 === 3 ? 2 : 1),
+    ];
+    list.push({ name: `Palier ${n + 1}`, requirements: reqs });
+    n++;
+  }
+  // Bande 5 (41-50): trois à quatre exigences, rang 7-10, forte présence de blanc.
+  for (let i = 0; i < 10; i++) {
+    const tier = Math.min(MAX_LIGHT_TIER, 7 + Math.floor(i / 3));
+    const reqs = [
+      req("w", tier, 2),
+      req(pickColor(n, false), tier, 1),
+      req(pickColor(n + 9, true), Math.max(1, tier - 3), i % 2 === 0 ? 2 : 1),
+    ];
+    if (i % 3 === 2) reqs.push(req("w", Math.max(1, tier - 2), 1));
+    list.push({ name: `Palier ${n + 1}`, requirements: reqs });
+    n++;
+  }
+
+  // Objectif final (51e, "pour finir le mini-jeu") — retour utilisateur:
+  // "nourrir l'objectif des 4 générateurs au niveau maximum (10)". Exigences
+  // de type "generator" (voir genReq) plutôt que "light" — voir
+  // doDropOnObjective()/predictDrop() pour le traitement spécifique.
+  list.push({
+    name: "Le Sommet",
+    final: true,
+    requirements: [
+      genReq("r", MAX_GEN_LEVEL, 1),
+      genReq("g", MAX_GEN_LEVEL, 1),
+      genReq("b", MAX_GEN_LEVEL, 1),
+      genReq("w", MAX_GEN_LEVEL, 1),
+    ],
+  });
+
+  return list;
+}
+
+const OBJECTIVE_SCRIPT = buildObjectiveScript();
+
+// Paliers de badges (retour utilisateur: "les barres de progression pour
+// débloquer des badges seront des progressions de 10 objectifs réussis
+// (donc 5 barres de progression, mais la dernière en comptera 11 avec
+// l'objectif final)") — seuils CUMULÉS d'objectifs réussis: 10, 20, 30, 40,
+// puis 51 (40 + les 10 derniers + l'objectif final). Visible depuis "Mon
+// profil" (voir getSommationBadges(), exporté plus bas, câblé dans main.js).
+const BADGE_THRESHOLDS = [10, 20, 30, 40, 51];
+const BADGE_DEFS = [
+  { name: "Étincelle" },
+  { name: "Synapse" },
+  { name: "Réseau" },
+  { name: "Constellation" },
+  { name: "Singularité" },
 ];
 
 // Progression globale minimale, PERSISTÉE à part (clé dédiée, hors
 // storage.js/KEYS — même raisonnement que le profil communautaire: ce n'est
-// pas la vraie progression du jeu). `badges`: index dans OBJECTIVE_SCRIPT de
-// chaque objectif complété au moins une fois — la séquence boucle, mais un
-// badge ne se débloque qu'à la première réussite (voir doDropOnObjective).
+// pas la vraie progression du jeu). `badgeTiers`: index (0-4) dans
+// BADGE_THRESHOLDS/BADGE_DEFS de chaque palier de badge déjà atteint.
 const META_KEY = "lightup-sommation-meta";
 
 function loadMeta() {
@@ -130,11 +232,32 @@ function loadMeta() {
     const parsed = raw ? JSON.parse(raw) : null;
     return {
       objectivesCompleted: Number(parsed?.objectivesCompleted) || 0,
-      badges: Array.isArray(parsed?.badges) ? parsed.badges.filter((n) => Number.isInteger(n)) : [],
+      badgeTiers: Array.isArray(parsed?.badgeTiers) ? parsed.badgeTiers.filter((n) => Number.isInteger(n)) : [],
     };
   } catch {
-    return { objectivesCompleted: 0, badges: [] };
+    return { objectivesCompleted: 0, badgeTiers: [] };
   }
+}
+
+/** Palier de badge (0-4) PAS ENCORE atteint, ou BADGE_THRESHOLDS.length si
+ * les 5 sont déjà acquis — utilisé par render() pour la barre du haut. */
+function currentBadgeTierIndex(meta) {
+  for (let i = 0; i < BADGE_THRESHOLDS.length; i++) {
+    if (meta.objectivesCompleted < BADGE_THRESHOLDS[i]) return i;
+  }
+  return BADGE_THRESHOLDS.length;
+}
+
+/** Exporté pour l'écran "Mon profil" (voir main.js: renderCommunityProfile)
+ * — retour utilisateur: "une fois la barre remplie, on gagne un badge sur
+ * ton profil (visible par les autres joueurs dans 'communauté')". L'app
+ * n'ayant pas de vrai backend multi-joueurs (voir community-store.js: "tout
+ * local, feed simulé"), "visible par les autres" suit le même principe que
+ * le reste du profil (pseudo/avatar/publications) — la seule surface
+ * "publique" que ce prototype sait offrir. */
+export function getSommationBadges() {
+  const meta = loadMeta();
+  return BADGE_DEFS.map((def, i) => ({ name: def.name, earned: meta.badgeTiers.includes(i) }));
 }
 
 function saveMeta(meta) {
@@ -151,6 +274,21 @@ function sameChannels(a, b) {
 
 function mixChannels(a, b) {
   return { r: a.r || b.r, g: a.g || b.g, b: a.b || b.b };
+}
+
+function channelCount(ch) {
+  return (ch.r ? 1 : 0) + (ch.g ? 1 : 0) + (ch.b ? 1 : 0);
+}
+
+/** Une couleur "pure" (1 seul canal: rouge/verte/bleue) — retour utilisateur
+ * round 8: seul un mélange entre deux couleurs PURES différentes reste
+ * autorisé. Le blanc (3 canaux) et les couleurs déjà mélangées (2 canaux:
+ * jaune/cyan/magenta) sont exclus du mélange (voir doLightMerge/
+ * predictDrop): "la fusion entre du blanc et une couleur doit être
+ * impossible" et "la fusion entre une couleur fusionnée et une autre doit
+ * être impossible, ça retourne sur du blanc, c'est inutile ou frustrant". */
+function isPureColor(ch) {
+  return channelCount(ch) === 1;
 }
 
 // "Franche" = rouge/verte/bleue OU blanche (les 4 couleurs de générateur
@@ -180,12 +318,20 @@ function cloneObjective(def) {
   return { requirements: def.requirements.map((r) => ({ ...r, fulfilled: 0 })) };
 }
 
-function neuronSvg(color, size = 22) {
+/** `atMax`: retour utilisateur round 8 — "lorsqu'on atteint le niveau max
+ * d'un générateur, il faut trouver quelque chose de similaire [à l'orbite
+ * indéfinie des lumières] (son + animation)". Anneau pointillé supplémentaire
+ * autour du neurone, qui tourne indéfiniment en CSS tant que le générateur
+ * reste au niveau max (voir style.css: .som-gen-halo/som-orbit-spin) — même
+ * langage visuel "orbite" que lightSvg() ci-dessous, adapté au neurone. */
+function neuronSvg(color, size = 22, atMax = false) {
   const hex = hexFor(COLOR_CH[color]) || "#fbfcff";
+  const halo = atMax ? `<circle class="som-gen-halo" cx="12" cy="12" r="9.5" stroke="${hex}" stroke-dasharray="2.5 3.5"/>` : "";
   return `<svg class="som-gen-svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${hex}" stroke-width="1.6">
     <circle cx="12" cy="12" r="4" fill="${hex}" stroke="none"/>
     <line x1="12" y1="8" x2="12" y2="2"/><line x1="12" y1="16" x2="12" y2="22"/>
     <line x1="8" y1="12" x2="2" y2="12"/><line x1="16" y1="12" x2="22" y2="12"/>
+    ${halo}
   </svg>`;
 }
 
@@ -224,9 +370,17 @@ function lightSvg(ch, tier, size = 26) {
     pips += `<circle cx="${x}" cy="${y}" r="${pipR.toFixed(2)}" fill="${hex}"/>`;
   }
   const glow = (2 + tier * 1.3).toFixed(1);
-  return `<svg class="som-light-svg" width="${size}" height="${size}" viewBox="0 0 24 24" style="filter:drop-shadow(0 0 ${glow}px ${hex})">
+  // Retour utilisateur round 8: "lorsqu'on atteint le niveau maximum d'une
+  // lumière... les petites boules tournent autour de la lumière indéfiniment"
+  // — les pips au rang MAX sont regroupés dans un <g> dédié pour pouvoir
+  // tourner en bloc autour du centre en CSS (voir style.css:
+  // .som-light-svg-max .som-light-pips / som-orbit-spin), sans affecter le
+  // halo statique (filter) posé sur le <svg> racine.
+  const atMax = tier >= MAX_LIGHT_TIER;
+  const pipsBlock = atMax ? `<g class="som-light-pips">${pips}</g>` : pips;
+  return `<svg class="som-light-svg${atMax ? " som-light-svg-max" : ""}" width="${size}" height="${size}" viewBox="0 0 24 24" style="filter:drop-shadow(0 0 ${glow}px ${hex})">
     <circle cx="${cx}" cy="${cy}" r="${coreR.toFixed(2)}" fill="${hex}"/>
-    ${pips}
+    ${pipsBlock}
   </svg>`;
 }
 
@@ -237,29 +391,27 @@ function genAccuracy(level) {
   return 0.1 + (1 - 0.1) * ((level - 1) / (MAX_GEN_LEVEL - 1));
 }
 
-/** 2% PAR couleur (r/g/b) au niveau 1 -> 22% PAR couleur au niveau max
- * (retour utilisateur round 7: "la proba du générateur peut évoluer jusqu'à
- * 12% de chances au niveau max de générateur blanc [fragment], donc les
- * probas des 3 couleurs + blanc passent à terme à 22% chacune au niveau
- * max") pour le générateur BLANC — le blanc lui-même n'est PAS tiré
- * explicitement, il retombe en reste (voir rollGeneratorOutcome): à un
- * niveau donné, blanc = 1 - 3×each - fragmentDropChance(level). Au niveau
- * max ça vaut exactement 1 - 3×0.22 - 0.12 = 0.22 — les 4 issues "lumière"
- * ET le morceau de générateur (voir fragmentDropChance ci-dessous) forment
- * ENSEMBLE un seul tirage à 5 issues qui somme à 100% (4×22%+12%=100%). */
-function whiteGenColorChance(level) {
-  return 0.02 + (0.22 - 0.02) * ((level - 1) / (MAX_GEN_LEVEL - 1));
+/** 2% PAR couleur (r/g/b), FIXE quel que soit le niveau — retour utilisateur
+ * round 8: "le générateur blanc finalement progresse sur sa distribution
+ * SANS augmenter les probabilités de sortir des couleurs" (revient sur le
+ * round 7, où ces probas montaient jusqu'à 22%). Le blanc lui-même n'est
+ * PAS tiré explicitement, il retombe en reste (voir rollGeneratorOutcome):
+ * blanc = 1 - 3×each - fragmentDropChance(level). Comme fragmentDropChance
+ * grandit avec le niveau alors que ce taux-ci reste fixe, seul le morceau
+ * de générateur devient plus probable en montant de niveau — le blanc
+ * absorbe la différence (voir fragmentDropChance ci-dessous). */
+function whiteGenColorChance() {
+  return 0.02;
 }
 
-/** Chance de loot un morceau de générateur — retour utilisateur round 6:
- * "faible et très peu changer", explicitement REVU au round 7: "il faut
- * augmenter la proba du générateur... jusqu'à 12% de chances au niveau max
- * de générateur blanc". Même forme d'interpolation que whiteGenColorChance
- * (4% au niveau 1 -> 12% au niveau max), et fait partie du MÊME tirage
- * unifié qu'elle (voir rollGeneratorOutcome) — RÉSERVÉ au générateur blanc,
- * "uniquement le générateur blanc peut faire loot un générateur". */
+/** Chance de loot un morceau de générateur — SEULE proba qui progresse avec
+ * le niveau du générateur blanc désormais (retour utilisateur round 8:
+ * "morceau à 20% [au niveau max], et blanc pour le reste une fois les
+ * probas couleurs soustraites"). 4% au niveau 1 -> 20% au niveau max,
+ * RÉSERVÉ au générateur blanc — "uniquement le générateur blanc peut faire
+ * loot un générateur" (voir rollGeneratorOutcome pour le tirage unifié). */
 function fragmentDropChance(level) {
-  return 0.04 + (0.12 - 0.04) * ((level - 1) / (MAX_GEN_LEVEL - 1));
+  return 0.04 + (0.2 - 0.04) * ((level - 1) / (MAX_GEN_LEVEL - 1));
 }
 
 /** Rangs de lumière atteignables directement à la génération, selon le
@@ -446,7 +598,7 @@ export function initSommation(pointsApi) {
    * Les générateurs de COULEUR n'ont pas de morceau possible (inchangé). */
   function rollGeneratorOutcome(gen) {
     if (gen.color === "w") {
-      const each = whiteGenColorChance(gen.level);
+      const each = whiteGenColorChance();
       const frag = fragmentDropChance(gen.level);
       const roll = Math.random();
       if (roll < each) return { kind: "light", ch: COLOR_CH.r };
@@ -467,7 +619,7 @@ export function initSommation(pointsApi) {
   function spawnRatiosChart(gen) {
     let segments;
     if (gen.color === "w") {
-      const each = whiteGenColorChance(gen.level);
+      const each = whiteGenColorChance();
       const frag = fragmentDropChance(gen.level);
       segments = [
         { hex: hexFor(COLOR_CH.r) || "#7b869c", pct: each, label: "Rouge" },
@@ -587,6 +739,12 @@ export function initSommation(pointsApi) {
     board[bCell.r][bCell.c] = { type: "gen", color: b.color, level: newLevel };
     board[aCell.r][aCell.c] = null;
     playSynapseRestore();
+    // Retour utilisateur round 8: "lorsqu'on atteint le niveau max d'un
+    // générateur, il faut trouver quelque chose de similaire (son +
+    // animation)" — même son que pour une lumière au rang max (voir
+    // doLightMerge), l'animation indéfinie est gérée en CSS via la classe
+    // posée par cellHtml()/neuronSvg() (voir style.css: .som-gen-halo).
+    if (newLevel >= MAX_GEN_LEVEL) playChargeFull();
     return { ok: true, resultCell: bCell, fx: "merge" };
   }
 
@@ -602,10 +760,28 @@ export function initSommation(pointsApi) {
       board[bCell.r][bCell.c] = { type: "light", ch: a.ch, tier: a.tier + 1 };
       board[aCell.r][aCell.c] = null;
       playSynapseRestore();
+      // Retour utilisateur round 8: "lorsqu'on atteint le niveau maximum
+      // d'une lumière, on déclenche un son approprié" — réutilise
+      // playChargeFull (déjà le son "quelque chose vient de se remplir/
+      // compléter" ailleurs dans Sommation), même principe de réemploi
+      // symbolique que le reste des sons de ce fichier.
+      if (a.tier + 1 >= MAX_LIGHT_TIER) playChargeFull();
       return { ok: true, resultCell: bCell, fx: "merge" };
     }
+    // Mélange: retour utilisateur round 8 — SEULES deux couleurs PURES
+    // différentes peuvent se mélanger. Le blanc ("la fusion entre du blanc
+    // et une couleur doit être impossible") et les couleurs déjà mélangées
+    // ("la fusion entre une couleur fusionnée et une autre... ça retourne
+    // sur du blanc, inutile ou frustrant") sont désormais rejetées — voir
+    // isPureColor(). Échange plutôt que rejet, comme les autres cas.
+    if (!isPureColor(a.ch) || !isPureColor(b.ch)) {
+      return { ok: false };
+    }
     const mixed = mixChannels(a.ch, b.ch);
-    const tier = Math.max(a.tier, b.tier);
+    // Retour utilisateur round 8: la lumière fusionnée prend le rang le
+    // PLUS BAS des deux (pas le plus haut) — nerf du mélange, qui servait
+    // auparavant à "gratter" un rang élevé en sacrifiant une lumière faible.
+    const tier = Math.min(a.tier, b.tier);
     board[bCell.r][bCell.c] = { type: "light", ch: mixed, tier };
     board[aCell.r][aCell.c] = null;
     playSynapseRestore();
@@ -624,24 +800,32 @@ export function initSommation(pointsApi) {
     return { ok: true, resultCell: fragCell, fx: "merge" };
   }
 
+  /** Une exigence "light" (les 50 objectifs normaux) ou "generator" (le 51e,
+   * objectif final — voir buildObjectiveScript/genReq) satisfaite par cet
+   * item du plateau. */
+  function matchesRequirement(item, r) {
+    if (r.fulfilled >= r.qty) return false;
+    if (r.kind === "generator") return item.type === "gen" && item.color === r.color && item.level >= r.level;
+    return item.type === "light" && sameChannels(item.ch, COLOR_CH[r.color]) && item.tier === r.tier;
+  }
+
   /** Nourrir l'objectif — retour utilisateur: "l'objectif est multiple et
    * précis" (exigences exactes couleur+rang) ET "on doit pouvoir nourrir
    * l'objectif avec les générateurs mais ça ne rapporte rien du tout, ça
-   * sert à libérer de l'espace si on veut". Donc: un générateur ou un
-   * morceau déposé ici est TOUJOURS juste recyclé (aucun effet sur les
-   * exigences) ; une lumière qui correspond à une exigence en cours la fait
-   * progresser (succès), une lumière qui ne correspond à rien est recyclée
-   * (échec visuel — voir fx 'obj-fail' — mais sans pénalité réelle). */
+   * sert à libérer de l'espace si on veut" — SAUF sur l'objectif FINAL, où
+   * un générateur au niveau max EST justement ce qui est demandé (voir
+   * matchesRequirement). Une lumière qui ne correspond à rien, ou un
+   * générateur/morceau hors du cas final, est recyclé (échec visuel — voir
+   * fx 'obj-fail'/'obj-recycle' — mais sans pénalité réelle). */
   function doDropOnObjective(coord) {
     const item = board[coord.r][coord.c];
-    if (item.type !== "light") {
-      board[coord.r][coord.c] = null;
-      playChargeEmptied();
-      return { ok: true, fx: "obj-recycle" };
-    }
-    const req = objectiveState.requirements.find((r) => r.fulfilled < r.qty && sameChannels(item.ch, COLOR_CH[r.color]) && item.tier === r.tier);
+    const req = objectiveState.requirements.find((r) => matchesRequirement(item, r));
     board[coord.r][coord.c] = null;
     if (!req) {
+      if (item.type !== "light") {
+        playChargeEmptied();
+        return { ok: true, fx: "obj-recycle" };
+      }
       playTargetLost();
       return { ok: true, fx: "obj-fail" };
     }
@@ -654,8 +838,14 @@ export function initSommation(pointsApi) {
     const allDone = objectiveState.requirements.every((r) => r.fulfilled >= r.qty);
     if (allDone) {
       meta.objectivesCompleted += 1;
-      const completedIndex = objectiveIndex;
-      if (!meta.badges.includes(completedIndex)) meta.badges.push(completedIndex);
+      // Retour utilisateur round 8: la barre du haut ne suit plus l'objectif
+      // COURANT mais une progression SUPÉRIEURE (paliers de 10 objectifs
+      // réussis, 11 pour le dernier) — voir BADGE_THRESHOLDS/currentBadgeTierIndex.
+      // Un objectif ne peut faire franchir qu'UN SEUL palier à la fois.
+      const newTierIndex = BADGE_THRESHOLDS.indexOf(meta.objectivesCompleted);
+      if (newTierIndex !== -1 && !meta.badgeTiers.includes(newTierIndex)) {
+        meta.badgeTiers.push(newTierIndex);
+      }
       saveMeta(meta);
       objectiveIndex = (objectiveIndex + 1) % OBJECTIVE_SCRIPT.length;
       objectiveState = cloneObjective(OBJECTIVE_SCRIPT[objectiveIndex]);
@@ -663,7 +853,7 @@ export function initSommation(pointsApi) {
       return { ok: true, fx: "obj-complete" };
     }
     playTargetSuccess();
-    return { ok: true, fx: "obj-progress", reqColor: req.color, reqTier: req.tier, orbIndex };
+    return { ok: true, fx: "obj-progress", reqColor: req.color, reqKind: req.kind, reqTier: req.tier, orbIndex };
   }
 
   // ---------- Glisser-déposer (Pointer Events, souris + tactile) ----------
@@ -691,8 +881,14 @@ export function initSommation(pointsApi) {
     if (!srcCell) return null;
 
     if (target?.objective) {
-      if (srcCell.type !== "light") return { valid: true, label: "Recycler (aucun gain)" };
-      const req = objectiveState.requirements.find((r) => r.fulfilled < r.qty && sameChannels(srcCell.ch, COLOR_CH[r.color]) && srcCell.tier === r.tier);
+      // Générateur/morceau: recyclage par défaut — SAUF sur l'objectif
+      // final, où un générateur au niveau max EST l'exigence (voir
+      // matchesRequirement/genReq).
+      if (srcCell.type !== "light") {
+        const genReqMatch = srcCell.type === "gen" && objectiveState.requirements.find((r) => matchesRequirement(srcCell, r));
+        return genReqMatch ? { valid: true, label: "Nourrir l'objectif" } : { valid: true, label: "Recycler (aucun gain)" };
+      }
+      const req = objectiveState.requirements.find((r) => matchesRequirement(srcCell, r));
       return req ? { valid: true, label: "Nourrir l'objectif" } : { valid: false, label: "Ne correspond à rien — recyclage" };
     }
     if (!target || (target.r === src.r && target.c === src.c)) return null;
@@ -727,8 +923,12 @@ export function initSommation(pointsApi) {
         if (srcCell.tier >= MAX_LIGHT_TIER) return { valid: true, label: "Échanger (rang déjà maximum)" };
         return { valid: true, label: `Fusionner → rang ${srcCell.tier + 1}` };
       }
+      // Mélange réservé à deux couleurs PURES différentes (voir
+      // doLightMerge/isPureColor) — blanc ou couleur déjà mélangée: échange.
+      if (!isPureColor(srcCell.ch) || !isPureColor(dst.ch)) return { valid: true, label: "Échanger les positions" };
       const mixed = mixChannels(srcCell.ch, dst.ch);
-      return { valid: true, label: `Mélanger → ${COLOR_NAMES[letterForChannels(mixed)]}` };
+      const mixTier = Math.min(srcCell.tier, dst.tier);
+      return { valid: true, label: `Mélanger → ${COLOR_NAMES[letterForChannels(mixed)]} (rang ${mixTier})` };
     }
     if ((srcCell.type === "light" && dst.type === "frag") || (srcCell.type === "frag" && dst.type === "light")) {
       const light = srcCell.type === "light" ? srcCell : dst;
@@ -745,7 +945,7 @@ export function initSommation(pointsApi) {
     if (target?.objective) {
       const outcome = doDropOnObjective(src);
       if (outcome?.fx) {
-        pendingFx = { type: outcome.fx, reqColor: outcome.reqColor, reqTier: outcome.reqTier, orbIndex: outcome.orbIndex };
+        pendingFx = { type: outcome.fx, reqColor: outcome.reqColor, reqKind: outcome.reqKind, reqTier: outcome.reqTier, orbIndex: outcome.orbIndex };
       }
       return;
     }
@@ -941,7 +1141,11 @@ export function initSommation(pointsApi) {
       // Retour utilisateur: le sous-objectif rempli "s'illumine" — on anime
       // PRÉCISÉMENT le cercle concerné plutôt que toute la case objectif
       // (voir doDropOnObjective()/objectiveHtml()).
-      const reqEl = gridEl.querySelector(`.som-obj-req[data-color="${fx.reqColor}"][data-tier="${fx.reqTier}"]`);
+      const reqSelector =
+        fx.reqKind === "generator"
+          ? `.som-obj-req[data-color="${fx.reqColor}"][data-kind="generator"]`
+          : `.som-obj-req[data-color="${fx.reqColor}"][data-tier="${fx.reqTier}"]`;
+      const reqEl = gridEl.querySelector(reqSelector);
       const orbEl = reqEl?.querySelectorAll(".som-obj-orb")[fx.orbIndex];
       if (!orbEl) return;
       orbEl.classList.add("som-fx-orb-fill");
@@ -967,17 +1171,27 @@ export function initSommation(pointsApi) {
 
   // ---------- Rendu ----------
 
+  // Retour utilisateur round 8: "plutôt qu'écrire nv10, on écrit nvMax.
+  // D'ailleurs plutôt que Nv, on préfère choisir l'anglais par défaut, donc
+  // lvl" — un seul point de vérité pour ce libellé, réutilisé pour les
+  // générateurs ET les lumières (mêmes bornes de "max" différentes: voir
+  // appels ci-dessous).
+  function lvlLabel(n, max) {
+    return n >= max ? "lvlMax" : `lvl${n}`;
+  }
+
   function cellHtml(r, c) {
     const cell = board[r][c];
     if (!cell) return "";
     if (cell.type === "gen") {
+      const atMax = cell.level >= MAX_GEN_LEVEL;
       const badge = cell.color === "w" ? "" : `<span class="som-badge">${Math.round(genAccuracy(cell.level) * 100)}%</span>`;
-      return `${neuronSvg(cell.color)}${badge}<span class="som-badge som-badge-lvl">Nv${cell.level}</span>`;
+      return `${neuronSvg(cell.color, 22, atMax)}${badge}<span class="som-badge som-badge-lvl">${lvlLabel(cell.level, MAX_GEN_LEVEL)}</span>`;
     }
     if (cell.type === "light") {
       // Design "flagrant" (retour utilisateur) — voir lightSvg(): un pip
       // radial par rang, pas seulement un changement de taille.
-      return `${lightSvg(cell.ch, cell.tier)}<span class="som-badge som-badge-lvl">nv${cell.tier}</span>`;
+      return `${lightSvg(cell.ch, cell.tier)}<span class="som-badge som-badge-lvl">${lvlLabel(cell.tier, MAX_LIGHT_TIER)}</span>`;
     }
     if (cell.type === "frag") return fragmentSvg();
     return "";
@@ -1005,9 +1219,20 @@ export function initSommation(pointsApi) {
     // requise (qty), qui "s'illumine" (prend l'apparence d'une lumière,
     // couleur pleine + halo) une fois cette unité fournie. Voir
     // doDropOnObjective()/playPendingFx() pour l'animation d'illumination.
+    // L'objectif FINAL (kind "generator", voir buildObjectiveScript) affiche
+    // à la place un petit neurone par exigence, qui s'illumine pareil.
     const groups = objectiveState.requirements
       .map((r) => {
         const hex = hexFor(COLOR_CH[r.color]) || "#fbfcff";
+        if (r.kind === "generator") {
+          const filled = r.fulfilled >= r.qty;
+          return `<div class="som-obj-req" data-color="${r.color}" data-kind="generator">
+            <div class="som-obj-orbs">
+              <span class="som-obj-orb som-obj-orb-gen${filled ? " som-obj-orb-filled" : ""}" style="--som-obj-color:${hex}">${neuronSvg(r.color, 13)}</span>
+            </div>
+            <span class="som-obj-req-tier">lvlMax</span>
+          </div>`;
+        }
         let orbs = "";
         for (let i = 0; i < r.qty; i++) {
           const filled = i < r.fulfilled;
@@ -1015,7 +1240,7 @@ export function initSommation(pointsApi) {
         }
         return `<div class="som-obj-req" data-color="${r.color}" data-tier="${r.tier}">
           <div class="som-obj-orbs">${orbs}</div>
-          <span class="som-obj-req-tier">nv${r.tier}</span>
+          <span class="som-obj-req-tier">${lvlLabel(r.tier, MAX_LIGHT_TIER)}</span>
         </div>`;
       })
       .join("");
@@ -1061,19 +1286,23 @@ export function initSommation(pointsApi) {
     if (pointsEl) pointsEl.textContent = `${pointsApi.getPoints()} pt`;
 
     if (progressFillEl || progressLabelEl) {
-      // Barre + texte "x/y" en haut — retour utilisateur: "on garde
-      // uniquement la barre de progression en haut, avec un x/y". Reflète
-      // l'exigence totale (somme fulfilled/qty) de l'objectif EN COURS: le
-      // remplir déclenche toujours une récompense (badge nouveau ou déjà
-      // connu) — la galerie de badges en bas est retirée (retour
-      // utilisateur: "les informations sur les objectifs remplis ne
-      // doivent pas être en bas, on les retire").
-      let total = 0;
-      let done = 0;
-      objectiveState.requirements.forEach((r) => {
-        total += r.qty;
-        done += Math.min(r.fulfilled, r.qty);
-      });
+      // Barre + texte "x/y" en haut — retour utilisateur round 8: "la barre
+      // de progression en haut ne doit pas représenter la progression de
+      // l'objectif courant, mais une progression supérieure qui avance à
+      // chaque fois qu'on remplit les objectifs" (paliers de 10 objectifs
+      // réussis, voir BADGE_THRESHOLDS/currentBadgeTierIndex) — remplace
+      // l'ancien calcul (fulfilled/qty de l'objectif affiché).
+      const tierIndex = currentBadgeTierIndex(meta);
+      let total;
+      let done;
+      if (tierIndex >= BADGE_THRESHOLDS.length) {
+        total = BADGE_THRESHOLDS.length;
+        done = BADGE_THRESHOLDS.length;
+      } else {
+        const prevThreshold = tierIndex === 0 ? 0 : BADGE_THRESHOLDS[tierIndex - 1];
+        total = BADGE_THRESHOLDS[tierIndex] - prevThreshold;
+        done = meta.objectivesCompleted - prevThreshold;
+      }
       if (progressFillEl) progressFillEl.style.width = `${total > 0 ? Math.round((done / total) * 100) : 0}%`;
       if (progressLabelEl) progressLabelEl.textContent = `${done}/${total}`;
     }
