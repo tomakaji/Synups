@@ -758,6 +758,31 @@ body {
   animation: points-pulse 0.5s ease-out;
 }
 
+/* Bouton de test Sommation ("+500 pts") — retour utilisateur: "un petit
+   bouton flottant quelque part (tout en haut)". Placé DANS le header plutôt
+   qu'en position:fixed pour rester "tout en haut" sans jamais chevaucher le
+   bouton mute global (voir .global-mute-btn) — même langage visuel discret
+   que .floating-editor-btn (bordure pointillée, opacité réduite: signal
+   "outil de dev", pas une vraie feature de jeu). */
+.som-debug-btn {
+  font-size: 0.66rem;
+  color: var(--text-dim);
+  background: var(--panel);
+  border: 1px dashed #3a3550;
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+  opacity: 0.6;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.som-debug-btn:hover {
+  opacity: 1;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 @keyframes points-pulse {
   0% {
     transform: scale(1);
@@ -2417,4 +2442,551 @@ body {
 .profile-avatar-btn.active {
   border-color: var(--accent);
   background: rgba(110, 231, 255, 0.08);
+}
+
+/* ---------- Sommation (mode bonus, prototype de test) ---------- */
+/* Même coquille mobile que #view-community/#view-editor: hauteur bornée au
+   viewport + une seule zone qui défile (ici .som-board-wrap), pour que le
+   plateau ne pousse jamais le header hors écran sur petit format. */
+#view-sommation {
+  height: 100vh;
+  overflow: hidden;
+  margin-top: -24px;
+  margin-bottom: -48px;
+}
+
+/* Barre de progression vers la prochaine récompense (badge) — remplace
+   l'ancien texte "Objectifs complétés : N" (retour utilisateur: "en haut
+   une barre de progression jusqu'à obtention d'une récompense"). Reflète la
+   part remplie de l'objectif EN COURS (somme fulfilled/qty): le vider
+   déclenche toujours une récompense, nouvelle ou déjà connue — voir
+   sommation.js: render(). */
+.som-progress-wrap {
+  width: min(360px, 90vw);
+  margin: 6px auto 0;
+  flex-shrink: 0;
+}
+
+.som-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.som-badge-progress {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(160, 178, 230, 0.15);
+  overflow: hidden;
+}
+
+.som-badge-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), #ffe066);
+  transition: width 0.35s ease-out;
+}
+
+/* "x/y" — retour utilisateur: "avec un x/y par exemple 0/20 pour le premier
+   badge" — remplace la galerie de badges qui était en bas. */
+.som-badge-progress-label {
+  font-size: 0.62rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.som-board-wrap {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+
+.som-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 6px;
+  width: min(360px, 90vw);
+  aspect-ratio: 1;
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.som-cell {
+  border-radius: 6px;
+  border: 1px solid rgba(160, 178, 230, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: grab;
+  /* Indispensable pour que les Pointer Events de glisser (voir
+     sommation.js: startDrag/onDragMove) reçoivent bien les mouvements du
+     doigt au lieu que le navigateur les intercepte pour faire défiler la
+     page (comportement tactile par défaut sur un élément draggable). */
+  touch-action: none;
+}
+
+.som-cell.som-empty {
+  border-style: dashed;
+  cursor: default;
+}
+
+/* Case verrouillée (2 dernières lignes au départ) — retour utilisateur:
+   "verrouillées et à débloquer en les achetant une par une". Pas de
+   glisser possible (voir sommation.js: render()/tryUnlock), juste un tap
+   qui tente le déblocage. */
+.som-cell.som-locked {
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.18);
+  border-style: dotted;
+  opacity: 0.6;
+}
+
+.som-cell.som-selected {
+  border-color: var(--accent);
+  border-width: 2px;
+}
+
+/* Case survolée pendant un glisser en cours — verte si le dépôt serait
+   valide, rouge sinon (retour utilisateur: "au survol, pour prévisualiser
+   ce qui va se passer") — voir sommation.js: onDragMove/predictDrop(). */
+.som-cell.som-drop-hover-valid {
+  border-color: var(--success);
+  border-width: 2px;
+  background: rgba(103, 232, 160, 0.12);
+}
+
+.som-cell.som-drop-hover-invalid {
+  border-color: var(--error);
+  border-width: 2px;
+  background: rgba(255, 107, 107, 0.1);
+}
+
+/* La case source reste visible mais estompée pendant qu'on la glisse (le
+   "ghost" flottant, voir .som-drag-ghost, porte la vraie représentation). */
+.som-cell.som-drag-source {
+  opacity: 0.35;
+}
+
+/* Élément flottant qui suit le doigt/curseur pendant un glisser — ajouté
+   directement à <body>, positionné en fixed via left/top mis à jour à
+   chaque pointermove (voir sommation.js). */
+.som-drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 999;
+  background: var(--panel);
+  box-shadow: none;
+  opacity: 0.9;
+}
+
+/* Bulle d'aperçu textuel qui suit le glisser (voir sommation.js:
+   predictDrop) — "Fusionner → rang 2", "Déplacer ici", "Ne correspond à
+   rien — recyclage", etc. */
+.som-drag-preview {
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  z-index: 1000;
+  background: var(--panel);
+  border: 1px solid var(--success);
+  color: var(--text);
+  font-size: 0.62rem;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.som-drag-preview-invalid {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+/* ---------- Animations (fusion/déplacement/objectif) ---------- */
+/* Retour utilisateur: "une animation lorsqu'on fusionne des objets" +
+   "animation lorsqu'on essaye de remplir l'objectif pour savoir si ça a
+   réussi ou échoué" + "animation de réussite... en transition vers le
+   prochain objectif" — voir sommation.js: pendingFx/playPendingFx(). */
+
+@keyframes som-pulse-merge {
+  0% {
+    box-shadow: 0 0 0 0 rgba(110, 231, 255, 0.65);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(110, 231, 255, 0);
+  }
+}
+.som-fx-merge {
+  animation: som-pulse-merge 0.5s ease-out;
+}
+
+@keyframes som-pulse-move {
+  0% {
+    background: rgba(110, 231, 255, 0.28);
+  }
+  100% {
+    background: transparent;
+  }
+}
+.som-fx-move {
+  animation: som-pulse-move 0.4s ease-out;
+}
+
+/* Apparition d'un nouvel élément (lumière générée, morceau tombé, case
+   nouvellement débloquée) — distinct de la fusion (pop-in depuis rien
+   plutôt qu'un halo sur un élément déjà là). Voir sommation.js:
+   spawnFromSelected()/tryUnlock() (fx type "spawn"). */
+@keyframes som-pulse-spawn {
+  0% {
+    transform: scale(0.25);
+    opacity: 0;
+  }
+  65% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.som-fx-spawn {
+  animation: som-pulse-spawn 0.35s ease-out;
+}
+
+@keyframes som-shake-fail {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+.som-fx-obj-fail {
+  animation: som-shake-fail 0.4s ease-in-out;
+  border-color: var(--error) !important;
+}
+
+@keyframes som-pulse-complete {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 224, 102, 0.75);
+  }
+  40% {
+    transform: scale(1.09);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 20px rgba(255, 224, 102, 0);
+  }
+}
+.som-fx-obj-complete {
+  animation: som-pulse-complete 0.7s ease-out;
+}
+
+@keyframes som-pulse-recycle {
+  0% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+.som-fx-obj-recycle {
+  animation: som-pulse-recycle 0.35s ease-out;
+}
+
+.som-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 3px;
+  font-size: 0.5rem;
+  color: var(--text-dim);
+}
+
+.som-badge.som-badge-lvl {
+  bottom: auto;
+  right: auto;
+  top: 2px;
+  left: 3px;
+}
+
+/* Rendu "flagrant" des lumières (retour utilisateur) — voir sommation.js:
+   lightSvg(): un pip radial par rang, halo statique (drop-shadow inline)
+   qui grandit avec le rang. Le "souffle" de vie ci-dessous n'anime que la
+   TRANSFORM (jamais filter) pour ne pas écraser ce halo statique. */
+.som-light-svg {
+  animation: som-idle-breathe 2.4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes som-idle-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+/* Lueur douce continue sur le cœur des générateurs (neurone) uniquement —
+   voir sommation.js: neuronSvg() (classe .som-gen-svg). */
+@keyframes som-idle-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 1px currentColor);
+  }
+  50% {
+    filter: drop-shadow(0 0 5px currentColor);
+  }
+}
+.som-gen-svg circle[fill] {
+  animation: som-idle-glow 3.2s ease-in-out infinite;
+}
+
+/* Léger frétillement du morceau de générateur (contour pointillé) en
+   attente — suggère une pièce instable/incomplète. */
+@keyframes som-frag-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.som-cell svg[stroke-dasharray] {
+  animation: som-frag-spin 9s linear infinite;
+  transform-origin: center;
+}
+
+/* Objectif: cellule spéciale 2x2, toujours en haut à gauche de la grille
+   (voir sommation.js: OBJ_R0/OBJ_C0/isReserved) — intégrée au plateau
+   plutôt que décrite dans une barre séparée (retour utilisateur). */
+.som-objective {
+  grid-column: span 2;
+  grid-row: span 2;
+  border: 1.5px solid var(--accent);
+  border-radius: 12px;
+  background: radial-gradient(circle, rgba(110, 231, 255, 0.06), transparent 70%);
+  padding: 6px;
+  cursor: default;
+  touch-action: auto;
+}
+
+/* Exigences précises (couleur + rang) — retour utilisateur: "dessiner juste
+   le cercle vide de la couleur voulue et afficher le niveau voulu en
+   dessous"; un cercle par unité requise (qty), qui "s'illumine" (prend
+   l'apparence d'une lumière) une fois fournie — voir sommation.js:
+   objectiveHtml()/doDropOnObjective(). */
+.som-obj-reqs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.som-obj-req {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.som-obj-orbs {
+  display: flex;
+  gap: 3px;
+}
+
+.som-obj-orb {
+  /* Retour utilisateur: "les objectifs sont très petits donc peu lisibles"
+     — agrandi nettement par rapport à la première version (13px). */
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--som-obj-color, #7b869c);
+  background: transparent;
+  box-sizing: border-box;
+  transition: background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.som-obj-orb-filled {
+  background: var(--som-obj-color, #7b869c);
+  box-shadow: 0 0 7px var(--som-obj-color, transparent);
+}
+
+.som-obj-req-tier {
+  /* Retour utilisateur: "surtout le niveau voulu" — texte agrandi et mis en
+     avant (couleur pleine + gras) plutôt que discret comme avant. */
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+
+/* Animation d'illumination d'un cercle précis au moment où il se remplit
+   (voir sommation.js: playPendingFx(), fx type "obj-progress"). */
+@keyframes som-orb-fill-pop {
+  0% {
+    transform: scale(0.5);
+  }
+  55% {
+    transform: scale(1.4);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.som-fx-orb-fill {
+  animation: som-orb-fill-pop 0.4s ease-out;
+}
+
+/* Réceptacles de déblocage d'une case verrouillée — retour utilisateur:
+   "on peut afficher 4 cercles réceptacles sous le cadenas, petits et sans
+   label" — mêmes principes que .som-obj-orb (voir plus haut) mais en plus
+   petit et SANS le texte de rang en dessous (le niveau requis se déduit,
+   il n'est plus affiché — voir sommation.js: lockedCellHtml()). Affichés
+   UNIQUEMENT sur la case active (la prochaine à débloquer, gauche à droite
+   — voir activeLockKey()) ; les autres cases verrouillées restent un simple
+   cadenas nu. */
+.som-lock-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.som-lock-orbs {
+  display: flex;
+  gap: 2px;
+  margin-top: 3px;
+}
+
+.som-lock-orb {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--som-lock-color, #7b869c);
+  background: transparent;
+  box-sizing: border-box;
+  transition: background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.som-lock-orb-filled {
+  background: var(--som-lock-color, #7b869c);
+  box-shadow: 0 0 5px var(--som-lock-color, transparent);
+}
+
+/* Retour utilisateur: "enlève tout texte explicatif dans le bas de l'écran,
+   on veut garder le mystère" — #sommation-hint et setHint() ont été retirés
+   de sommation.js/index.html ; .som-hint n'existe plus dans le DOM. */
+
+.som-spawn-info {
+  width: min(360px, 90vw);
+  /* Retour utilisateur: "un peu de marge en bas... c'est trop collé au
+     bouton générer" — marge basse ajoutée avant .som-actions. */
+  margin: 6px auto 16px;
+  display: flex;
+  justify-content: center;
+  min-height: 1.4em;
+}
+
+.som-spawn-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Camembert de probabilités de spawn — retour utilisateur: "un graphique
+   fromage plutôt que des informations écrites, avec juste les couleurs,
+   c'est suffisant". Voir sommation.js: spawnRatiosChart(). Agrandi (retour
+   utilisateur: "on peut augmenter un peu la taille du fromage pour que ça
+   soit plus lisible") pour laisser respirer la légende à côté. */
+.som-spawn-pie {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  margin-top: 2px;
+  border-radius: 50%;
+  border: 1px solid rgba(160, 178, 230, 0.25);
+  animation: som-pulse-spawn 0.3s ease-out;
+}
+
+/* Légende en colonne À CÔTÉ du camembert (retour utilisateur: "ajoute une
+   légende des probas en colonne à droite... ça ne prenne pas plus que la
+   hauteur du fromage") — texte minuscule pour tenir jusqu'à 5 lignes
+   (couleurs + "???" pour le morceau de générateur) dans cette hauteur. */
+.som-spawn-legend {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  max-height: 52px;
+  overflow: hidden;
+}
+
+.som-spawn-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.58rem;
+  line-height: 1.15;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.som-spawn-legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  box-sizing: border-box;
+}
+
+.som-spawn-legend-pct {
+  margin-left: auto;
+  padding-left: 6px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.som-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+}
+
+.som-actions .options-btn {
+  flex: 1;
+  min-width: 140px;
+}
+
+.som-actions .options-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }

@@ -246,3 +246,21 @@ export async function playChargeOverload() {
   soft.triggerAttackRelease("F3", "16n", now, ERROR_SFX_VELOCITY);
   tone.triggerAttackRelease("F#3", "16n", now + 0.02, ERROR_SFX_VELOCITY);
 }
+
+// --- Sommation (mode bonus): génération de lumière ------------------------
+// Son dédié, volontairement TRÈS court et étouffé (filtre passe-bas + volume
+// bas) car cette action peut être spammée (bouton "Générer" dans
+// sommation.js) — contrairement aux autres sons de ce fichier, réutilisés
+// tels quels de façon symbolique par Sommation pour rappeler le jeu de base,
+// celui-ci est neuf pour ne pas fatiguer l'oreille en rafale.
+const sommationGenerateFilter = new Tone.Filter({ frequency: 900, type: "lowpass" }).connect(delay);
+const sommationGenerateSynth = new Tone.Synth({
+  oscillator: { type: "sine" },
+  envelope: { attack: 0.004, decay: 0.08, sustain: 0, release: 0.08 },
+  volume: -24,
+}).connect(sommationGenerateFilter);
+
+export async function playGenerate() {
+  await ensureStarted();
+  sommationGenerateSynth.triggerAttackRelease("C5", "32n");
+}

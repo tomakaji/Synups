@@ -37,6 +37,7 @@ import {
   mirrorNeuronIcon,
 } from "./game/render.js";
 import { initEditor } from "./editor.js";
+import { initSommation } from "./sommation.js";
 import { FEATURES } from "./game/generator.js";
 import { requestLevel, ensureLevelBuffer, takeBufferedLevel } from "./game/infiniteClient.js";
 import {
@@ -196,12 +197,18 @@ let infinitePoints = loadPoints();
 const infinitePointsEl = document.getElementById("infinite-points");
 const secretsPointsEl = document.getElementById("secrets-points");
 const menuPointsBadgeEl = document.getElementById("menu-points-badge");
+// Sommation (mode bonus) partage désormais ce MÊME solde — retour
+// utilisateur: "les points dans le mode Sommation sont les mêmes que dans le
+// mode infinity". Inclus ici pour que renderPointsEverywhere() le maintienne
+// à jour aussi, quelle que soit l'écran d'où provient la dépense/le gain.
+const sommationPointsEl = document.getElementById("sommation-points");
 
 function renderPointsEverywhere() {
   const label = `${infinitePoints} pt`;
   infinitePointsEl.textContent = label;
   secretsPointsEl.textContent = label;
   menuPointsBadgeEl.textContent = label;
+  if (sommationPointsEl) sommationPointsEl.textContent = label;
 }
 
 function awardInfinitePoints(tier) {
@@ -217,6 +224,24 @@ function awardInfinitePoints(tier) {
   infinitePointsEl.classList.remove("points-gain");
   void infinitePointsEl.offsetWidth;
   infinitePointsEl.classList.add("points-gain");
+}
+
+// API générique (montant explicite plutôt que par palier) exposée à
+// Sommation — voir initSommation() plus bas — pour dépenser/injecter des
+// points dans ce MÊME solde partagé sans dupliquer sa persistance ni son
+// affichage (un seul point de vérité: infinitePoints ci-dessus).
+function spendSharedPoints(amount) {
+  if (infinitePoints < amount) return false;
+  infinitePoints -= amount;
+  savePoints(infinitePoints);
+  renderPointsEverywhere();
+  return true;
+}
+
+function addSharedPoints(amount) {
+  infinitePoints += amount;
+  savePoints(infinitePoints);
+  renderPointsEverywhere();
 }
 
 renderPointsEverywhere();
@@ -1313,6 +1338,7 @@ function setMode(next) {
 }
 
 const editorApi = initEditor({ levels });
+const sommationApi = initSommation({ getPoints: () => infinitePoints, spendPoints: spendSharedPoints, addPoints: addSharedPoints });
 
 // ---------- Navigation (pile d'écrans + bouton Retour générique) ----------
 // Prototype mono-page: tous les écrans coexistent dans le DOM, un seul est
@@ -1341,6 +1367,7 @@ const SCREEN_IDS = {
   community: "view-community",
   "community-profile": "view-community-profile",
   editor: "view-editor",
+  sommation: "view-sommation",
 };
 
 let viewStack = ["title"];
@@ -1378,6 +1405,7 @@ function showView(name, opts) {
   if (name === "community") renderCommunityFeed();
   if (name === "community-profile") renderCommunityProfile();
   if (name === "editor") editorApi.onShow();
+  if (name === "sommation") sommationApi.onShow();
   renderActiveScreen();
 }
 
@@ -1437,6 +1465,7 @@ document.getElementById("menu-community").onclick = () => pushView("community");
 document.getElementById("menu-secrets").onclick = () => pushView("secrets");
 document.getElementById("menu-options").onclick = () => pushView("options");
 document.getElementById("btn-floating-editor").onclick = () => pushView("editor");
+document.getElementById("btn-open-sommation").onclick = () => pushView("sommation");
 
 renderActiveScreen();
 renderTitleStoryProgress();
