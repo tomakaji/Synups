@@ -1,10 +1,10 @@
 // Toute la persistance (localStorage) de l'app rassemblée ici — progression
-// Histoire, réglages son/musique, thème/ambiance actifs, achats de la
-// boutique "Secrets", points. Auparavant éparpillée (POINTS_STORAGE_KEY dans
-// main.js, STORAGE_KEY dans editor.js pour les niveaux custom — celui-ci
-// reste dans editor.js, hors du périmètre de ce module) : centraliser le
-// reste évite de dupliquer le même motif try/catch à chaque nouveau réglage,
-// maintenant qu'on en ajoute beaucoup d'un coup (écran titre/options/secrets).
+// Histoire, réglages son/musique/thème PixelArt, points. Auparavant
+// éparpillée (POINTS_STORAGE_KEY dans main.js, STORAGE_KEY dans editor.js
+// pour les niveaux custom — celui-ci reste dans editor.js, hors du périmètre
+// de ce module) : centraliser le reste évite de dupliquer le même motif
+// try/catch à chaque nouveau réglage, maintenant qu'on en ajoute beaucoup
+// d'un coup (écran titre/options/Remember).
 //
 // Chaque store est indépendant (clé localStorage dédiée) plutôt qu'un seul
 // gros objet JSON : une future feature qui ajoute son propre réglage n'a pas
@@ -15,7 +15,6 @@ const KEYS = {
   points: "lightup-infinite-points", // clé pré-existante (main.js) — conservée telle quelle pour ne pas perdre le total déjà gagné par les joueurs actuels
   progress: "lightup-story-progress",
   settings: "lightup-settings",
-  purchases: "lightup-purchases",
 };
 
 function readJson(key, fallback) {
@@ -39,7 +38,7 @@ function writeJson(key, value) {
   }
 }
 
-// ---------- Points (mode Infini, dépensés dans Secrets) ----------
+// ---------- Points (mode Infini, dépensés dans Remember) ----------
 
 export function loadPoints() {
   try {
@@ -95,15 +94,18 @@ export function currentStoryIndex(completedSet, total) {
   return total - 1;
 }
 
-// ---------- Réglages (son/musique/thème/ambiance) ----------
+// ---------- Réglages (son/musique/thème PixelArt) ----------
 
 const DEFAULT_SETTINGS = {
   volume: 80, // 0-100, curseur commun sons+musique (voir main.js)
   soundMuted: false,
   musicMuted: false,
   globalMuted: false, // toggle unique "couper le son" accessible partout — voir index.html/main.js
-  theme: "synapse",
-  musicAmbiance: "signal-clair",
+  // Thème visuel PixelArt: 5e/dernière récompense de Remember (voir
+  // sommation.js: isPixelArtUnlocked). Le toggle n'est exposé dans Options
+  // qu'une fois débloqué, mais la valeur peut techniquement persister à
+  // false même avant déverrouillage (pas de risque, juste inerte).
+  pixelartEnabled: false,
 };
 
 export function loadSettings() {
@@ -115,29 +117,8 @@ export function saveSettings(settings) {
   writeJson(KEYS.settings, settings);
 }
 
-// ---------- Achats boutique "Secrets" ----------
-// Le thème et l'ambiance musicale PAR DÉFAUT ("synapse"/"signal-clair") sont
-// implicitement toujours possédés (jamais dans ces listes, jamais achetables
-// — voir SHOP_ITEMS dans main.js) : seuls les items payants y apparaissent
-// une fois débloqués.
-
-export function loadPurchases() {
-  const data = readJson(KEYS.purchases, { themes: [], musicAmbiances: [] });
-  return {
-    themes: new Set(Array.isArray(data.themes) ? data.themes : []),
-    musicAmbiances: new Set(Array.isArray(data.musicAmbiances) ? data.musicAmbiances : []),
-  };
-}
-
-export function savePurchases(purchases) {
-  writeJson(KEYS.purchases, {
-    themes: Array.from(purchases.themes),
-    musicAmbiances: Array.from(purchases.musicAmbiances),
-  });
-}
-
-/** Efface TOUTE la sauvegarde (progression, réglages, achats, points) — voir
- * le bouton "Réinitialiser le jeu" dans Options. Ne touche PAS aux niveaux
+/** Efface TOUTE la sauvegarde (progression, réglages, points) — voir le
+ * bouton "Réinitialiser le jeu" dans Options. Ne touche PAS aux niveaux
  * custom de l'éditeur (STORAGE_KEY dans editor.js): l'éditeur est un outil
  * de développement séparé du jeu tel que vécu par le joueur. */
 export function eraseAllProgress() {

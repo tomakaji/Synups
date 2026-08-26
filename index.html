@@ -4,9 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
     <title>Synups</title>
+    <!-- Police pixel pour le thème PixelArt (5e/dernière récompense de
+         Remember, voir style.css: body.theme-pixelart) — chargée d'office
+         mais SANS impact visuel tant que le thème n'est pas activé
+         (font-family n'est appliquée que sous cette classe). Repli sur
+         Courier New/monospace si le réseau est indisponible. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
-  <body data-theme="synapse">
+  <body>
     <div id="app">
       <!-- Bouton mute global: PAS un écran, visible en permanence au-dessus de
            tous les autres (voir style.css: position fixed) — coupe/rétablit
@@ -73,13 +81,13 @@
             <span class="menu-card-sub">Crée, partage et joue les grilles des autres joueurs</span>
           </button>
 
-          <button id="menu-secrets" class="menu-card menu-card--secrets">
+          <button id="menu-remember" class="menu-card menu-card--remember">
             <span class="menu-card-top">
               <svg viewBox="0 0 24 24" class="menu-card-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="7.5" cy="15.5" r="5.5"></circle>
                 <path d="M11.6 11.6 21 2.3M21 2.3v5M21 2.3h-5M15 7l3 3"></path>
               </svg>
-              <span class="menu-card-label">Secrets</span>
+              <span class="menu-card-label">Remember</span>
             </span>
             <span id="menu-points-badge" class="menu-card-sub menu-card-points">0 pt</span>
           </button>
@@ -265,6 +273,17 @@
             </div>
           </div>
 
+          <!-- 5e/dernière récompense de Remember (voir sommation.js:
+               isPixelArtUnlocked, main.js: renderPixelArtOption) — retour
+               utilisateur: "présent dès le début en grisé sous le nom de
+               'Remember ?'". Le contenu réel (nom, hint, bouton actif) n'est
+               révélé qu'une fois débloqué, voir renderPixelArtOption(). -->
+          <div id="options-pixelart-section" class="options-section">
+            <span id="options-pixelart-label" class="options-label">Remember ?</span>
+            <button id="btn-pixelart-toggle" class="options-btn" disabled>Verrouillé</button>
+            <p id="options-pixelart-hint" class="options-hint">Débloqué à la 5e récompense de Remember.</p>
+          </div>
+
           <div class="options-section">
             <span class="options-label">Le jeu</span>
             <button id="btn-buy-game" class="options-btn options-btn--accent">
@@ -275,49 +294,18 @@
           <div class="options-section">
             <span class="options-label">Données</span>
             <button id="btn-reset-save" class="options-btn options-btn--danger">Réinitialiser le jeu</button>
-            <p class="options-hint">Efface la progression Histoire, les points et les achats de la boutique Secrets. Impossible à annuler.</p>
+            <p class="options-hint">Efface la progression Histoire, les points et les réglages. Impossible à annuler.</p>
           </div>
         </div>
       </section>
 
-      <!-- ================= SECRETS (boutique à points) ================= -->
-      <section id="view-secrets" class="screen hidden">
-        <header class="screen-header">
-          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
-            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-          </button>
-          <h2 class="screen-title">Secrets</h2>
-          <span id="secrets-points" class="infinite-points">0 pt</span>
-        </header>
-
-        <p class="secrets-hint">Dépense les points gagnés en mode Infini pour débloquer des thèmes visuels et des ambiances sonores.</p>
-
-        <div class="shop-section">
-          <span class="options-label">Thèmes du plateau</span>
-          <div id="shop-themes" class="shop-grid"></div>
-        </div>
-
-        <div class="shop-section">
-          <span class="options-label">Ambiances musicales</span>
-          <div id="shop-music" class="shop-grid"></div>
-        </div>
-
-        <!-- Mode bonus en test (voir sommation.js): pas encore un vrai
-             gouffre à points de l'économie du jeu, juste un accès direct
-             pour prototyper la boucle de jeu. -->
-        <div class="shop-section">
-          <span class="options-label">Mode bonus (test)</span>
-          <button id="btn-open-sommation" class="options-btn options-btn--accent">Sommation</button>
-        </div>
-      </section>
-
-      <!-- ================= SOMMATION (mode bonus, prototype) ================= -->
+      <!-- ================= REMEMBER (ex-Sommation, remplace Secrets) ================= -->
       <section id="view-sommation" class="screen hidden">
         <header class="screen-header">
           <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
-          <h2 class="screen-title">Sommation</h2>
+          <h2 class="screen-title">Remember</h2>
           <span id="sommation-points" class="infinite-points">0 pt</span>
           <!-- Outil de test: injecte des points dans le solde PARTAGÉ avec
                Infini (voir main.js: spendSharedPoints/addSharedPoints) —
@@ -405,11 +393,12 @@
           <p id="profile-status" class="editor-status"></p>
         </div>
 
-        <!-- Badges Sommation (voir sommation.js: getSommationBadges) — le
-             seul "visible par les autres joueurs" que ce prototype tout
+        <!-- Badges Remember, sous forme de bannières avec le pseudo (voir
+             sommation.js: getSommationBadges, main.js: renderCommunityProfile)
+             — le seul "visible par les autres joueurs" que ce prototype tout
              local sait offrir: la même surface que le pseudo/avatar. -->
         <div class="options-section">
-          <span class="options-label">Badges Sommation</span>
+          <span class="options-label">Badges Remember</span>
           <div id="profile-sommation-badges" class="profile-badges"></div>
         </div>
 
@@ -793,7 +782,7 @@
         <div class="modal-backdrop" data-reset-modal-close></div>
         <div class="modal-card">
           <h3 class="modal-title">Réinitialiser le jeu ?</h3>
-          <p class="modal-text">Toute la progression Histoire, les points et les achats de la boutique Secrets seront définitivement effacés.</p>
+          <p class="modal-text">Toute la progression Histoire, les points et les réglages seront définitivement effacés.</p>
           <div class="modal-actions">
             <button id="btn-reset-cancel" class="options-btn" data-reset-modal-close>Annuler</button>
             <button id="btn-reset-confirm" class="options-btn options-btn--danger">Réinitialiser</button>

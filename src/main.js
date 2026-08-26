@@ -23,8 +23,6 @@ import {
   enterFailure,
   exitFailure,
   setMusicVolume,
-  setMusicAmbiance,
-  MUSIC_AMBIANCES,
 } from "./game/music.js";
 import {
   createBoardRenderer,
@@ -37,7 +35,7 @@ import {
   mirrorNeuronIcon,
 } from "./game/render.js";
 import { initEditor } from "./editor.js";
-import { initSommation, getSommationBadges } from "./sommation.js";
+import { initSommation, getSommationBadges, isPixelArtUnlocked } from "./sommation.js";
 import { FEATURES } from "./game/generator.js";
 import { requestLevel, ensureLevelBuffer, takeBufferedLevel } from "./game/infiniteClient.js";
 import {
@@ -49,8 +47,6 @@ import {
   currentStoryIndex,
   loadSettings,
   saveSettings,
-  loadPurchases,
-  savePurchases,
   eraseAllProgress,
   loadProfile,
   saveProfile,
@@ -190,14 +186,13 @@ function renderTitleStoryProgress() {
   storyProgressTextEl.textContent = `${storyProgress.size} / ${total}`;
 }
 
-// ---------- Points (gagnés en Infini, dépensés dans Secrets) ----------
+// ---------- Points (gagnés en Infini, dépensés dans Remember) ----------
 const INFINITE_POINTS_BY_TIER = { 1: 1, 2: 3, 3: 5 };
 
 let infinitePoints = loadPoints();
 const infinitePointsEl = document.getElementById("infinite-points");
-const secretsPointsEl = document.getElementById("secrets-points");
 const menuPointsBadgeEl = document.getElementById("menu-points-badge");
-// Sommation (mode bonus) partage désormais ce MÊME solde — retour
+// Sommation (mode "Remember") partage désormais ce MÊME solde — retour
 // utilisateur: "les points dans le mode Sommation sont les mêmes que dans le
 // mode infinity". Inclus ici pour que renderPointsEverywhere() le maintienne
 // à jour aussi, quelle que soit l'écran d'où provient la dépense/le gain.
@@ -206,7 +201,6 @@ const sommationPointsEl = document.getElementById("sommation-points");
 function renderPointsEverywhere() {
   const label = `${infinitePoints} pt`;
   infinitePointsEl.textContent = label;
-  secretsPointsEl.textContent = label;
   menuPointsBadgeEl.textContent = label;
   if (sommationPointsEl) sommationPointsEl.textContent = label;
 }
@@ -444,7 +438,7 @@ btnHintWatchAd.onclick = () => {
 
 renderHintUI();
 
-// ---------- Réglages persistants (son/musique/thème/ambiance) ----------
+// ---------- Réglages persistants (son/musique/thème PixelArt) ----------
 // Un seul curseur de volume commun aux sons ET à la musique (retour
 // utilisateur: "ajouter une barre de réglage volume qui regle les deux en
 // même temps pour plus de cohérence"), plus deux icônes toggle indépendantes
@@ -508,152 +502,6 @@ applyVolumes();
 // dans handleCellClick) pour qu'elles soient déjà prêtes au premier clic.
 preloadMusic();
 
-// ---------- Thèmes & ambiances (boutique "Secrets") ----------
-// Voir storage.js: le thème/l'ambiance par défaut sont toujours possédés
-// (jamais dans `purchases`, jamais dans SHOP_ITEMS ci-dessous) — seuls les
-// items PAYANTS y figurent. Chaque item coûte des points (voir
-// INFINITE_POINTS_BY_TIER: 1 à 5 pts/niveau Infini, ces prix représentent
-// donc plusieurs dizaines de niveaux résolus, cohérent avec une boutique de
-// "métaprogression" plutôt qu'un achat immédiat.
-const THEMES = {
-  synapse: { label: "Synapse", swatch: "#6ee7ff", cost: 0 },
-  reve: { label: "Rêve", swatch: "#c58bff", cost: 15 },
-  "memoire-ancienne": { label: "Mémoire ancienne", swatch: "#e8b563", cost: 15 },
-  surcharge: { label: "Surcharge", swatch: "#ff7a5c", cost: 25 },
-};
-
-// Prix des ambiances (voir music.js: MUSIC_AMBIANCES pour le contenu réel
-// de chaque preset) — "signal-clair" (par défaut, gratuite) n'a pas de prix
-// ici, cohérent avec THEMES.synapse ci-dessus.
-const MUSIC_AMBIANCE_COST = { "echo-profond": 15, "reseau-eveille": 20 };
-
-let purchases = loadPurchases();
-
-function ownsTheme(key) {
-  return key === "synapse" || purchases.themes.has(key);
-}
-function ownsAmbiance(key) {
-  return key === "signal-clair" || purchases.musicAmbiances.has(key);
-}
-
-function applyTheme(key) {
-  document.body.dataset.theme = key;
-}
-
-function applyAmbiance(key) {
-  setMusicAmbiance(key);
-}
-
-applyTheme(settings.theme);
-applyAmbiance(settings.musicAmbiance);
-
-function renderShop() {
-  const themesEl = document.getElementById("shop-themes");
-  const musicEl = document.getElementById("shop-music");
-  themesEl.innerHTML = "";
-  musicEl.innerHTML = "";
-
-  for (const [key, theme] of Object.entries(THEMES)) {
-    themesEl.appendChild(
-      buildShopItem({
-        label: theme.label,
-        cost: theme.cost,
-        owned: ownsTheme(key),
-        active: settings.theme === key,
-        swatch: theme.swatch,
-        onBuy: () => buyTheme(key, theme.cost),
-        onEquip: () => equipTheme(key),
-      })
-    );
-  }
-
-  for (const [key, ambiance] of Object.entries(MUSIC_AMBIANCES)) {
-    const cost = MUSIC_AMBIANCE_COST[key] ?? 0;
-    musicEl.appendChild(
-      buildShopItem({
-        label: ambiance.label,
-        cost,
-        owned: ownsAmbiance(key),
-        active: settings.musicAmbiance === key,
-        onBuy: () => buyAmbiance(key, cost),
-        onEquip: () => equipAmbiance(key),
-      })
-    );
-  }
-}
-
-/** Construit une carte boutique générique (thème OU ambiance): affiche soit
- * un bouton "Acheter · N pt" (grisé/désactivé si pas assez de points), soit
- * "Équiper"/"Équipé" une fois possédé — jamais les deux à la fois. */
-function buildShopItem({ label, cost, owned, active, swatch, onBuy, onEquip }) {
-  const card = document.createElement("div");
-  card.className = "shop-item" + (active ? " shop-item--active" : "");
-
-  if (swatch) {
-    const dot = document.createElement("span");
-    dot.className = "shop-item-swatch";
-    dot.style.background = swatch;
-    card.appendChild(dot);
-  }
-
-  const name = document.createElement("span");
-  name.className = "shop-item-label";
-  name.textContent = label;
-  card.appendChild(name);
-
-  const action = document.createElement("button");
-  action.className = "shop-item-btn";
-  if (!owned) {
-    action.textContent = `Débloquer · ${cost} pt`;
-    action.disabled = infinitePoints < cost;
-    action.onclick = onBuy;
-  } else if (active) {
-    action.textContent = "Équipé";
-    action.disabled = true;
-    action.classList.add("shop-item-btn--active");
-  } else {
-    action.textContent = "Équiper";
-    action.onclick = onEquip;
-  }
-  card.appendChild(action);
-
-  return card;
-}
-
-function buyTheme(key, cost) {
-  if (infinitePoints < cost) return;
-  infinitePoints -= cost;
-  savePoints(infinitePoints);
-  purchases.themes.add(key);
-  savePurchases(purchases);
-  equipTheme(key);
-  renderPointsEverywhere();
-}
-
-function equipTheme(key) {
-  settings.theme = key;
-  saveSettings(settings);
-  applyTheme(key);
-  renderShop();
-}
-
-function buyAmbiance(key, cost) {
-  if (infinitePoints < cost) return;
-  infinitePoints -= cost;
-  savePoints(infinitePoints);
-  purchases.musicAmbiances.add(key);
-  savePurchases(purchases);
-  equipAmbiance(key);
-  renderPointsEverywhere();
-}
-
-function equipAmbiance(key) {
-  settings.musicAmbiance = key;
-  saveSettings(settings);
-  applyAmbiance(key);
-  renderShop();
-}
-
 // ---------- Options: acheter le jeu (design seul) + réinitialiser ----------
 // "Débloquer la version complète": maquette volontairement sans action pour
 // l'instant (voir demande utilisateur — le paiement réel n'est pas encore
@@ -676,6 +524,54 @@ document.querySelectorAll("[data-reset-modal-close]").forEach((el) => {
 document.getElementById("btn-reset-confirm").onclick = () => {
   eraseAllProgress();
   window.location.reload();
+};
+
+// ---------- Thème PixelArt (5e et dernière récompense de Remember) ----------
+// Retour utilisateur round 10: "la 5eme et dernière récompense du jeu sera
+// un theme PixelArt de tout le jeu + menus etc activable/desactivable dans
+// Options et présent dès le début en grisé sous le nom de 'Remember ?'".
+// Voir sommation.js: isPixelArtUnlocked (badgesEarned >= 5) et style.css:
+// body.theme-pixelart pour le reskin lui-même.
+const pixelartSectionEl = document.getElementById("options-pixelart-section");
+const pixelartLabelEl = document.getElementById("options-pixelart-label");
+const btnPixelartToggle = document.getElementById("btn-pixelart-toggle");
+const pixelartHintEl = document.getElementById("options-pixelart-hint");
+
+function applyPixelArtTheme() {
+  document.body.classList.toggle("theme-pixelart", settings.pixelartEnabled === true);
+}
+applyPixelArtTheme();
+
+/** Ré-exécutée à chaque affichage d'Options (voir showView) — le
+ * déverrouillage peut survenir entre deux passages (le joueur vient de
+ * décrocher sa 5e récompense dans Remember), donc jamais figé sur un état
+ * périmé, même principe que renderLevelGrid/renderCommunityProfile. Grisé et
+ * intitulé "Remember ?" tant que verrouillé (retour utilisateur: "présent
+ * dès le début en grisé"), pour piquer la curiosité sans rien révéler. */
+function renderPixelArtOption() {
+  const unlocked = isPixelArtUnlocked();
+  pixelartSectionEl.classList.toggle("locked", !unlocked);
+  if (!unlocked) {
+    pixelartLabelEl.textContent = "Remember ?";
+    btnPixelartToggle.textContent = "Verrouillé";
+    btnPixelartToggle.disabled = true;
+    btnPixelartToggle.classList.remove("options-btn--accent");
+    pixelartHintEl.textContent = "Débloqué à la 5e récompense de Remember.";
+    return;
+  }
+  pixelartLabelEl.textContent = "Thème PixelArt";
+  btnPixelartToggle.disabled = false;
+  btnPixelartToggle.textContent = settings.pixelartEnabled ? "Activé" : "Désactivé";
+  btnPixelartToggle.classList.toggle("options-btn--accent", settings.pixelartEnabled);
+  pixelartHintEl.textContent = "Habillage rétro pour tout le jeu et les menus.";
+}
+
+btnPixelartToggle.onclick = () => {
+  if (!isPixelArtUnlocked()) return;
+  settings.pixelartEnabled = !settings.pixelartEnabled;
+  saveSettings(settings);
+  applyPixelArtTheme();
+  renderPixelArtOption();
 };
 
 // ---------- Mode Infini ----------
@@ -1279,16 +1175,38 @@ function renderCommunityProfile() {
   }
   profileLikedEmptyEl.classList.toggle("hidden", liked.length > 0);
 
+  // Bannières Remember — retour utilisateur round 10: "les badges doivent
+  // être progressifs et englober le pseudo du joueur (comme une sorte de
+  // bannière)". Construites via DOM API (pas innerHTML) pour que le pseudo,
+  // saisi librement par le joueur, ne soit jamais interprété comme du HTML
+  // — même principe que buildCommunityCard: pseudo/textContent (voir plus
+  // bas). Le tier (1-4, voir sommation.js: getSommationBadges) pilote
+  // uniquement l'habillage CSS (.badge-banner--tier-N), de plus en plus
+  // élaboré à mesure que le joueur progresse.
   if (profileSommationBadgesEl) {
     profileSommationBadgesEl.innerHTML = "";
+    const pseudo = profile?.pseudo?.trim() || "Joueur";
     for (const badge of getSommationBadges()) {
-      const chip = document.createElement("div");
-      chip.className = "profile-badge-chip" + (badge.earned ? " earned" : "");
-      chip.innerHTML = `
-        <span class="profile-badge-icon">${badge.earned ? "🏅" : "🔒"}</span>
-        <span class="profile-badge-name">${badge.name}</span>
-      `;
-      profileSommationBadgesEl.appendChild(chip);
+      const banner = document.createElement("div");
+      banner.className =
+        `badge-banner badge-banner--tier-${badge.tier}` + (badge.earned ? " earned" : " locked");
+
+      const deco = document.createElement("div");
+      deco.className = "badge-banner-deco";
+      deco.setAttribute("aria-hidden", "true");
+      banner.appendChild(deco);
+
+      const pseudoEl = document.createElement("span");
+      pseudoEl.className = "badge-banner-pseudo";
+      pseudoEl.textContent = badge.earned ? pseudo : "?????";
+      banner.appendChild(pseudoEl);
+
+      const nameEl = document.createElement("span");
+      nameEl.className = "badge-banner-name";
+      nameEl.textContent = badge.earned ? badge.name : "Verrouillé";
+      banner.appendChild(nameEl);
+
+      profileSommationBadgesEl.appendChild(banner);
     }
   }
 }
@@ -1377,7 +1295,6 @@ const SCREEN_IDS = {
   play: "view-play",
   "infinite-config": "view-infinite-config",
   options: "view-options",
-  secrets: "view-secrets",
   community: "view-community",
   "community-profile": "view-community-profile",
   editor: "view-editor",
@@ -1415,11 +1332,11 @@ function showView(name, opts) {
   if (name === "play") setMode(opts?.mode ?? mode);
   if (opts?.levelIndex != null) loadLevel(opts.levelIndex);
   if (name === "story-select") renderLevelGrid();
-  if (name === "secrets") renderShop();
   if (name === "community") renderCommunityFeed();
   if (name === "community-profile") renderCommunityProfile();
   if (name === "editor") editorApi.onShow();
   if (name === "sommation") sommationApi.onShow();
+  if (name === "options") renderPixelArtOption();
   renderActiveScreen();
 }
 
@@ -1473,13 +1390,22 @@ function enterInfiniteDirect() {
   }
 }
 
+/** "Remember" depuis le menu titre — retour utilisateur: "le mode Sommation
+ * va prendre la place de Secrets... on arrive directement dans le mode
+ * Sommation". Même principe que enterStoryDirect/enterInfiniteDirect: on
+ * saute toute étape intermédiaire (il n'y en a plus, l'ancienne boutique
+ * Secrets a été retirée) et "Retour" ramène directement au menu titre. */
+function enterRememberDirect() {
+  viewStack = ["title", "sommation"];
+  showView("sommation");
+}
+
 document.getElementById("menu-story").onclick = enterStoryDirect;
 document.getElementById("menu-infinite").onclick = enterInfiniteDirect;
 document.getElementById("menu-community").onclick = () => pushView("community");
-document.getElementById("menu-secrets").onclick = () => pushView("secrets");
+document.getElementById("menu-remember").onclick = enterRememberDirect;
 document.getElementById("menu-options").onclick = () => pushView("options");
 document.getElementById("btn-floating-editor").onclick = () => pushView("editor");
-document.getElementById("btn-open-sommation").onclick = () => pushView("sommation");
 
 renderActiveScreen();
 renderTitleStoryProgress();

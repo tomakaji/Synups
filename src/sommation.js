@@ -99,7 +99,7 @@ function genCost() {
 // Placeholder gratuit, même principe que hint-modal (voir main.js) — pas de
 // vraie intégration publicitaire. Solde partagé avec le mode Infini: cette
 // valeur reste utile même après le passage au coût fixe de 1pt/génération
-// (round 8) puisqu'elle peut aussi être drainée depuis Infini/Secrets.
+// (round 8) puisqu'elle peut aussi être drainée depuis Infini.
 const AD_WATCH_REWARD = 200;
 
 // ---------- Objectifs: 50 objectifs progressifs + 1 objectif final ----------
@@ -211,20 +211,28 @@ const OBJECTIVE_SCRIPT = buildObjectiveScript();
 // redémarre la barre à zéro pour la prochaine". Corrige le bug round 8: la
 // barre se bloquait définitivement à "5/5" une fois les 51 objectifs
 // épuisés (BADGE_THRESHOLDS/currentBadgeTierIndex plafonnaient à 5 paliers
-// fixes). Désormais SANS PLAFOND: un badge cosmétique tombe tous les
+// fixes). Désormais SANS PLAFOND: une récompense tombe tous les
 // OBJECTIVES_PER_BADGE objectifs réussis, à l'infini — la séquence des 51
 // objectifs (voir OBJECTIVE_SCRIPT) continue elle aussi de tourner en boucle
 // (voir objectiveIndex % OBJECTIVE_SCRIPT.length ci-dessous) et alimente
-// cette même progression sans distinction. `BADGE_DEFS` ne fixe qu'un
-// premier lot de noms cosmétiques (voir getSommationBadges()) — "c'est juste
-// un cosmétique, à fixer plus tard".
+// cette même progression sans distinction.
+//
+// Round 10 — retour utilisateur: "il faut designer les 4 badges obtenables,
+// [...] progressifs et [qui] englobent le pseudo du joueur (comme une sorte
+// de bannière). Et la 5eme et dernière récompense du jeu sera un thème
+// PixelArt". `BADGE_DEFS` fixe donc EXACTEMENT ces 4 premiers paliers
+// (badgesEarned 1 à 4) — bannières de plus en plus élaborées, rendues avec
+// le pseudo dans main.js (voir renderCommunityProfile). Le 5e palier ne
+// produit plus de badge ici: voir isPixelArtUnlocked() plus bas. Les paliers
+// au-delà du 5e ne débloquent plus rien de nouveau, mais la barre continue
+// de tourner (jamais de blocage, cf. le bug round 8 ci-dessus).
 const OBJECTIVES_PER_BADGE = 10;
+const PIXELART_BADGE_TIER = 5;
 const BADGE_DEFS = [
   { name: "Étincelle" },
   { name: "Synapse" },
   { name: "Réseau" },
   { name: "Constellation" },
-  { name: "Singularité" },
 ];
 
 // Progression globale minimale, PERSISTÉE à part (clé dédiée, hors
@@ -256,12 +264,23 @@ function loadMeta() {
  * n'ayant pas de vrai backend multi-joueurs (voir community-store.js: "tout
  * local, feed simulé"), "visible par les autres" suit le même principe que
  * le reste du profil (pseudo/avatar/publications) — la seule surface
- * "publique" que ce prototype sait offrir. Les 5 noms de BADGE_DEFS restent
- * le premier lot cosmétique affiché (earned dès que badgesEarned dépasse
- * leur index) — la progression elle-même ne s'arrête jamais au-delà. */
+ * "publique" que ce prototype sait offrir. Les 4 noms de BADGE_DEFS
+ * (earned dès que badgesEarned dépasse leur index, 1 à 4) sont les seuls
+ * badges-bannière du jeu — le 5e palier n'en fait pas partie, voir
+ * isPixelArtUnlocked(). */
 export function getSommationBadges() {
   const meta = loadMeta();
-  return BADGE_DEFS.map((def, i) => ({ name: def.name, earned: meta.badgesEarned > i }));
+  return BADGE_DEFS.map((def, i) => ({ name: def.name, earned: meta.badgesEarned > i, tier: i + 1 }));
+}
+
+/** 5e et dernière récompense du jeu — retour utilisateur: "la 5eme et
+ * dernière récompense du jeu sera un theme PixelArt de tout le jeu + menus
+ * [...] activable/desactivable dans Options et présent dès le début en
+ * grisé". Contrairement aux 4 badges-bannière ci-dessus, ce palier ne
+ * produit aucun badge de profil: juste un déverrouillage de réglage (voir
+ * main.js: settings.pixelartEnabled, options-pixelart-row). */
+export function isPixelArtUnlocked() {
+  return loadMeta().badgesEarned >= PIXELART_BADGE_TIER;
 }
 
 function saveMeta(meta) {
@@ -1323,7 +1342,7 @@ export function initSommation(pointsApi) {
 
     // Retour utilisateur: "afficher le nombre de points possédés par le
     // joueur en haut" — même format que les autres totaux de points du jeu
-    // (voir "N pt" pour Infini/Secrets). Solde PARTAGÉ (voir pointsApi) —
+    // (voir "N pt" pour Infini/Remember). Solde PARTAGÉ (voir pointsApi) —
     // main.js le tient déjà à jour ailleurs (renderPointsEverywhere), ceci
     // reste une écriture de secours pour rester correct dès ce render().
     if (pointsEl) pointsEl.textContent = `${pointsApi.getPoints()} pt`;
