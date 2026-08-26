@@ -2576,6 +2576,19 @@ body {
   touch-action: none;
 }
 
+/* Fond très légèrement teinté sur une case LUMIÈRE (retour utilisateur
+   round 8: "je préfère le fond teinté sur les lumières" plutôt qu'un cadre
+   redessiné sur les générateurs) — distingue les deux types de case sans
+   toucher aux illustrations. --som-light-tint est posé en inline par
+   sommation.js: render() (couleur de la lumière à 12% d'opacité, voir
+   game/colors.js: colorFor). Placée ICI (avant .som-empty et surtout avant
+   .som-drop-hover-valid/.som-fx-move plus bas) pour que ces états, à
+   spécificité CSS égale, gagnent grâce à l'ordre du fichier plutôt que
+   d'être masqués par cette teinte de fond. */
+.som-cell.som-light-cell {
+  background: var(--som-light-tint, transparent);
+}
+
 .som-cell.som-empty {
   border-style: dashed;
   cursor: default;

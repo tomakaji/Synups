@@ -40,7 +40,7 @@
 // l'action, pour spammer facilement (retour utilisateur). Tout le reste
 // est un vrai geste de glisser, y compris nourrir une case verrouillée
 // active (plus de tap-déblocage, voir doDropOnLock).
-import { hexFor } from "./game/colors.js";
+import { hexFor, colorFor } from "./game/colors.js";
 // Sons: un son NEUF, court et étouffé, dédié à la génération (spammable via
 // le bouton "Générer" — voir spawnFromSelected) ; les autres actions
 // réutilisent des sons déjà existants du jeu principal, de façon symbolique
@@ -1256,10 +1256,20 @@ export function initSommation(pointsApi) {
       for (let c = 0; c < SIZE; c++) {
         if (isReserved(r, c)) continue;
         const locked = isLocked(r, c);
-        const isEmpty = !locked && !board[r][c];
+        const cell = board[r][c];
+        const isEmpty = !locked && !cell;
         const isSelected = selectedGen && selectedGen.r === r && selectedGen.c === c;
-        const cls = `som-cell${locked ? " som-locked" : isEmpty ? " som-empty" : ""}${isSelected ? " som-selected" : ""}`;
-        html += `<div class="${cls}" data-r="${r}" data-c="${c}">${locked ? lockedCellHtml(`${r},${c}`) : cellHtml(r, c)}</div>`;
+        // Retour utilisateur round 8: "je préfère le fond teinté sur les
+        // lumières" — distingue une case lumière d'une case générateur SANS
+        // toucher aux illustrations, via un très léger fond teinté dans la
+        // couleur de la lumière (voir style.css: .som-light-cell, placé
+        // AVANT les règles d'état comme .som-drop-hover-valid/.som-fx-move
+        // pour que ces dernières restent visibles par-dessus pendant un
+        // survol/une animation de glisser).
+        const isLightCell = !locked && cell?.type === "light";
+        const tintStyle = isLightCell ? ` style="--som-light-tint:${colorFor(cell.ch, 0.12)}"` : "";
+        const cls = `som-cell${locked ? " som-locked" : isEmpty ? " som-empty" : ""}${isSelected ? " som-selected" : ""}${isLightCell ? " som-light-cell" : ""}`;
+        html += `<div class="${cls}" data-r="${r}" data-c="${c}"${tintStyle}>${locked ? lockedCellHtml(`${r},${c}`) : cellHtml(r, c)}</div>`;
       }
     }
     gridEl.innerHTML = html;
