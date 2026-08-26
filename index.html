@@ -766,6 +766,25 @@
         </div>
       </div>
 
+      <!-- Modale de confirmation "recycler ce générateur" (Sommation) —
+           retour utilisateur round 9: "si on met un générateur dans
+           l'objectif pour le recycler, j'aimerais que tu préviennes avec
+           une modale de confirmation... pour éviter la frustration d'un
+           faux mouvement" — voir sommation.js: onDragEnd(). Seulement pour
+           un GÉNÉRATEUR (les morceaux/lumières recyclés restent sans
+           confirmation, geste peu coûteux). -->
+      <div id="som-recycle-confirm-modal" class="modal hidden">
+        <div class="modal-backdrop" data-som-recycle-modal-close></div>
+        <div class="modal-card">
+          <h3 class="modal-title">Recycler ce générateur ?</h3>
+          <p class="modal-text">Il sera perdu définitivement — l'objectif ne l'accepte pas.</p>
+          <div class="modal-actions">
+            <button id="btn-som-recycle-cancel" class="options-btn" data-som-recycle-modal-close>Annuler</button>
+            <button id="btn-som-recycle-confirm" class="options-btn options-btn--accent">Recycler</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Modale de confirmation "réinitialiser le jeu": remplace
            window.confirm() (retour utilisateur: "doit être une modale
            intégrée, pas une vraie pop-up de navigateur"), même principe que

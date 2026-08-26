@@ -205,13 +205,20 @@ function buildObjectiveScript() {
 
 const OBJECTIVE_SCRIPT = buildObjectiveScript();
 
-// Paliers de badges (retour utilisateur: "les barres de progression pour
-// débloquer des badges seront des progressions de 10 objectifs réussis
-// (donc 5 barres de progression, mais la dernière en comptera 11 avec
-// l'objectif final)") — seuils CUMULÉS d'objectifs réussis: 10, 20, 30, 40,
-// puis 51 (40 + les 10 derniers + l'objectif final). Visible depuis "Mon
-// profil" (voir getSommationBadges(), exporté plus bas, câblé dans main.js).
-const BADGE_THRESHOLDS = [10, 20, 30, 40, 51];
+// Paliers de badges — retour utilisateur round 9: "à chaque fois qu'on
+// remplit les objectifs, la barre progresse un peu. Toutes les 10
+// progressions on gagne une récompense... une fois la récompense obtenue on
+// redémarre la barre à zéro pour la prochaine". Corrige le bug round 8: la
+// barre se bloquait définitivement à "5/5" une fois les 51 objectifs
+// épuisés (BADGE_THRESHOLDS/currentBadgeTierIndex plafonnaient à 5 paliers
+// fixes). Désormais SANS PLAFOND: un badge cosmétique tombe tous les
+// OBJECTIVES_PER_BADGE objectifs réussis, à l'infini — la séquence des 51
+// objectifs (voir OBJECTIVE_SCRIPT) continue elle aussi de tourner en boucle
+// (voir objectiveIndex % OBJECTIVE_SCRIPT.length ci-dessous) et alimente
+// cette même progression sans distinction. `BADGE_DEFS` ne fixe qu'un
+// premier lot de noms cosmétiques (voir getSommationBadges()) — "c'est juste
+// un cosmétique, à fixer plus tard".
+const OBJECTIVES_PER_BADGE = 10;
 const BADGE_DEFS = [
   { name: "Étincelle" },
   { name: "Synapse" },
@@ -222,30 +229,25 @@ const BADGE_DEFS = [
 
 // Progression globale minimale, PERSISTÉE à part (clé dédiée, hors
 // storage.js/KEYS — même raisonnement que le profil communautaire: ce n'est
-// pas la vraie progression du jeu). `badgeTiers`: index (0-4) dans
-// BADGE_THRESHOLDS/BADGE_DEFS de chaque palier de badge déjà atteint.
+// pas la vraie progression du jeu). `badgesEarned`: COMPTEUR simple (pas de
+// plafond) de récompenses déjà décrochées.
 const META_KEY = "lightup-sommation-meta";
 
 function loadMeta() {
   try {
     const raw = localStorage.getItem(META_KEY);
     const parsed = raw ? JSON.parse(raw) : null;
+    // Migration douce depuis l'ancien format round 8 (`badgeTiers`: liste de
+    // paliers 0-4 déjà atteints, plafonnée à 5) — sa longueur devient le
+    // point de départ du nouveau compteur illimité.
+    const legacyBadgeCount = Array.isArray(parsed?.badgeTiers) ? parsed.badgeTiers.length : 0;
     return {
       objectivesCompleted: Number(parsed?.objectivesCompleted) || 0,
-      badgeTiers: Array.isArray(parsed?.badgeTiers) ? parsed.badgeTiers.filter((n) => Number.isInteger(n)) : [],
+      badgesEarned: Number.isInteger(parsed?.badgesEarned) ? parsed.badgesEarned : legacyBadgeCount,
     };
   } catch {
-    return { objectivesCompleted: 0, badgeTiers: [] };
+    return { objectivesCompleted: 0, badgesEarned: 0 };
   }
-}
-
-/** Palier de badge (0-4) PAS ENCORE atteint, ou BADGE_THRESHOLDS.length si
- * les 5 sont déjà acquis — utilisé par render() pour la barre du haut. */
-function currentBadgeTierIndex(meta) {
-  for (let i = 0; i < BADGE_THRESHOLDS.length; i++) {
-    if (meta.objectivesCompleted < BADGE_THRESHOLDS[i]) return i;
-  }
-  return BADGE_THRESHOLDS.length;
 }
 
 /** Exporté pour l'écran "Mon profil" (voir main.js: renderCommunityProfile)
@@ -254,10 +256,12 @@ function currentBadgeTierIndex(meta) {
  * n'ayant pas de vrai backend multi-joueurs (voir community-store.js: "tout
  * local, feed simulé"), "visible par les autres" suit le même principe que
  * le reste du profil (pseudo/avatar/publications) — la seule surface
- * "publique" que ce prototype sait offrir. */
+ * "publique" que ce prototype sait offrir. Les 5 noms de BADGE_DEFS restent
+ * le premier lot cosmétique affiché (earned dès que badgesEarned dépasse
+ * leur index) — la progression elle-même ne s'arrête jamais au-delà. */
 export function getSommationBadges() {
   const meta = loadMeta();
-  return BADGE_DEFS.map((def, i) => ({ name: def.name, earned: meta.badgeTiers.includes(i) }));
+  return BADGE_DEFS.map((def, i) => ({ name: def.name, earned: meta.badgesEarned > i }));
 }
 
 function saveMeta(meta) {
@@ -407,11 +411,13 @@ function whiteGenColorChance() {
 /** Chance de loot un morceau de générateur — SEULE proba qui progresse avec
  * le niveau du générateur blanc désormais (retour utilisateur round 8:
  * "morceau à 20% [au niveau max], et blanc pour le reste une fois les
- * probas couleurs soustraites"). 4% au niveau 1 -> 20% au niveau max,
- * RÉSERVÉ au générateur blanc — "uniquement le générateur blanc peut faire
- * loot un générateur" (voir rollGeneratorOutcome pour le tirage unifié). */
+ * probas couleurs soustraites" — révisé round 9: "finalement... on va
+ * monter jusqu'à 30% de proba... plutôt que 20%"). 4% au niveau 1 -> 30% au
+ * niveau max, RÉSERVÉ au générateur blanc — "uniquement le générateur blanc
+ * peut faire loot un générateur" (voir rollGeneratorOutcome pour le tirage
+ * unifié). */
 function fragmentDropChance(level) {
-  return 0.04 + (0.2 - 0.04) * ((level - 1) / (MAX_GEN_LEVEL - 1));
+  return 0.04 + (0.3 - 0.04) * ((level - 1) / (MAX_GEN_LEVEL - 1));
 }
 
 /** Rangs de lumière atteignables directement à la génération, selon le
@@ -482,6 +488,12 @@ export function initSommation(pointsApi) {
   // — même principe placeholder que hint-modal dans main.js.
   const adModalEl = document.getElementById("som-ad-modal");
   const adWatchBtn = document.getElementById("btn-som-ad-watch");
+  // Modale de confirmation "recycler ce générateur" — retour utilisateur
+  // round 9: "si on met un générateur dans l'objectif pour le recycler,
+  // j'aimerais que tu préviennes avec une modale de confirmation... pour
+  // éviter la frustration d'un faux mouvement" — voir onDragEnd() plus bas.
+  const recycleModalEl = document.getElementById("som-recycle-confirm-modal");
+  const recycleConfirmBtn = document.getElementById("btn-som-recycle-confirm");
 
   // Plateau: null (vide) | {type:'gen', color, level} | {type:'light', ch,
   // tier} | {type:'frag'}. Persistant tant que l'onglet reste ouvert
@@ -839,12 +851,12 @@ export function initSommation(pointsApi) {
     if (allDone) {
       meta.objectivesCompleted += 1;
       // Retour utilisateur round 8: la barre du haut ne suit plus l'objectif
-      // COURANT mais une progression SUPÉRIEURE (paliers de 10 objectifs
-      // réussis, 11 pour le dernier) — voir BADGE_THRESHOLDS/currentBadgeTierIndex.
-      // Un objectif ne peut faire franchir qu'UN SEUL palier à la fois.
-      const newTierIndex = BADGE_THRESHOLDS.indexOf(meta.objectivesCompleted);
-      if (newTierIndex !== -1 && !meta.badgeTiers.includes(newTierIndex)) {
-        meta.badgeTiers.push(newTierIndex);
+      // COURANT mais une progression SUPÉRIEURE — révisé round 9: cette
+      // progression ne doit JAMAIS se bloquer, elle avance à chaque objectif
+      // et redémarre à zéro après chaque récompense, à l'infini (voir
+      // OBJECTIVES_PER_BADGE ci-dessus).
+      if (meta.objectivesCompleted % OBJECTIVES_PER_BADGE === 0) {
+        meta.badgesEarned += 1;
       }
       saveMeta(meta);
       objectiveIndex = (objectiveIndex + 1) % OBJECTIVE_SCRIPT.length;
@@ -1001,6 +1013,10 @@ export function initSommation(pointsApi) {
   }
 
   let drag = null; // { r, c, pointerId, startX, startY, moved, ghostEl, previewEl, sourceEl, lastHoverEl }
+  // Glisser en attente de confirmation (voir onDragEnd()/recycleModalEl) —
+  // { src: {r,c}, target } le temps que le joueur confirme ou annule le
+  // recyclage d'un générateur déposé sur l'objectif.
+  let pendingRecycleDrop = null;
 
   function clearHoverAndPreview() {
     if (drag?.lastHoverEl) drag.lastHoverEl.classList.remove("som-drop-hover-valid", "som-drop-hover-invalid");
@@ -1107,8 +1123,25 @@ export function initSommation(pointsApi) {
       }
     } else {
       const target = findDropTargetAt(e.clientX, e.clientY);
-      handleDrop({ r, c }, target);
-      render();
+      const srcCell = board[r]?.[c];
+      // Retour utilisateur round 9: "si on met un générateur dans l'objectif
+      // pour le recycler, préviens avec une modale de confirmation... pour
+      // éviter la frustration d'un faux mouvement" — SEUL un générateur qui
+      // ne correspond à AUCUNE exigence (donc perdu pour de bon, voir
+      // matchesRequirement/predictDrop) déclenche la confirmation ; un
+      // générateur qui nourrit l'objectif final, ou une lumière/un morceau
+      // recyclé, restent immédiats (geste peu coûteux ou volontaire).
+      const wouldRecycleGenerator =
+        target?.objective &&
+        srcCell?.type === "gen" &&
+        !objectiveState.requirements.some((req) => matchesRequirement(srcCell, req));
+      if (wouldRecycleGenerator) {
+        pendingRecycleDrop = { src: { r, c }, target };
+        recycleModalEl?.classList.remove("hidden");
+      } else {
+        handleDrop({ r, c }, target);
+        render();
+      }
     }
     drag = null;
   }
@@ -1299,21 +1332,14 @@ export function initSommation(pointsApi) {
       // Barre + texte "x/y" en haut — retour utilisateur round 8: "la barre
       // de progression en haut ne doit pas représenter la progression de
       // l'objectif courant, mais une progression supérieure qui avance à
-      // chaque fois qu'on remplit les objectifs" (paliers de 10 objectifs
-      // réussis, voir BADGE_THRESHOLDS/currentBadgeTierIndex) — remplace
-      // l'ancien calcul (fulfilled/qty de l'objectif affiché).
-      const tierIndex = currentBadgeTierIndex(meta);
-      let total;
-      let done;
-      if (tierIndex >= BADGE_THRESHOLDS.length) {
-        total = BADGE_THRESHOLDS.length;
-        done = BADGE_THRESHOLDS.length;
-      } else {
-        const prevThreshold = tierIndex === 0 ? 0 : BADGE_THRESHOLDS[tierIndex - 1];
-        total = BADGE_THRESHOLDS[tierIndex] - prevThreshold;
-        done = meta.objectivesCompleted - prevThreshold;
-      }
-      if (progressFillEl) progressFillEl.style.width = `${total > 0 ? Math.round((done / total) * 100) : 0}%`;
+      // chaque fois qu'on remplit les objectifs" — révisé round 9: cette
+      // progression ne doit JAMAIS se bloquer (bug: elle restait figée à
+      // "5/5" après le 51e objectif). Modulo simple, SANS PLAFOND: avance à
+      // chaque objectif, redémarre à zéro juste après chaque récompense
+      // (voir OBJECTIVES_PER_BADGE/doDropOnObjective).
+      const done = meta.objectivesCompleted % OBJECTIVES_PER_BADGE;
+      const total = OBJECTIVES_PER_BADGE;
+      if (progressFillEl) progressFillEl.style.width = `${Math.round((done / total) * 100)}%`;
       if (progressLabelEl) progressLabelEl.textContent = `${done}/${total}`;
     }
 
@@ -1348,6 +1374,24 @@ export function initSommation(pointsApi) {
       // principe placeholder que hint-modal (voir main.js).
       pointsApi.addPoints(AD_WATCH_REWARD);
       closeAdModal();
+      render();
+    };
+  }
+
+  function closeRecycleModal() {
+    recycleModalEl?.classList.add("hidden");
+    // Annuler: on ferme simplement — le plateau n'a jamais été touché (voir
+    // onDragEnd), le générateur reste où il était, aucun render() requis.
+    pendingRecycleDrop = null;
+  }
+  document.querySelectorAll("[data-som-recycle-modal-close]").forEach((el) => (el.onclick = closeRecycleModal));
+  if (recycleConfirmBtn) {
+    recycleConfirmBtn.onclick = () => {
+      if (pendingRecycleDrop) {
+        handleDrop(pendingRecycleDrop.src, pendingRecycleDrop.target);
+      }
+      pendingRecycleDrop = null;
+      recycleModalEl?.classList.add("hidden");
       render();
     };
   }
