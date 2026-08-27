@@ -20,6 +20,7 @@
 // chaque `Tone.Player` boucle sur son propre buffer via le même
 // AudioContext, sans dépendre de `Tone.Transport`).
 import * as Tone from "tone";
+import { isPixelTheme } from "./pixelIcons.js";
 
 // Gamme utilisée par TOUTES les couches mélodiques (voir
 // music-demos/couches: neurone-couleur.wav, prismes.wav) — exportée comme
@@ -29,7 +30,17 @@ import * as Tone from "tone";
 // plutôt qu'un tirage dans cette gamme).
 export const MUSIC_SCALE = ["A3", "C4", "D4", "E4", "G4"];
 
-const LAYER_URLS = {
+// Round 13 (thème PixelArt, 6e volet — musique): les mêmes 11 pistes
+// existent en DEUX versions — le rendu "lisse" d'origine (public/music/) et
+// une réorchestration chiptune/Game Boy (public/music-chip/, voir
+// tools/chiptune/ pour le synthétiseur qui les a générées) qui reprend les
+// mêmes thèmes/tonalité (même gamme MUSIC_SCALE, même mouvement d'accords
+// Am->C->Am sur base.wav) mais en timbres pulse/triangle/bruit LFSR plutôt
+// qu'en instruments "lisses". `currentLayerUrls()` choisit le bon jeu selon
+// le thème actif au moment de la construction/rechargement des lecteurs —
+// voir refreshMusicTheme() plus bas pour le cas où le thème change EN COURS
+// DE LECTURE (bouton Options, voir main.js: btnPixelartToggle.onclick).
+const LAYER_URLS_SMOOTH = {
   base: "/music/base.wav",
   neurone: "/music/neurone.wav",
   neuroneLayer2: "/music/neurone-layer2.wav",
@@ -42,6 +53,24 @@ const LAYER_URLS = {
   pyra: "/music/pyra.wav",
   echec: "/music/echec.wav",
 };
+
+const LAYER_URLS_CHIP = {
+  base: "/music-chip/base.wav",
+  neurone: "/music-chip/neurone.wav",
+  neuroneLayer2: "/music-chip/neurone-layer2.wav",
+  neuroneCouleur: "/music-chip/neurone-couleur.wav",
+  neuroneCouleurLayer2: "/music-chip/neurone-couleur-layer2.wav",
+  miroirs: "/music-chip/miroirs.wav",
+  miroirsLayer2: "/music-chip/miroirs-layer2.wav",
+  neuronesMiroirs: "/music-chip/neurones-miroirs.wav",
+  prismes: "/music-chip/prismes.wav",
+  pyra: "/music-chip/pyra.wav",
+  echec: "/music-chip/echec.wav",
+};
+
+function currentLayerUrls() {
+  return isPixelTheme() ? LAYER_URLS_CHIP : LAYER_URLS_SMOOTH;
+}
 
 // Couches "mécanique" au sens de resetLayers/setLayerActive — n'inclut ni
 // "base" (toujours à 1, jamais dans `unlocked`) ni "echec" (gérée à part,
@@ -160,12 +189,13 @@ function ensureBuilt() {
   if (players) return;
   players = {};
   gains = {};
-  for (const key of Object.keys(LAYER_URLS)) {
+  const urls = currentLayerUrls();
+  for (const key of Object.keys(urls)) {
     // échec.wav se branche directement sur musicBus (jamais étouffée, voir
     // duckFilter ci-dessus) — base + toutes les couches mécaniques passent
     // par le passe-bas partagé, neutre hors état d'échec.
     const gain = new Tone.Gain(key === "base" ? 1 : 0).connect(key === "echec" ? musicBus : duckFilter);
-    const player = new Tone.Player({ url: LAYER_URLS[key], loop: true }).connect(gain);
+    const player = new Tone.Player({ url: urls[key], loop: true }).connect(gain);
     players[key] = player;
     gains[key] = gain;
   }
@@ -191,6 +221,29 @@ export async function startMusic() {
   started = true;
   const when = Tone.now() + 0.05; // léger différé: laisse le temps au scheduler de tout aligner
   for (const player of Object.values(players)) player.start(when);
+}
+
+/** Recharge les 11 pistes sur le jeu d'URLs correspondant au thème ACTUEL
+ * (voir currentLayerUrls) — à appeler quand le thème PixelArt est
+ * togglé en cours de session (voir main.js: btnPixelartToggle.onclick),
+ * puisque `ensureBuilt` ci-dessus n'est exécutée qu'une seule fois et ne
+ * relit donc jamais le thème après coup. Sans effet si la musique n'a
+ * jamais été construite (le prochain `ensureBuilt` prendra le bon thème
+ * directement, rien à rattraper). Les gains (couches débloquées, ambiance,
+ * état d'échec) sont préservés tels quels — seul le CONTENU audio change,
+ * pas le mix en cours. */
+export async function refreshMusicTheme() {
+  if (!players) return;
+  const urls = currentLayerUrls();
+  const wasStarted = started;
+  if (wasStarted) {
+    for (const player of Object.values(players)) player.stop();
+  }
+  await Promise.all(Object.keys(urls).map((key) => players[key].load(urls[key])));
+  if (wasStarted) {
+    const when = Tone.now() + 0.05;
+    for (const player of Object.values(players)) player.start(when);
+  }
 }
 
 /** À appeler au chargement d'un nouveau niveau: remet toutes les couches

@@ -23,6 +23,7 @@ import {
   enterFailure,
   exitFailure,
   setMusicVolume,
+  refreshMusicTheme,
 } from "./game/music.js";
 import {
   createBoardRenderer,
@@ -582,6 +583,11 @@ btnPixelartToggle.onclick = () => {
   // une seule fois plus haut) — sans ce re-render explicite, ses icônes ne
   // se reskinneraient qu'au prochain coup joué plutôt qu'immédiatement.
   if (renderer.grid) renderer.render();
+  // Idem côté musique (round 13): si la musique tourne déjà, on recharge les
+  // 11 pistes sur le jeu chiptune/lisse correspondant sans couper le mix en
+  // cours (voir music.js: refreshMusicTheme). Sans effet si la musique n'a
+  // pas encore démarré (ensureBuilt prendra le bon thème au premier départ).
+  refreshMusicTheme();
 };
 
 // Débug: force le déverrouillage pour tester le thème sans finir le
