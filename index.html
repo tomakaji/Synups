@@ -319,6 +319,17 @@
           <button id="som-debug-points" class="som-debug-btn" type="button" title="Débug: +500 points">+500 pts</button>
         </header>
 
+        <!-- État "terminé" (round 12): une fois PixelArt débloqué (5e et
+             dernière récompense), Remember est fini — retour utilisateur:
+             "il sera marqué comme terminé et ne sera plus jouable". Le menu
+             titre redirige désormais directement vers Mon profil (voir
+             main.js: enterRememberDirect), donc cet écran est normalement
+             inatteignable une fois débloqué — ce bloc est un filet de
+             sécurité défensif si jamais on y arrive quand même. -->
+        <div id="som-done-state" class="som-done-state hidden">
+          <p class="som-done-message">Remember est terminé — toutes les récompenses ont été débloquées. Retrouve tes bannières dans Mon profil.</p>
+        </div>
+
         <div class="som-progress-wrap" title="Progression vers la prochaine récompense">
           <!-- Teaser de la prochaine récompense — retour utilisateur round 11:
                "au dessus de la barre de progression, il faut teaser le

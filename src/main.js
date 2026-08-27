@@ -201,7 +201,12 @@ const sommationPointsEl = document.getElementById("sommation-points");
 function renderPointsEverywhere() {
   const label = `${infinitePoints} pt`;
   infinitePointsEl.textContent = label;
-  menuPointsBadgeEl.textContent = label;
+  // Une fois PixelArt débloqué (5e et dernière récompense de Remember), le
+  // mode est terminé (retour utilisateur round 12: "il sera marqué comme
+  // terminé et ne sera plus jouable") — la carte du menu titre l'affiche à
+  // la place du solde de points, qui n'a plus de sens ici (voir
+  // enterRememberDirect ci-dessous: le clic redirige vers Mon profil).
+  menuPointsBadgeEl.textContent = isPixelArtUnlocked() ? "Terminé" : label;
   if (sommationPointsEl) sommationPointsEl.textContent = label;
 }
 
@@ -572,6 +577,11 @@ btnPixelartToggle.onclick = () => {
   saveSettings(settings);
   applyPixelArtTheme();
   renderPixelArtOption();
+  // Le plateau (Histoire/Infini) peut déjà être construit en mémoire même si
+  // l'écran affiché en ce moment est Options (voir renderer, singleton créé
+  // une seule fois plus haut) — sans ce re-render explicite, ses icônes ne
+  // se reskinneraient qu'au prochain coup joué plutôt qu'immédiatement.
+  if (renderer.grid) renderer.render();
 };
 
 // Débug: force le déverrouillage pour tester le thème sans finir le
@@ -1350,6 +1360,12 @@ function showView(name, opts) {
   if (name === "editor") editorApi.onShow();
   if (name === "sommation") sommationApi.onShow();
   if (name === "options") renderPixelArtOption();
+  // Rafraîchit la carte "Remember" du menu titre (points vs "Terminé") à
+  // chaque retour — le déverrouillage de PixelArt peut survenir entre deux
+  // passages sans forcément s'accompagner d'un changement de points (voir
+  // renderPointsEverywhere), donc jamais figé sur un état périmé, même
+  // principe que renderPixelArtOption()/renderLevelGrid().
+  if (name === "title") renderPointsEverywhere();
   renderActiveScreen();
 }
 
@@ -1407,8 +1423,19 @@ function enterInfiniteDirect() {
  * va prendre la place de Secrets... on arrive directement dans le mode
  * Sommation". Même principe que enterStoryDirect/enterInfiniteDirect: on
  * saute toute étape intermédiaire (il n'y en a plus, l'ancienne boutique
- * Secrets a été retirée) et "Retour" ramène directement au menu titre. */
+ * Secrets a été retirée) et "Retour" ramène directement au menu titre.
+ *
+ * Round 12: une fois PixelArt débloqué, Remember est terminé et non-
+ * rejouable (retour utilisateur: "ça veut dire qu'on a terminé Remember
+ * donc il sera marqué comme terminé et ne sera plus jouable") — le clic
+ * redirige vers Mon profil (où les bannières/récompenses restent
+ * consultables) au lieu d'entrer dans le plateau. */
 function enterRememberDirect() {
+  if (isPixelArtUnlocked()) {
+    viewStack = ["title", "community-profile"];
+    showView("community-profile");
+    return;
+  }
   viewStack = ["title", "sommation"];
   showView("sommation");
 }

@@ -2599,6 +2599,21 @@ body {
   flex-shrink: 0;
 }
 
+/* État "terminé" (round 12, filet de sécurité — voir index.html:
+   #som-done-state). Centré, sans interaction, dans le même esprit
+   silencieux que le reste de l'écran Remember. */
+.som-done-state {
+  width: min(360px, 90vw);
+  margin: 48px auto 0;
+  text-align: center;
+}
+
+.som-done-message {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 /* Teaser de la prochaine récompense — retour utilisateur round 11: "au
    dessus de la barre de progression, il faut teaser le joueur en affichant
    la prochaine récompense à débloquer". Masqué (voir sommation.js: render())
@@ -3255,9 +3270,12 @@ body.theme-pixelart::after {
   mix-blend-mode: multiply;
 }
 
-/* Chrome carré: menus/boutons/panneaux/modales/bannières/cartes — PAS le
-   plateau de jeu (.cell/.som-cell/lasers), volontairement épargné (voir
-   plus haut). */
+/* Chrome carré: menus/boutons/panneaux/modales/bannières/cartes. Round 12:
+   le plateau principal (Histoire/Infini) a désormais SES PROPRES sprites
+   32x32 en pixel art (voir pixelIcons.js + render.js: isPixelTheme()) —
+   seul le plateau de Remember (sommation.js) reste inchangé, volontairement
+   (voir sommation.js: une fois PixelArt débloqué, Remember est terminé et
+   non-rejouable, donc plus jamais affiché à ce moment). */
 body.theme-pixelart .menu-card,
 body.theme-pixelart .options-btn,
 body.theme-pixelart .options-section,
@@ -3287,4 +3305,58 @@ body.theme-pixelart .badge-banner--tier-4.earned .badge-banner-pseudo {
   background-clip: initial;
   color: var(--accent);
   text-shadow: none;
+}
+
+/* ====================================================================
+   Animations du plateau principal sous PixelArt (round 12): les classes
+   DOM restent les MÊMES que le design lisse (cell-sonar-halo/cell-breathe/
+   cell-flicker, voir pixelIcons.js + render.js), seule leur courbe de temps
+   change ici — steps() au lieu d'un easing lisse, ce qui suffit à lire
+   "rétro" sans dupliquer une seconde keyframe par effet. Les deux nouvelles
+   classes (pyra-dot-pixel/pixel-target-pulse) sont, elles, propres au thème
+   pixel (leurs équivalents lisses utilisent des <animate> SVG, pas de CSS
+   partageable). ==================================================== */
+body.theme-pixelart .cell-sonar-halo {
+  border-radius: 0;
+  animation-timing-function: steps(6);
+}
+
+body.theme-pixelart .cell-breathe {
+  animation-timing-function: steps(4);
+}
+
+body.theme-pixelart .pyra-dot-pixel {
+  animation: pyra-dot-pixel-pulse 1.8s steps(3) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes pyra-dot-pixel-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+body.theme-pixelart .pixel-target-pulse {
+  animation: pixel-target-pulse-anim 1.6s steps(2) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes pixel-target-pulse-anim {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+}
+
+/* Points animés du laser: carrés (pas de cercle lisse) et un déplacement
+   par paliers plutôt qu'un glissement linéaire — comme un "pip" qui saute
+   de position sur un fil, cohérent avec le reste du plateau en 32x32. */
+body.theme-pixelart .laser-dot {
+  border-radius: 0;
+}
+
+body.theme-pixelart .laser-dot--h,
+body.theme-pixelart .laser-dot--h-reverse,
+body.theme-pixelart .laser-dot--v,
+body.theme-pixelart .laser-dot--v-reverse {
+  animation-timing-function: steps(10);
 }

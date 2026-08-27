@@ -4,6 +4,26 @@
 // et par l'éditeur de niveaux (editor.js) pour un aperçu/test identique.
 import { CellType, PRISM_COLOR_SEQUENCE } from "./grid.js";
 import { colorFor, hexFor, illuminatedColor, lightColor } from "./colors.js";
+// Thème PixelArt (5e récompense de Remember, voir sommation.js): chaque
+// icône "lisse" ci-dessous a un équivalent en grille 32x32 dans
+// pixelIcons.js — un branchement isPixelTheme() en tête de chaque fonction
+// suffit, le reste du pipeline (grid.js, animations JS, sons) est inchangé.
+// Portée: uniquement ce plateau (Histoire/Infini) — jamais celui de Remember
+// (sommation.js), voir pixelIcons.js pour le détail de cette exclusion.
+import {
+  isPixelTheme,
+  pixelNeuronIcon,
+  pixelNeuronDuplicateIcon,
+  pixelChargeIcon,
+  pixelSynapseIcon,
+  pixelTargetIcon,
+  pixelMirrorIcon,
+  pixelWallIcon,
+  pixelPyraIcon,
+  pixelMirrorNeuronIcon,
+  pixelFilterIcon,
+  pixelPrismIcon,
+} from "./pixelIcons.js";
 
 // Valeurs de repli seulement — voir `measureMetrics()` plus bas: en jeu, la
 // taille réelle des cases peut être plus petite que ça sur mobile (voir
@@ -45,6 +65,14 @@ const PRISM_LETTER_COLORS = {
  * les cases éclairées ont désormais la même opacité, voir colors.js).
  */
 function neuronIcon(lit) {
+  if (isPixelTheme()) {
+    const hex = hexFor(lit) || "#fbfcff";
+    // Même halo "sonar" que le design lisse (même classe CSS, même div) —
+    // sous body.theme-pixelart il devient carré et saute par paliers (voir
+    // style.css) au lieu de s'étendre en cercle lisse, pour rester cohérent
+    // avec l'esthétique du reste des sprites 32x32.
+    return `<div class="cell-sonar-halo" style="border-color:${hex}"></div>${pixelNeuronIcon(lit)}`;
+  }
   const hex = hexFor(lit) || "#fbfcff";
   // Le halo sonar est un <div> ordinaire (pas un cercle SVG): transform-box:
   // fill-box sur un <circle> se comporte de façon peu fiable selon les
@@ -69,6 +97,7 @@ function neuronIcon(lit) {
  * couleur, même position centrale).
  */
 function neuronDuplicateIcon(lit) {
+  if (isPixelTheme()) return pixelNeuronDuplicateIcon(lit);
   const hex = hexFor(lit) || "#fbfcff";
   return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
     <circle cx="50" cy="50" r="36" fill="none" stroke="#b98fe0" stroke-width="3" stroke-dasharray="5 5" opacity="0.55"/>
@@ -83,6 +112,7 @@ function neuronDuplicateIcon(lit) {
  * (retour utilisateur), plutôt que des glyphes simplifiés redessinés à
  * part qui risqueraient de diverger du rendu réel. */
 export function chargeIcon(cell) {
+  if (isPixelTheme()) return pixelChargeIcon(cell);
   const n = cell.number;
   const count = cell._adjacentLights || 0;
   const satisfied = count === n;
@@ -148,6 +178,7 @@ export function chargeIcon(cell) {
 }
 
 export function synapseIcon(state) {
+  if (isPixelTheme()) return pixelSynapseIcon(state);
   if (state === "success") {
     return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
       <circle cx="32" cy="32" r="16" fill="#4a3f9a" opacity="0.3"/>
@@ -186,6 +217,7 @@ export function synapseIcon(state) {
  * espace qui révélait ce pic de façon inégale: remplacé par une opacité
  * réduite, plus fiable, pour distinguer l'état "non atteint". */
 function targetIcon(cell) {
+  if (isPixelTheme()) return pixelTargetIcon(cell);
   const hex = hexFor(cell.target) || "#888";
   const matched = !!cell._colorMatch;
   const corners = "M16,30 V16 H30 M70,16 H84 V30 M84,70 V84 H70 M30,84 H16 V70";
@@ -207,6 +239,7 @@ function targetIcon(cell) {
  * repos, tintée de la couleur du dernier laser qui la traverse (voir
  * grid.js: `_mirrorColor`), pour que le joueur voie où l'impulsion rebondit. */
 export function mirrorIcon(cell) {
+  if (isPixelTheme()) return pixelMirrorIcon(cell);
   const active = cell._mirrorColor && (cell._mirrorColor.r || cell._mirrorColor.g || cell._mirrorColor.b);
   const stroke = active ? hexFor(cell._mirrorColor) || "#9fb4d8" : "#4a5468";
   const glow = active ? colorFor(cell._mirrorColor, 0.35) || "rgba(159,180,216,0.35)" : "rgba(74,84,104,0.18)";
@@ -221,6 +254,7 @@ export function mirrorIcon(cell) {
  * n'affiche RIEN — voir .cell--void) tout en restant dans le langage
  * "obstacle sans corps" (pas de fond/contour de case, juste l'icône). */
 function wallIcon() {
+  if (isPixelTheme()) return pixelWallIcon();
   return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
     <rect x="10" y="10" width="80" height="80" rx="6" fill="none" stroke="#3a4258" stroke-width="4"/>
     <path d="M10,34 L34,10 M10,58 L58,10 M10,82 L82,10 M34,90 L90,34 M58,90 L90,58" stroke="#3a4258" stroke-width="4"/>
@@ -237,6 +271,7 @@ function wallIcon() {
  * langage visuel des autres charges plutôt que d'inventer un nouveau
  * signe d'erreur. */
 export function pyraIcon(cell) {
+  if (isPixelTheme()) return pixelPyraIcon(cell);
   const active = cell._activeColor;
   const fillHex = (active && hexFor(channelColor(active))) || "#888";
   const fillOpacity = cell._state === "success" && active ? 0.75 : 0;
@@ -271,6 +306,7 @@ export function pyraIcon(cell) {
  * l'autre" — voir grid.js: MIRROR_NEURON. Couleur violette distincte du
  * reste du langage visuel pour signaler le statut expérimental. */
 export function mirrorNeuronIcon() {
+  if (isPixelTheme()) return pixelMirrorNeuronIcon();
   return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
     <line x1="50" y1="10" x2="50" y2="90" stroke="#b98fe0" stroke-width="5" stroke-dasharray="7 6" stroke-linecap="round"/>
     <circle cx="26" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
@@ -283,6 +319,7 @@ export function mirrorNeuronIcon() {
  * (sombre plein derrière, couleur devant) que les autres icônes, pour
  * rester lisible même sur un fond de la même teinte. */
 export function filterIcon(cell) {
+  if (isPixelTheme()) return pixelFilterIcon(cell);
   const hex = hexFor(channelColor(cell.filterColor)) || "#888";
   const shape = "M15,25 85,25 60,50 60,80 40,80 40,50 Z";
   return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
@@ -317,6 +354,7 @@ export function filterIcon(cell) {
  * `transform`, pas son innerHTML) pour que la transition s'applique.
  */
 export function prismIcon(cell) {
+  if (isPixelTheme()) return pixelPrismIcon(cell, PRISM_COLOR_SEQUENCE, PRISM_LETTER_COLORS);
   const baseIndex = PRISM_COLOR_SEQUENCE.indexOf(cell.firstColor || "r");
   const base = [0, 1, 2, 3].map((i) => PRISM_COLOR_SEQUENCE[(baseIndex + i) % 4]);
   const left = hexFor(PRISM_LETTER_COLORS[base[0]]) || "#888";
@@ -639,10 +677,19 @@ export function createBoardRenderer(boardEl) {
     if (!icon) return;
     const deg = (cellData._prismAdjacentCount || 0) * 90;
     const rotor = icon.querySelector(".prism-rotor");
-    if (rotor) {
+    // Le thème (lisse/pixel) peut changer entre deux frames (Options ->
+    // toggle PixelArt pendant qu'un plateau est déjà affiché en mémoire,
+    // voir main.js: btnPixelartToggle.onclick appelle renderer.render()) —
+    // dans ce cas garder l'ancien noeud ne ferait QUE tourner l'icône de
+    // l'ancien thème au lieu de la reskinner. Un data-attribute mémorise le
+    // thème avec lequel le rotor actuel a été peint, pour ne réutiliser le
+    // raccourci "juste tourner le transform" que si le thème n'a pas bougé.
+    const pixel = String(isPixelTheme());
+    if (rotor && icon.dataset.pixelTheme === pixel) {
       rotor.style.transform = `rotate(${deg}deg)`;
     } else {
       icon.innerHTML = prismIcon(cellData);
+      icon.dataset.pixelTheme = pixel;
     }
   }
 

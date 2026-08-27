@@ -591,6 +591,16 @@ export function initSommation(pointsApi) {
   // éviter la frustration d'un faux mouvement" — voir onDragEnd() plus bas.
   const recycleModalEl = document.getElementById("som-recycle-confirm-modal");
   const recycleConfirmBtn = document.getElementById("btn-som-recycle-confirm");
+  // État "terminé" (round 12) — filet de sécurité défensif, voir onShow()
+  // plus bas et index.html: #som-done-state. En pratique cet écran n'est
+  // normalement plus atteignable une fois PixelArt débloqué (voir main.js:
+  // enterRememberDirect redirige directement vers Mon profil), mais si on y
+  // arrive quand même on affiche cet état non-interactif plutôt que le
+  // plateau normal (rien à consulter/rejouer: la partie est marquée finie).
+  const doneStateEl = document.getElementById("som-done-state");
+  const progressWrapEl = document.querySelector(".som-progress-wrap");
+  const boardWrapEl = document.querySelector(".som-board-wrap");
+  const actionsEl = document.querySelector(".som-actions");
 
   // Partie en cours: restaurée depuis le disque si une sauvegarde valide
   // existe (voir BOARD_KEY/readBoardState plus haut) — retour utilisateur:
@@ -1534,6 +1544,17 @@ export function initSommation(pointsApi) {
 
   return {
     onShow() {
+      // Filet de sécurité (voir déclaration de doneStateEl plus haut): si
+      // PixelArt est débloqué, Remember est terminé — on affiche un état
+      // figé au lieu du plateau (jamais de render(), donc jamais de spawn/
+      // fusion/objectif traité pour cette visite).
+      const done = isPixelArtUnlocked();
+      doneStateEl?.classList.toggle("hidden", !done);
+      progressWrapEl?.classList.toggle("hidden", done);
+      boardWrapEl?.classList.toggle("hidden", done);
+      spawnInfoEl?.classList.toggle("hidden", done);
+      actionsEl?.classList.toggle("hidden", done);
+      if (done) return;
       render();
     },
   };
