@@ -273,6 +273,19 @@ export function getSommationBadges() {
   return BADGE_DEFS.map((def, i) => ({ name: def.name, earned: meta.badgesEarned > i, tier: i + 1 }));
 }
 
+/** Teaser affiché au-dessus de la barre de progression — retour utilisateur
+ * round 11: "il faut teaser le joueur en affichant la prochaine récompense
+ * à débloquer". `badgesEarned` récompenses déjà décrochées -> la prochaine
+ * est BADGE_DEFS[badgesEarned] (index 0-based) tant qu'il en reste, sinon
+ * le thème PixelArt (tier 5), sinon plus rien de nouveau ne sera annoncé
+ * (barre toujours active au-delà, voir plus haut, mais honnête: on ne
+ * tease pas un contenu qui n'existe pas). */
+function nextRewardLabel(badgesEarned) {
+  if (badgesEarned < BADGE_DEFS.length) return `bannière « ${BADGE_DEFS[badgesEarned].name} »`;
+  if (badgesEarned < PIXELART_BADGE_TIER) return "thème PixelArt";
+  return null;
+}
+
 /** 5e et dernière récompense du jeu — retour utilisateur: "la 5eme et
  * dernière récompense du jeu sera un theme PixelArt de tout le jeu + menus
  * [...] activable/desactivable dans Options et présent dès le début en
@@ -283,9 +296,73 @@ export function isPixelArtUnlocked() {
   return loadMeta().badgesEarned >= PIXELART_BADGE_TIER;
 }
 
+/** Débogage: force le déverrouillage de la 5e récompense (thème PixelArt)
+ * sans avoir à finir le mini-jeu Remember à chaque fois — retour
+ * utilisateur round 11: "même si le bouton est verrouillé dans options,
+ * j'aimerais pouvoir l'activer pour tester la feature sans avoir à finir le
+ * mini jeu à chaque fois". Fait avancer le VRAI compteur badgesEarned
+ * (jamais en arrière si déjà plus haut) plutôt qu'un flag de contournement
+ * séparé — réutilise tel quel le chemin normal (isPixelArtUnlocked), donc
+ * rien à dupliquer/désynchroniser ailleurs. Débloque en même temps les 4
+ * bannières (effet de bord acceptable pour un bouton de test — voir
+ * main.js: #btn-pixelart-debug-unlock, dans Options). */
+export function debugUnlockPixelArt() {
+  const meta = loadMeta();
+  if (meta.badgesEarned < PIXELART_BADGE_TIER) {
+    meta.badgesEarned = PIXELART_BADGE_TIER;
+    saveMeta(meta);
+  }
+}
+
 function saveMeta(meta) {
   try {
     localStorage.setItem(META_KEY, JSON.stringify(meta));
+  } catch {
+    // voir storage.js: stockage indisponible, on reste correct en mémoire
+  }
+}
+
+// ---------- Partie en cours (plateau, verrous, objectif affiché) ----------
+// Retour utilisateur round 11: "L'état du jeu Remember (la progression, les
+// objectifs remplis, les éléments en jeu sur la grille etc) doit toujours
+// être enregistré, c'est pas un mini jeu qu'on recommence, il doit
+// persister." Avant ce round, seul META_KEY (compteurs long terme:
+// objectifs/badges cumulés) était sauvegardé — le plateau lui-même
+// (générateurs/lumières posés), les cases encore verrouillées et
+// l'objectif COURANT (avec son remplissage partiel) ne vivaient qu'en
+// mémoire JS et disparaissaient au rechargement. Clé dédiée plutôt que
+// fusionnée à META_KEY: state "court terme, rejouable" bien distinct de la
+// progression "long terme, cumulative" — même découpage d'esprit que
+// storage.js (KEYS.progress vs KEYS.points). Hors storage.js/KEYS et hors
+// eraseAllProgress(), comme META_KEY/PROFILE_KEY: "Réinitialiser le jeu" ne
+// doit pas remettre Remember à zéro non plus.
+const BOARD_KEY = "lightup-sommation-board";
+
+/** Lue une seule fois à l'ouverture (voir initSommation ci-dessous) — valide
+ * juste assez la forme du plateau (tableau SIZE×SIZE) pour ne jamais
+ * planter le rendu si le format a changé entre deux versions; en cas de
+ * doute, on retombe silencieusement sur l'état de départ historique plutôt
+ * que de risquer une UI incohérente. */
+function readBoardState() {
+  try {
+    const raw = localStorage.getItem(BOARD_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.board) || parsed.board.length !== SIZE) return null;
+    if (!parsed.board.every((row) => Array.isArray(row) && row.length === SIZE)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/** Écrite à la fin de CHAQUE render() (voir plus bas) — render() est déjà le
+ * point de passage unique après toute mutation du plateau (drag, fusion,
+ * génération, déblocage, objectif nourri...), donc un seul point d'écriture
+ * suffit à tout capturer sans avoir à instrumenter chaque handler. */
+function writeBoardState(state) {
+  try {
+    localStorage.setItem(BOARD_KEY, JSON.stringify(state));
   } catch {
     // voir storage.js: stockage indisponible, on reste correct en mémoire
   }
@@ -500,6 +577,7 @@ export function initSommation(pointsApi) {
   const debugPointsBtn = document.getElementById("som-debug-points");
   const progressFillEl = document.getElementById("som-badge-progress-fill");
   const progressLabelEl = document.getElementById("som-badge-progress-label");
+  const nextRewardTeaserEl = document.getElementById("som-next-reward-teaser");
   const spawnInfoEl = document.getElementById("som-spawn-info");
   const spawnBtn = document.getElementById("som-spawn-btn");
   // Modale "plus assez de points" — retour utilisateur: "on ouvre une
@@ -514,42 +592,51 @@ export function initSommation(pointsApi) {
   const recycleModalEl = document.getElementById("som-recycle-confirm-modal");
   const recycleConfirmBtn = document.getElementById("btn-som-recycle-confirm");
 
+  // Partie en cours: restaurée depuis le disque si une sauvegarde valide
+  // existe (voir BOARD_KEY/readBoardState plus haut) — retour utilisateur:
+  // "c'est pas un mini jeu qu'on recommence, il doit persister". Sinon
+  // (première visite, ou sauvegarde invalide) on repart de l'état de départ
+  // historique ci-dessous, comme avant ce round.
+  const savedBoard = readBoardState();
+
   // Plateau: null (vide) | {type:'gen', color, level} | {type:'light', ch,
-  // tier} | {type:'frag'}. Persistant tant que l'onglet reste ouvert
-  // (aucune sauvegarde disque du plateau lui-même pour ce premier jet).
-  const board = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
-  // Générateur de départ: blanc, peut faire apparaître n'importe quelle
-  // couleur mais à très faible taux au niveau 1 — voir rollGeneratorOutcome().
-  // C'est aussi le SEUL moyen d'obtenir un générateur (via ses morceaux
-  // lootés, voir spawnFromSelected) — retour utilisateur: "on ne doit pas
-  // pouvoir acheter un générateur, ça se loot uniquement en fragment".
-  board[0][2] = { type: "gen", color: "w", level: 1 };
+  // tier} | {type:'frag'}.
+  const board = savedBoard?.board ?? Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+  if (!savedBoard) {
+    // Générateur de départ: blanc, peut faire apparaître n'importe quelle
+    // couleur mais à très faible taux au niveau 1 — voir rollGeneratorOutcome().
+    // C'est aussi le SEUL moyen d'obtenir un générateur (via ses morceaux
+    // lootés, voir spawnFromSelected) — retour utilisateur: "on ne doit pas
+    // pouvoir acheter un générateur, ça se loot uniquement en fragment".
+    board[0][2] = { type: "gen", color: "w", level: 1 };
+  }
+
+  // Ordre CANONIQUE de déblocage des 2 dernières lignes — retour
+  // utilisateur round 7: "on les débloque dans l'ordre de gauche à droite,
+  // pour éviter de remplir un peu les objectifs de niveau 1 un partout
+  // avant d'en remplir un entier". Ligne du haut d'abord (gauche à droite),
+  // puis la ligne du bas — une seule case peut être "active" (voir
+  // activeLockCoord()) à la fois. TOUJOURS recalculé (indépendant de la
+  // sauvegarde): seul l'ENSEMBLE des cases encore verrouillées ci-dessous
+  // varie d'une partie à l'autre, pas l'ordre lui-même.
+  const LOCK_ORDER = [];
+  for (let r = SIZE - 2; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) LOCK_ORDER.push({ r, c });
+  }
+  const TOTAL_LOCKED_CELLS = LOCK_ORDER.length;
 
   // Les 2 dernières lignes démarrent verrouillées — retour utilisateur:
   // "les deux dernières lignes de cases sont verrouillées et à débloquer en
   // les achetant une par une". Cases identifiées par clé "r,c" plutôt que
   // par une valeur de board[][] pour rester indépendant du contenu (une
   // case verrouillée n'a jamais de contenu tant qu'elle n'est pas ouverte).
-  const lockedCells = new Set();
-  // Ordre CANONIQUE de déblocage — retour utilisateur round 7: "on les
-  // débloque dans l'ordre de gauche à droite, pour éviter de remplir un peu
-  // les objectifs de niveau 1 un partout avant d'en remplir un entier".
-  // Ligne du haut d'abord (gauche à droite), puis la ligne du bas — une
-  // seule case peut être "active" (voir activeLockCoord()) à la fois.
-  const LOCK_ORDER = [];
-  for (let r = SIZE - 2; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      lockedCells.add(`${r},${c}`);
-      LOCK_ORDER.push({ r, c });
-    }
-  }
-  const TOTAL_LOCKED_CELLS = lockedCells.size;
+  const lockedCells = new Set(savedBoard?.lockedCells ?? LOCK_ORDER.map(({ r, c }) => `${r},${c}`));
   // État de remplissage de la case ACTIVE uniquement (couleur -> déjà
   // fournie) — remis à {} à chaque déblocage (voir doDropOnLock()). Contrat
   // "un item à la fois glissé dessus", comme l'objectif (retour utilisateur:
   // "on peut afficher 4 cercles réceptacles sous le cadenas... on débloque
   // dans l'ordre"), plutôt que l'ancien "tout ou rien" atomique du round 6.
-  let lockFill = {};
+  let lockFill = savedBoard?.lockFill ?? {};
 
   function isLocked(r, c) {
     return lockedCells.has(`${r},${c}`);
@@ -574,9 +661,24 @@ export function initSommation(pointsApi) {
     return coord ? `${coord.r},${coord.c}` : null;
   }
 
-  let selectedGen = null; // {r, c} | null — uniquement pour le bouton "Générer"
-  let objectiveIndex = 0;
-  let objectiveState = cloneObjective(OBJECTIVE_SCRIPT[0]);
+  let selectedGen = savedBoard?.selectedGen ?? null; // {r, c} | null — uniquement pour le bouton "Générer"
+  // render() revalide de toute façon que selectedGen pointe encore vers un
+  // générateur (voir plus bas: "if (selectedGen && board[...]?.type ===
+  // 'gen')") — pas besoin de validation supplémentaire ici, un board restauré
+  // incohérent s'auto-corrige au premier rendu.
+  let objectiveIndex = Number.isInteger(savedBoard?.objectiveIndex)
+    ? ((savedBoard.objectiveIndex % OBJECTIVE_SCRIPT.length) + OBJECTIVE_SCRIPT.length) % OBJECTIVE_SCRIPT.length
+    : 0;
+  // L'objectif sauvegardé n'est repris que s'il a la même forme que le
+  // script actuel (même nombre d'exigences) — protège contre une sauvegarde
+  // devenue incompatible après une future mise à jour d'OBJECTIVE_SCRIPT:
+  // on préfère repartir d'un objectif propre (fulfilled=0) plutôt que
+  // risquer un rendu désynchronisé.
+  const freshObjective = cloneObjective(OBJECTIVE_SCRIPT[objectiveIndex]);
+  let objectiveState =
+    savedBoard?.objectiveState?.requirements?.length === freshObjective.requirements.length
+      ? savedBoard.objectiveState
+      : freshObjective;
   const meta = loadMeta();
   // Animation à jouer au PROCHAIN rendu (consommée une fois, voir render())
   // — {type:'move'|'merge', r, c} pour une case du plateau, ou
@@ -1362,6 +1464,12 @@ export function initSommation(pointsApi) {
       if (progressLabelEl) progressLabelEl.textContent = `${done}/${total}`;
     }
 
+    if (nextRewardTeaserEl) {
+      const label = nextRewardLabel(meta.badgesEarned);
+      nextRewardTeaserEl.textContent = label ? `Prochaine récompense : ${label}` : "";
+      nextRewardTeaserEl.classList.toggle("hidden", !label);
+    }
+
     if (selectedGen && board[selectedGen.r]?.[selectedGen.c]?.type === "gen") {
       const gen = board[selectedGen.r][selectedGen.c];
       const cost = genCost(gen.level);
@@ -1377,6 +1485,15 @@ export function initSommation(pointsApi) {
       spawnBtn.textContent = "Sélectionne un générateur";
       if (spawnInfoEl) spawnInfoEl.innerHTML = "";
     }
+
+    // Sauvegarde disque — voir writeBoardState/BOARD_KEY plus haut. render()
+    // est déjà le point de passage unique après CHAQUE mutation du plateau,
+    // donc un seul appel ici suffit à capturer tout changement (drag, fusion,
+    // génération, déblocage, objectif nourri, recyclage...) sans avoir à
+    // instrumenter chaque handler individuellement. `selectedGen` est repris
+    // APRÈS le bloc ci-dessus pour persister sa valeur déjà auto-corrigée
+    // (remise à null si elle ne pointait plus vers un générateur valide).
+    writeBoardState({ board, lockedCells: Array.from(lockedCells), lockFill, objectiveIndex, objectiveState, selectedGen });
   }
 
   spawnBtn.onclick = spawnFromSelected;

@@ -35,7 +35,7 @@ import {
   mirrorNeuronIcon,
 } from "./game/render.js";
 import { initEditor } from "./editor.js";
-import { initSommation, getSommationBadges, isPixelArtUnlocked } from "./sommation.js";
+import { initSommation, getSommationBadges, isPixelArtUnlocked, debugUnlockPixelArt } from "./sommation.js";
 import { FEATURES } from "./game/generator.js";
 import { requestLevel, ensureLevelBuffer, takeBufferedLevel } from "./game/infiniteClient.js";
 import {
@@ -573,6 +573,19 @@ btnPixelartToggle.onclick = () => {
   applyPixelArtTheme();
   renderPixelArtOption();
 };
+
+// Débug: force le déverrouillage pour tester le thème sans finir le
+// mini-jeu Remember à chaque fois (retour utilisateur round 11). Toujours
+// dans le DOM (pas seulement quand verrouillé) par simplicité — cliquer une
+// fois débloqué n'a plus d'effet (debugUnlockPixelArt ne redescend jamais
+// le compteur), donc pas besoin de le masquer une fois inutile.
+const btnPixelartDebugUnlock = document.getElementById("btn-pixelart-debug-unlock");
+if (btnPixelartDebugUnlock) {
+  btnPixelartDebugUnlock.onclick = () => {
+    debugUnlockPixelArt();
+    renderPixelArtOption();
+  };
+}
 
 // ---------- Mode Infini ----------
 // Voir docs/infinite-mode-design.md. Un niveau généré est un objet niveau

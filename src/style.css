@@ -2599,6 +2599,24 @@ body {
   flex-shrink: 0;
 }
 
+/* Teaser de la prochaine récompense — retour utilisateur round 11: "au
+   dessus de la barre de progression, il faut teaser le joueur en affichant
+   la prochaine récompense à débloquer". Masqué (voir sommation.js: render())
+   au-delà du 5e palier, une fois qu'il n'y a plus rien de nouveau à annoncer
+   — la barre continue de tourner mais on ne promet pas un contenu inexistant. */
+.som-next-reward-teaser {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.som-next-reward-teaser.hidden {
+  display: none;
+}
+
 .som-progress-row {
   display: flex;
   align-items: center;

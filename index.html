@@ -282,6 +282,12 @@
             <span id="options-pixelart-label" class="options-label">Remember ?</span>
             <button id="btn-pixelart-toggle" class="options-btn" disabled>Verrouillé</button>
             <p id="options-pixelart-hint" class="options-hint">Débloqué à la 5e récompense de Remember.</p>
+            <!-- Débug: force le déverrouillage pour tester le thème sans finir
+                 le mini-jeu Remember à chaque fois (retour utilisateur round
+                 11) — voir sommation.js: debugUnlockPixelArt. Même esprit que
+                 #som-debug-points (+500 pts), texte discret plutôt qu'un
+                 bouton mis en avant. -->
+            <button id="btn-pixelart-debug-unlock" class="som-debug-btn" type="button">Débloquer (débug)</button>
           </div>
 
           <div class="options-section">
@@ -314,6 +320,11 @@
         </header>
 
         <div class="som-progress-wrap" title="Progression vers la prochaine récompense">
+          <!-- Teaser de la prochaine récompense — retour utilisateur round 11:
+               "au dessus de la barre de progression, il faut teaser le
+               joueur en affichant la prochaine récompense à débloquer".
+               Rempli par sommation.js: render() (voir nextRewardLabel). -->
+          <span id="som-next-reward-teaser" class="som-next-reward-teaser"></span>
           <div class="som-progress-row">
             <div id="som-badge-progress" class="som-badge-progress">
               <div id="som-badge-progress-fill" class="som-badge-progress-fill"></div>
