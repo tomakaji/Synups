@@ -32,10 +32,50 @@ const KEYS = {
  * que dupliquée entre main.js et editor.js, pour qu'un ajout futur (ou un
  * jour, de vraies photos de profil) n'ait qu'un seul fichier à toucher.
  * Même famille que les auteurs fictifs de community-seed.js, pour que les
- * créations des vrais joueurs se mêlent visuellement au fil simulé. */
-export const AVATAR_CHOICES = [
-  "🙂", "🧠", "✨", "🔷", "🌌", "⚡", "🌙", "🦋", "🌀", "🪐", "🌊", "🧩", "🔥", "🛰️", "🦉", "🎯", "🔮",
+ * créations des vrais joueurs se mêlent visuellement au fil simulé.
+ *
+ * Round 18 (retour utilisateur): "il nous faut une liste d'avatars qu'on
+ * débloque au fil du jeu [...] en rapport avec le jeu et son design" — la
+ * plupart restent débloqués d'office (c'était déjà le cas, aucune
+ * régression) le temps que la vraie logique de déblocage soit décidée
+ * ailleurs, mais la STRUCTURE est prête : `locked` porte une clé de
+ * déblocage optionnelle, résolue par l'appelant (voir isAvatarUnlocked
+ * ci-dessous) plutôt que ce module ne connaisse la progression du jeu.
+ * "retro" est le premier avatar réellement verrouillé, aligné sur la 5e et
+ * dernière récompense Remember (voir sommation.js: isPixelArtUnlocked). */
+export const AVATARS = [
+  { id: "smile", emoji: "🙂" },
+  { id: "brain", emoji: "🧠" },
+  { id: "spark", emoji: "✨" },
+  { id: "diamond", emoji: "🔷" },
+  { id: "nebula", emoji: "🌌" },
+  { id: "bolt", emoji: "⚡" },
+  { id: "moon", emoji: "🌙" },
+  { id: "butterfly", emoji: "🦋" },
+  { id: "spiral", emoji: "🌀" },
+  { id: "saturn", emoji: "🪐" },
+  { id: "wave", emoji: "🌊" },
+  { id: "puzzle", emoji: "🧩" },
+  { id: "fire", emoji: "🔥" },
+  { id: "satellite", emoji: "🛰️" },
+  { id: "owl", emoji: "🦉" },
+  { id: "target", emoji: "🎯" },
+  { id: "crystal", emoji: "🔮" },
+  { id: "retro", emoji: "👾", locked: "pixelart" },
 ];
+
+/** Rétrocompatibilité (profils déjà enregistrés avec un avatar par défaut) :
+ * le premier avatar de la liste sert de repli si l'avatar sauvegardé n'existe
+ * plus / n'est plus valide. */
+export const DEFAULT_AVATAR = AVATARS[0].emoji;
+
+/** true si `avatar` (une entrée de AVATARS) est déverrouillé. `unlocks` est
+ * un sac de clés->booléen fourni par l'appelant (voir main.js/editor.js:
+ * { pixelart: isPixelArtUnlocked() }) — ce module ne sait rien de la
+ * progression du jeu lui-même, uniquement de la liste et de ses clés. */
+export function isAvatarUnlocked(avatar, unlocks = {}) {
+  return !avatar.locked || !!unlocks[avatar.locked];
+}
 
 function readJson(key, fallback) {
   try {
@@ -198,6 +238,20 @@ export function validatePlayableLevel({ rows, cols, cells }) {
   }
   if (!analysis) return { error: "Cette grille n'a aucune solution — impossible de la publier." };
   return { ok: true, solutionLength: analysis.solution.length, difficulty: starsForSolverTier(analysis.tier) };
+}
+
+/** true si une grille du même titre par le même auteur existe déjà dans le
+ * fil (seed ou publiée, peu importe) — retour utilisateur round 18: la
+ * modale de confirmation "Publier" doit vérifier "qu'il n'existe pas de
+ * niveau qui a le même combo nom + auteur" avant de laisser passer, pour
+ * éviter les republications accidentelles/redondantes du même niveau. */
+export function isDuplicatePublication(title, authorPseudo) {
+  const t = (title || "").trim().toLowerCase();
+  const a = (authorPseudo || "").trim().toLowerCase();
+  if (!t) return false;
+  return listLevels().some(
+    (l) => (l.title || "").trim().toLowerCase() === t && (l.author?.pseudo || "").trim().toLowerCase() === a
+  );
 }
 
 /** Publie une grille (depuis l'éditeur, voir editor.js) dans VOTRE espace

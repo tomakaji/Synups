@@ -220,12 +220,14 @@ const OBJECTIVE_SCRIPT = buildObjectiveScript();
 // Round 10 — retour utilisateur: "il faut designer les 4 badges obtenables,
 // [...] progressifs et [qui] englobent le pseudo du joueur (comme une sorte
 // de bannière). Et la 5eme et dernière récompense du jeu sera un thème
-// PixelArt". `BADGE_DEFS` fixe donc EXACTEMENT ces 4 premiers paliers
-// (badgesEarned 1 à 4) — bannières de plus en plus élaborées, rendues avec
-// le pseudo dans main.js (voir renderCommunityProfile). Le 5e palier ne
-// produit plus de badge ici: voir isPixelArtUnlocked() plus bas. Les paliers
-// au-delà du 5e ne débloquent plus rien de nouveau, mais la barre continue
-// de tourner (jamais de blocage, cf. le bug round 8 ci-dessus).
+// PixelArt". `BADGE_DEFS` fixait à l'origine EXACTEMENT ces 4 premiers
+// paliers (badgesEarned 1 à 4) — bannières de plus en plus élaborées,
+// rendues avec le pseudo dans main.js (voir renderCommunityProfile).
+// Round 18 (retour utilisateur): "ajoute le badge 'retro' [...] pour le
+// dernier gain de remember" — un 5e badge rejoint donc la liste, au même
+// palier que le déblocage du thème PixelArt (PIXELART_BADGE_TIER): les deux
+// récompenses tombent maintenant exactement en même temps, ce qui rend
+// BADGE_DEFS.length === PIXELART_BADGE_TIER (voir nextRewardLabel plus bas).
 const OBJECTIVES_PER_BADGE = 10;
 const PIXELART_BADGE_TIER = 5;
 const BADGE_DEFS = [
@@ -233,6 +235,7 @@ const BADGE_DEFS = [
   { name: "Synapse" },
   { name: "Réseau" },
   { name: "Constellation" },
+  { name: "Rétro" },
 ];
 
 // Progression globale minimale, PERSISTÉE à part (clé dédiée, hors
@@ -260,14 +263,14 @@ function loadMeta() {
 
 /** Exporté pour l'écran "Mon profil" (voir main.js: renderCommunityProfile)
  * — retour utilisateur: "une fois la barre remplie, on gagne un badge sur
- * ton profil (visible par les autres joueurs dans 'communauté')". L'app
- * n'ayant pas de vrai backend multi-joueurs (voir community-store.js: "tout
- * local, feed simulé"), "visible par les autres" suit le même principe que
- * le reste du profil (pseudo/avatar/publications) — la seule surface
- * "publique" que ce prototype sait offrir. Les 4 noms de BADGE_DEFS
- * (earned dès que badgesEarned dépasse leur index, 1 à 4) sont les seuls
- * badges-bannière du jeu — le 5e palier n'en fait pas partie, voir
- * isPixelArtUnlocked(). */
+ * ton profil". Round 18 (retour utilisateur): "les badges c'est [...]
+ * visible par les autres joueurs [...] son badge sera visible sous forme
+ * d'un encadré autour de son pseudo + avatar [...] on sélectionne le badge
+ * qu'on souhaite mettre" — getSommationBadges() ne fait plus QUE lister les
+ * badges gagnés, l'appelant (main.js) gère en plus la sélection d'un badge
+ * "actif" (stockée dans le profil, voir storage.js) qui est celui réellement
+ * montré aux autres joueurs (dans les cartes communautaires, l'en-tête de
+ * jeu communautaire...), jamais automatiquement le plus haut gagné. */
 export function getSommationBadges() {
   const meta = loadMeta();
   return BADGE_DEFS.map((def, i) => ({ name: def.name, earned: meta.badgesEarned > i, tier: i + 1 }));
@@ -277,13 +280,16 @@ export function getSommationBadges() {
  * round 11: "il faut teaser le joueur en affichant la prochaine récompense
  * à débloquer". `badgesEarned` récompenses déjà décrochées -> la prochaine
  * est BADGE_DEFS[badgesEarned] (index 0-based) tant qu'il en reste, sinon
- * le thème PixelArt (tier 5), sinon plus rien de nouveau ne sera annoncé
- * (barre toujours active au-delà, voir plus haut, mais honnête: on ne
- * tease pas un contenu qui n'existe pas). */
+ * plus rien de nouveau ne sera annoncé (barre toujours active au-delà, voir
+ * plus haut, mais honnête: on ne tease pas un contenu qui n'existe pas). Le
+ * tout dernier palier (Rétro) tombe pile au même moment que le thème
+ * PixelArt (BADGE_DEFS.length === PIXELART_BADGE_TIER, voir plus haut) —
+ * les deux sont donc teasés ensemble plutôt que l'un après l'autre. */
 function nextRewardLabel(badgesEarned) {
-  if (badgesEarned < BADGE_DEFS.length) return `bannière « ${BADGE_DEFS[badgesEarned].name} »`;
-  if (badgesEarned < PIXELART_BADGE_TIER) return "thème PixelArt";
-  return null;
+  if (badgesEarned >= BADGE_DEFS.length) return null;
+  const label = `bannière « ${BADGE_DEFS[badgesEarned].name} »`;
+  if (badgesEarned + 1 === PIXELART_BADGE_TIER) return `${label} (et le thème PixelArt)`;
+  return label;
 }
 
 /** 5e et dernière récompense du jeu — retour utilisateur: "la 5eme et
@@ -303,7 +309,7 @@ export function isPixelArtUnlocked() {
  * mini jeu à chaque fois". Fait avancer le VRAI compteur badgesEarned
  * (jamais en arrière si déjà plus haut) plutôt qu'un flag de contournement
  * séparé — réutilise tel quel le chemin normal (isPixelArtUnlocked), donc
- * rien à dupliquer/désynchroniser ailleurs. Débloque en même temps les 4
+ * rien à dupliquer/désynchroniser ailleurs. Débloque en même temps les 5
  * bannières (effet de bord acceptable pour un bouton de test — voir
  * main.js: #btn-pixelart-debug-unlock, dans Options). */
 export function debugUnlockPixelArt() {
@@ -591,12 +597,12 @@ export function initSommation(pointsApi) {
   // éviter la frustration d'un faux mouvement" — voir onDragEnd() plus bas.
   const recycleModalEl = document.getElementById("som-recycle-confirm-modal");
   const recycleConfirmBtn = document.getElementById("btn-som-recycle-confirm");
-  // État "terminé" (round 12) — filet de sécurité défensif, voir onShow()
-  // plus bas et index.html: #som-done-state. En pratique cet écran n'est
-  // normalement plus atteignable une fois PixelArt débloqué (voir main.js:
-  // enterRememberDirect redirige directement vers Mon profil), mais si on y
-  // arrive quand même on affiche cet état non-interactif plutôt que le
-  // plateau normal (rien à consulter/rejouer: la partie est marquée finie).
+  // État "terminé" (round 12, devenu l'écran normal round 18) — voir
+  // onShow() plus bas et index.html: #som-done-state. Depuis round 18, le
+  // menu titre ouvre TOUJOURS Remember (voir main.js: enterRememberDirect),
+  // donc c'est bien ICI, une fois PixelArt débloqué, que ce filet devient
+  // l'écran effectivement affiché — un état non-interactif ("bravo, plus
+  // rien à voir ici") plutôt que le plateau normal.
   const doneStateEl = document.getElementById("som-done-state");
   const progressWrapEl = document.querySelector(".som-progress-wrap");
   const boardWrapEl = document.querySelector(".som-board-wrap");
@@ -1544,10 +1550,10 @@ export function initSommation(pointsApi) {
 
   return {
     onShow() {
-      // Filet de sécurité (voir déclaration de doneStateEl plus haut): si
-      // PixelArt est débloqué, Remember est terminé — on affiche un état
-      // figé au lieu du plateau (jamais de render(), donc jamais de spawn/
-      // fusion/objectif traité pour cette visite).
+      // Voir déclaration de doneStateEl plus haut: si PixelArt est
+      // débloqué, Remember est terminé — on affiche un état figé au lieu du
+      // plateau (jamais de render(), donc jamais de spawn/fusion/objectif
+      // traité pour cette visite).
       const done = isPixelArtUnlocked();
       doneStateEl?.classList.toggle("hidden", !done);
       progressWrapEl?.classList.toggle("hidden", done);

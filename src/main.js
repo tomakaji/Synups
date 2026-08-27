@@ -50,7 +50,7 @@ import {
   saveSettings,
   eraseAllProgress,
   loadProfile,
-  saveProfile,
+  updateProfile,
 } from "./game/storage.js";
 import {
   listLevels,
@@ -62,7 +62,8 @@ import {
   encodeShareCode,
   decodeShareCode,
   importSharedLevel,
-  AVATAR_CHOICES,
+  AVATARS,
+  isAvatarUnlocked,
 } from "./game/community-store.js";
 
 let currentLevelIndex = 0;
@@ -206,7 +207,8 @@ function renderPointsEverywhere() {
   // mode est terminé (retour utilisateur round 12: "il sera marqué comme
   // terminé et ne sera plus jouable") — la carte du menu titre l'affiche à
   // la place du solde de points, qui n'a plus de sens ici (voir
-  // enterRememberDirect ci-dessous: le clic redirige vers Mon profil).
+  // enterRememberDirect ci-dessous: le clic ouvre quand même Remember, qui
+  // affiche alors son propre état "terminé" — voir sommation.js: onShow()).
   menuPointsBadgeEl.textContent = isPixelArtUnlocked() ? "Terminé" : label;
   if (sommationPointsEl) sommationPointsEl.textContent = label;
 }
@@ -929,6 +931,7 @@ const profilePublishedEl = document.getElementById("profile-published");
 const profilePublishedEmptyEl = document.getElementById("profile-published-empty");
 const profileLikedEl = document.getElementById("profile-liked");
 const profileLikedEmptyEl = document.getElementById("profile-liked-empty");
+const profileBadgePreviewEl = document.getElementById("profile-badge-preview");
 const profileSommationBadgesEl = document.getElementById("profile-sommation-badges");
 const btnProfileBadgesDebugUnlock = document.getElementById("btn-profile-badges-debug-unlock");
 const titleProfileBanner = document.getElementById("title-profile-banner");
@@ -938,7 +941,42 @@ const titleProfilePseudoEl = document.getElementById("title-profile-pseudo");
 let communitySearch = "";
 let communitySort = "recent";
 let currentCommunityLevel = null; // grille en cours en mode "community" — voir loadCommunityLevel
-let selectedProfileAvatar = AVATAR_CHOICES[0];
+let selectedProfileAvatar = AVATARS[0].emoji;
+// Tier (1-5) du badge choisi pour affichage public, ou null ("aucun badge") —
+// voir renderCommunityProfile/refreshProfileBadgePreview. Simple reflet local
+// de profile.activeBadge, ré-synchronisé à chaque entrée dans "Mon profil".
+let selectedActiveBadge = null;
+
+/** Bag d'unlocks résolu ici (main.js reste le seul point qui connaît à la
+ * fois community-store.js ET sommation.js) — même contrat que dans
+ * editor.js: `isAvatarUnlocked(avatar, unlocks)` ne connaît que la forme
+ * `{ pixelart: boolean }`, jamais sommation.js directement. */
+function avatarUnlocks() {
+  return { pixelart: isPixelArtUnlocked() };
+}
+
+/** Construit un "encadré" avatar+pseudo — la surface publique du badge actif
+ * d'un joueur (retour utilisateur round 18: "visible par les autres joueurs
+ * [...] lorsqu'on joue à un niveau de quelqu'un, son badge sera visible sous
+ * forme d'un encadré autour de son pseudo + avatar"). `badgeTier` est soit le
+ * tier (1-5) capturé dans `author.badge` au moment de la publication (voir
+ * editor.js), soit celui actuellement sélectionné dans "Mon profil"
+ * (prévisualisation en direct) — dans les deux cas un simple nombre opaque,
+ * jamais recalculé depuis la progression Sommation de l'observateur. Sans
+ * badge (null/undefined), le cadre reste neutre — même apparence qu'avant
+ * cette fonctionnalité. */
+function buildBadgeFrame(avatarEmoji, pseudoText, badgeTier) {
+  const frame = document.createElement("span");
+  frame.className = "badge-frame" + (badgeTier ? ` badge-frame--tier-${badgeTier}` : "");
+  const avatarEl = document.createElement("span");
+  avatarEl.className = "badge-frame-avatar";
+  avatarEl.textContent = avatarEmoji || "🙂";
+  const pseudoEl = document.createElement("span");
+  pseudoEl.className = "badge-frame-pseudo";
+  pseudoEl.textContent = pseudoText || "Joueur";
+  frame.append(avatarEl, pseudoEl);
+  return frame;
+}
 
 /** Carte d'une grille communautaire — réutilisée à l'identique dans le fil
  * principal et dans "Mon profil" (mes publications / mes favoris). Le
@@ -963,12 +1001,7 @@ function buildCommunityCard(level, { showUnpublish = false, onChange } = {}) {
 
   const byline = document.createElement("div");
   byline.className = "community-card-byline";
-  const avatar = document.createElement("span");
-  avatar.className = "community-avatar";
-  avatar.textContent = level.author?.avatar ?? "🙂";
-  const pseudo = document.createElement("span");
-  pseudo.textContent = level.author?.pseudo ?? "Joueur";
-  byline.append(avatar, pseudo);
+  byline.appendChild(buildBadgeFrame(level.author?.avatar, level.author?.pseudo ?? "Joueur", level.author?.badge));
 
   const mechanicsRow = document.createElement("div");
   mechanicsRow.className = "community-card-mechanics";
@@ -1143,7 +1176,10 @@ function loadCommunityLevel(level) {
   currentLevel = { name: level.title, rows: level.rows, cols: level.cols, cells: level.cells };
   grid = new LightUpGrid(currentLevel);
   communityLevelTitleEl.textContent = level.title;
-  communityLevelAuthorEl.textContent = `${level.author?.avatar ?? ""} ${level.author?.pseudo ?? "Joueur"}`;
+  communityLevelAuthorEl.innerHTML = "";
+  communityLevelAuthorEl.appendChild(
+    buildBadgeFrame(level.author?.avatar, level.author?.pseudo ?? "Joueur", level.author?.badge)
+  );
   refreshCommunityLikeButton();
   startBoard();
 }
@@ -1166,16 +1202,26 @@ btnCommunityLike.onclick = () => {
 // ---------- Mon profil ----------
 function refreshProfileAvatarPicker() {
   profileAvatarPicker.innerHTML = "";
-  for (const avatar of AVATAR_CHOICES) {
+  const unlocks = avatarUnlocks();
+  for (const avatar of AVATARS) {
+    const unlocked = isAvatarUnlocked(avatar, unlocks);
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "profile-avatar-btn" + (avatar === selectedProfileAvatar ? " active" : "");
-    btn.textContent = avatar;
-    btn.addEventListener("click", () => {
-      selectedProfileAvatar = avatar;
-      profileAvatarPreviewEl.textContent = avatar;
-      refreshProfileAvatarPicker();
-    });
+    btn.className =
+      "profile-avatar-btn" +
+      (avatar.emoji === selectedProfileAvatar ? " active" : "") +
+      (unlocked ? "" : " locked");
+    btn.textContent = avatar.emoji;
+    btn.disabled = !unlocked;
+    btn.title = unlocked ? "" : "Avatar verrouillé";
+    if (unlocked) {
+      btn.addEventListener("click", () => {
+        selectedProfileAvatar = avatar.emoji;
+        profileAvatarPreviewEl.textContent = avatar.emoji;
+        refreshProfileAvatarPicker();
+        refreshProfileBadgePreview();
+      });
+    }
     profileAvatarPicker.appendChild(btn);
   }
 }
@@ -1190,7 +1236,7 @@ function refreshProfileAvatarPicker() {
  * modifié depuis (pseudo changé dans "Mon profil" puis retour ici). */
 function renderTitleProfileBanner() {
   const profile = loadProfile();
-  titleProfileAvatarEl.textContent = profile?.avatar ?? AVATAR_CHOICES[0];
+  titleProfileAvatarEl.textContent = profile?.avatar ?? AVATARS[0].emoji;
   titleProfilePseudoEl.textContent = profile?.pseudo?.trim() || "Configurer mon profil";
 }
 
@@ -1200,12 +1246,28 @@ titleProfileBanner.onclick = () => pushView("community-profile");
  * renderLevelGrid/renderShop, jamais figée sur un rendu périmé (ex: un like
  * posé depuis le fil principal doit apparaître dans "Mes favoris" au
  * prochain passage ici). */
+/** Reconstruit l'encadré de prévisualisation "Mon profil" (retour
+ * utilisateur round 18: "on selectionne le badge qu'on souhaite mettre et on
+ * peut voir en direct la prévisualisation") — appelée à chaque changement
+ * d'avatar, de pseudo tapé, ou de badge sélectionné, toujours à partir de
+ * l'état actuellement affiché dans le formulaire (pas forcément déjà
+ * enregistré). */
+function refreshProfileBadgePreview() {
+  if (!profileBadgePreviewEl) return;
+  profileBadgePreviewEl.innerHTML = "";
+  const pseudo = profilePseudoInput.value.trim() || "Joueur";
+  profileBadgePreviewEl.appendChild(buildBadgeFrame(selectedProfileAvatar, pseudo, selectedActiveBadge));
+}
+
 function renderCommunityProfile() {
   const profile = loadProfile();
   profilePseudoInput.value = profile?.pseudo ?? "";
-  selectedProfileAvatar = profile?.avatar ?? AVATAR_CHOICES[0];
+  const savedAvatarUnlocked =
+    profile?.avatar && isAvatarUnlocked(AVATARS.find((a) => a.emoji === profile.avatar) ?? {}, avatarUnlocks());
+  selectedProfileAvatar = savedAvatarUnlocked ? profile.avatar : AVATARS[0].emoji;
   profileAvatarPreviewEl.textContent = selectedProfileAvatar;
   refreshProfileAvatarPicker();
+  selectedActiveBadge = profile?.activeBadge ?? null;
   profileStatusEl.textContent = "";
 
   const mine = listLevels().filter((l) => l.source === "local");
@@ -1236,9 +1298,18 @@ function renderCommunityProfile() {
     profileSommationBadgesEl.innerHTML = "";
     const pseudo = profile?.pseudo?.trim() || "Joueur";
     for (const badge of getSommationBadges()) {
-      const banner = document.createElement("div");
+      // Round 18 (retour utilisateur): "dans le profil, on sélectionne le
+      // badge qu'on souhaite mettre" — une bannière gagnée devient un bouton
+      // qui (dé)sélectionne ce tier comme badge public actif (voir
+      // storage.js: updateProfile, editor.js: snapshot dans author.badge à
+      // la publication). Un second clic sur le badge déjà actif le retire
+      // ("aucun badge affiché"), pour ne pas obliger à en choisir un.
+      const banner = document.createElement(badge.earned ? "button" : "div");
+      if (badge.earned) banner.type = "button";
       banner.className =
-        `badge-banner badge-banner--tier-${badge.tier}` + (badge.earned ? " earned" : " locked");
+        `badge-banner badge-banner--tier-${badge.tier}` +
+        (badge.earned ? " earned selectable" : " locked") +
+        (badge.earned && selectedActiveBadge === badge.tier ? " selected" : "");
 
       const deco = document.createElement("div");
       deco.className = "badge-banner-deco";
@@ -1255,9 +1326,19 @@ function renderCommunityProfile() {
       nameEl.textContent = badge.earned ? badge.name : "Verrouillé";
       banner.appendChild(nameEl);
 
+      if (badge.earned) {
+        banner.addEventListener("click", () => {
+          selectedActiveBadge = selectedActiveBadge === badge.tier ? null : badge.tier;
+          updateProfile({ activeBadge: selectedActiveBadge });
+          renderCommunityProfile();
+        });
+      }
+
       profileSommationBadgesEl.appendChild(banner);
     }
   }
+
+  refreshProfileBadgePreview();
 }
 
 btnProfileSave.onclick = () => {
@@ -1266,9 +1347,19 @@ btnProfileSave.onclick = () => {
     profileStatusEl.textContent = "Choisis un pseudo avant d'enregistrer.";
     return;
   }
-  saveProfile({ pseudo, avatar: selectedProfileAvatar });
+  // updateProfile (pas saveProfile) pour ne jamais écraser activeBadge, réglé
+  // séparément par un clic sur une bannière (voir plus haut) — même si ce
+  // bouton n'enregistre pas lui-même le badge, il ne doit pas non plus
+  // l'effacer.
+  updateProfile({ pseudo, avatar: selectedProfileAvatar });
   profileStatusEl.textContent = "Profil enregistré.";
 };
+
+// Prévisualisation en direct dès que le pseudo est modifié, avant même
+// d'enregistrer (retour utilisateur round 18) — même esprit que le pseudo
+// tapé dans la modale de publication de l'éditeur, qui n'attend pas non plus
+// une sauvegarde pour refléter la saisie en cours.
+profilePseudoInput.addEventListener("input", refreshProfileBadgePreview);
 
 // Round 17 (retour utilisateur): bouton admin temporaire pour tester les 4
 // badges sans finir Remember — même fonction que le bouton équivalent
@@ -1461,15 +1552,15 @@ function enterInfiniteDirect() {
  *
  * Round 12: une fois PixelArt débloqué, Remember est terminé et non-
  * rejouable (retour utilisateur: "ça veut dire qu'on a terminé Remember
- * donc il sera marqué comme terminé et ne sera plus jouable") — le clic
- * redirige vers Mon profil (où les bannières/récompenses restent
- * consultables) au lieu d'entrer dans le plateau. */
+ * donc il sera marqué comme terminé et ne sera plus jouable").
+ *
+ * Round 18 (retour utilisateur): "j'aimerais juste que ça ouvre la page
+ * remember mais qu'à la place du jeu on a une page de réussite, de jeu
+ * terminé" — donc on ouvre TOUJOURS l'écran Sommation (jamais Mon profil,
+ * contrairement à avant ce round): c'est sommation.js: onShow() qui bascule
+ * lui-même vers l'état "terminé" (#som-done-state) une fois PixelArt
+ * débloqué, plutôt que main.js qui redirige ailleurs. */
 function enterRememberDirect() {
-  if (isPixelArtUnlocked()) {
-    viewStack = ["title", "community-profile"];
-    showView("community-profile");
-    return;
-  }
   viewStack = ["title", "sommation"];
   showView("sommation");
 }

@@ -327,15 +327,19 @@
           <button id="som-debug-points" class="som-debug-btn" type="button" title="Débug: +500 points">+500 pts</button>
         </header>
 
-        <!-- État "terminé" (round 12): une fois PixelArt débloqué (5e et
-             dernière récompense), Remember est fini — retour utilisateur:
-             "il sera marqué comme terminé et ne sera plus jouable". Le menu
-             titre redirige désormais directement vers Mon profil (voir
-             main.js: enterRememberDirect), donc cet écran est normalement
-             inatteignable une fois débloqué — ce bloc est un filet de
-             sécurité défensif si jamais on y arrive quand même. -->
+        <!-- État "terminé" (round 12, réécrit round 18): une fois PixelArt
+             débloqué (5e et dernière récompense), Remember est fini — retour
+             utilisateur round 18: "j'aimerais juste que ça ouvre la page
+             remember mais qu'à la place du jeu on a une page de réussite, de
+             jeu terminé, pour dire bravo mais y a plus rien à voir ici". Le
+             menu titre ouvre maintenant toujours cet écran Remember (voir
+             main.js: enterRememberDirect) plutôt que de rediriger vers Mon
+             profil — c'est CET écran qui joue le rôle de "plus rien à voir
+             ici". -->
         <div id="som-done-state" class="som-done-state hidden">
-          <p class="som-done-message">Remember est terminé — toutes les récompenses ont été débloquées. Retrouve tes bannières dans Mon profil.</p>
+          <div class="som-done-icon" aria-hidden="true">✓</div>
+          <p class="som-done-title">Bravo, Remember est terminé !</p>
+          <p class="som-done-message">Toutes les récompenses ont été débloquées. Il n'y a plus rien à faire ici — retrouve tes bannières dans Mon profil.</p>
         </div>
 
         <div class="som-progress-wrap" title="Progression vers la prochaine récompense">
@@ -438,6 +442,8 @@
                  accepté là-bas). -->
             <button id="btn-profile-badges-debug-unlock" class="som-debug-btn" type="button">Déverrouiller (admin)</button>
           </div>
+          <p class="options-hint">Choisis le badge affiché autour de ton avatar et de ton pseudo pour les autres joueurs — reclique dessus pour le retirer.</p>
+          <div id="profile-badge-preview" class="badge-frame-preview"></div>
           <div id="profile-sommation-badges" class="profile-badges"></div>
         </div>
 
@@ -691,9 +697,6 @@
               <label class="editor-field">Mes niveaux
                 <select id="ed-level-list"></select>
               </label>
-              <label class="editor-field">Repartir d'un niveau du jeu
-                <select id="ed-template-list"></select>
-              </label>
 
               <div class="options-actions">
                 <button id="ed-new" class="icon-btn" aria-label="Effacer (nouveau niveau)" title="Effacer (nouveau niveau)">
@@ -716,13 +719,19 @@
                 </button>
               </div>
 
-              <p id="ed-status" class="editor-status"></p>
               <textarea id="ed-export-output" class="hidden" readonly rows="6"></textarea>
 
+              <!-- Round 18 (retour utilisateur): le texte d'invite qui
+                   s'affichait à l'ouverture ("Colle le code d'un niveau
+                   ci-dessous...") est retiré — redondant avec ce label,
+                   seul texte informatif restant ici. ed-import-status ne
+                   sert plus qu'à un VRAI retour (erreur de collage), jamais
+                   à répéter le mode d'emploi. -->
               <div id="ed-import-panel" class="editor-section hidden">
                 <label class="editor-field">Coller l'objet JS d'un niveau (ex: le résultat d'Exporter)
                   <textarea id="ed-import-input" rows="6" placeholder='{ name: "...", rows: 5, cols: 5, cells: [...] }'></textarea>
                 </label>
+                <p id="ed-import-status" class="editor-status"></p>
                 <div class="editor-row">
                   <button id="ed-import-confirm" class="editor-btn">Charger ce niveau</button>
                   <button id="ed-import-cancel" class="editor-btn">Annuler</button>

@@ -1072,14 +1072,28 @@ body {
 
 .editor-field input,
 .editor-field select,
-#ed-level-list,
-#ed-template-list {
+#ed-level-list {
   background: #0e1119;
   border: 1px solid #2a3040;
   color: var(--text);
   border-radius: 6px;
   padding: 6px 8px;
   font-size: 0.85rem;
+}
+
+/* Round 18 (retour utilisateur): plutôt qu'un message d'info séparé pour un
+   nom de niveau manquant (au moment de sauvegarder/exporter/publier, ou dès
+   la création d'un niveau vierge), le champ Titre lui-même passe en état
+   d'erreur — voir editor.js: markNameError/clearNameError. Le "shake"
+   (réutilise l'animation som-shake-fail, voir plus bas) ne joue que sur une
+   tentative active ayant échoué, pas sur le simple rappel passif affiché à
+   la création d'un niveau vierge. */
+.editor-field input.input-error {
+  border-color: var(--error);
+}
+
+.editor-field input.input-error--shake {
+  animation: som-shake-fail 0.4s ease-in-out;
 }
 
 /* ---------- Onglet "Format grille": croix d'insertion/retrait par bord ----------
@@ -1820,7 +1834,29 @@ body {
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: var(--panel);
-  transition: opacity 0.2s, filter 0.2s;
+  transition: opacity 0.2s, filter 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+
+/* Round 18 (retour utilisateur): une bannière gagnée est un <button> qui
+   sélectionne ce badge comme "actif" (affiché publiquement) — reset des
+   styles de bouton natifs pour continuer à ressembler exactement à
+   l'ancienne <div>, plus juste un curseur + un état "selected" (voir main.js:
+   renderCommunityProfile). */
+.badge-banner.selectable {
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+
+.badge-banner.selectable:hover {
+  transform: translateY(-1px);
+}
+
+.badge-banner.selected {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 18px -4px var(--accent);
 }
 
 .badge-banner.locked {
@@ -1969,10 +2005,8 @@ body {
 }
 
 /* Tier 4 "Constellation" — ambre (clin d'œil au thème "Mémoire ancienne"
-   retiré), la bannière la plus riche: petit champ d'étoiles + un point qui
-   orbite lentement autour du pseudo, texte en dégradé. C'est la dernière
-   bannière du jeu — le 5e palier n'en produit plus (voir sommation.js:
-   isPixelArtUnlocked), il déverrouille le thème PixelArt dans Options. */
+   retiré), champ d'étoiles + un point qui orbite lentement autour du pseudo,
+   texte en dégradé. */
 .badge-banner--tier-4.earned {
   border-color: rgba(232, 181, 99, 0.55);
   background: linear-gradient(135deg, rgba(232, 181, 99, 0.2), var(--panel) 80%);
@@ -2032,6 +2066,144 @@ body {
   100% {
     transform: translate(10px, 0);
   }
+}
+
+/* Tier 5 "Rétro" — dernière bannière, gagnée en même temps que le thème
+   PixelArt (voir sommation.js: PIXELART_BADGE_TIER === BADGE_DEFS.length).
+   Reprend le vert CRT de ce thème (`body.theme-pixelart { --accent:
+   #39ff14; }`) plutôt qu'une nouvelle teinte, + un scanline discret et un
+   pseudo en police mono pour évoquer un vieux moniteur. */
+.badge-banner--tier-5.earned {
+  border-color: rgba(57, 255, 20, 0.5);
+  background: linear-gradient(135deg, rgba(57, 255, 20, 0.14), var(--panel) 78%);
+  box-shadow: 0 0 18px -6px rgba(57, 255, 20, 0.55);
+}
+
+.badge-banner--tier-5.earned .badge-banner-deco::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(57, 255, 20, 0.08) 0px,
+    rgba(57, 255, 20, 0.08) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  animation: badge-retro-flicker 3.6s steps(2) infinite;
+}
+
+.badge-banner--tier-5.earned .badge-banner-pseudo {
+  font-family: "Courier New", monospace;
+  color: #9dffa0;
+  text-shadow: 0 0 8px rgba(57, 255, 20, 0.6);
+}
+
+.badge-banner--tier-5.earned .badge-banner-name {
+  color: #39ff14;
+}
+
+@keyframes badge-retro-flicker {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ---------- Encadré public avatar+pseudo (badge actif) ----------
+   Composant compact réutilisé à 3 endroits (voir main.js: buildBadgeFrame):
+   prévisualisation "Mon profil", byline des cartes communautaires, en-tête
+   de jeu en mode Communauté. Sans tier (pas de badge choisi/capturé), reste
+   visuellement identique à l'ancien avatar+pseudo nu — la fonctionnalité
+   n'ajoute jamais de bruit visuel pour qui n'a pas de badge actif. */
+.badge-frame {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 2px 2px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  vertical-align: middle;
+}
+
+.badge-frame-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #1c2130;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.badge-frame-pseudo {
+  font-size: inherit;
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge-frame--tier-1,
+.badge-frame--tier-2 {
+  border-color: rgba(110, 231, 255, 0.4);
+  background: rgba(110, 231, 255, 0.08);
+}
+
+.badge-frame--tier-1 .badge-frame-pseudo,
+.badge-frame--tier-2 .badge-frame-pseudo {
+  color: var(--accent);
+}
+
+.badge-frame--tier-3 {
+  border-color: rgba(197, 139, 255, 0.5);
+  background: rgba(197, 139, 255, 0.1);
+  box-shadow: 0 0 10px -4px rgba(197, 139, 255, 0.7);
+}
+
+.badge-frame--tier-3 .badge-frame-pseudo {
+  color: #c58bff;
+}
+
+.badge-frame--tier-4 {
+  border-color: rgba(232, 181, 99, 0.55);
+  background: rgba(232, 181, 99, 0.12);
+  box-shadow: 0 0 10px -4px rgba(232, 181, 99, 0.75);
+}
+
+.badge-frame--tier-4 .badge-frame-pseudo {
+  color: #e8b563;
+}
+
+.badge-frame--tier-5 {
+  border-color: rgba(57, 255, 20, 0.55);
+  background: rgba(57, 255, 20, 0.1);
+  box-shadow: 0 0 10px -4px rgba(57, 255, 20, 0.75);
+}
+
+.badge-frame--tier-5 .badge-frame-pseudo {
+  color: #9dffa0;
+  font-family: "Courier New", monospace;
+}
+
+.badge-frame-preview {
+  display: flex;
+  padding: 4px 0 2px;
+  font-size: 1.05rem;
+}
+
+.badge-frame-preview .badge-frame {
+  padding: 4px 14px 4px 4px;
+}
+
+.badge-frame-preview .badge-frame-avatar {
+  width: 30px;
+  height: 30px;
+  font-size: 1.1rem;
 }
 
 .options-btn {
@@ -2553,6 +2725,32 @@ body {
   background: rgba(110, 231, 255, 0.08);
 }
 
+/* Round 18 (retour utilisateur): avatars déblocables au fil du jeu (voir
+   community-store.js: AVATARS/isAvatarUnlocked) — verrouillé se distingue
+   par une opacité réduite + un cadenas en overlay, jamais cliquable
+   (:disabled natif, pas juste visuel). */
+.profile-avatar-btn.locked {
+  opacity: 0.35;
+  cursor: not-allowed;
+  position: relative;
+}
+
+.profile-avatar-btn.locked:hover {
+  border-color: #2a3040;
+}
+
+.profile-avatar-btn.locked::after {
+  content: "🔒";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  background: rgba(6, 8, 14, 0.55);
+  border-radius: 7px;
+}
+
 /* ---------- Sommation (mode bonus, prototype de test) ---------- */
 /* Même coquille mobile que #view-community/#view-editor: hauteur bornée au
    viewport + une seule zone qui défile (ici .som-board-wrap), pour que le
@@ -2576,13 +2774,35 @@ body {
   flex-shrink: 0;
 }
 
-/* État "terminé" (round 12, filet de sécurité — voir index.html:
-   #som-done-state). Centré, sans interaction, dans le même esprit
-   silencieux que le reste de l'écran Remember. */
+/* État "terminé" (round 12, devenu l'écran normal du menu "Remember" round
+   18 — voir index.html: #som-done-state, main.js: enterRememberDirect).
+   Centré, sans interaction — "y a plus rien à voir ici" (retour
+   utilisateur), donc pas de bouton, juste une confirmation chaleureuse. */
 .som-done-state {
   width: min(360px, 90vw);
-  margin: 48px auto 0;
+  margin: 72px auto 0;
   text-align: center;
+}
+
+.som-done-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  border-radius: 999px;
+  background: rgba(110, 231, 255, 0.1);
+  border: 1px solid rgba(110, 231, 255, 0.4);
+  color: var(--accent);
+  font-size: 1.5rem;
+}
+
+.som-done-title {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
 }
 
 .som-done-message {

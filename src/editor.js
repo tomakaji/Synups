@@ -19,8 +19,15 @@ import {
   playChargeEmptied,
   playChargeOverload,
 } from "./game/sound.js";
-import { validatePlayableLevel, publishLevel, AVATAR_CHOICES } from "./game/community-store.js";
+import {
+  validatePlayableLevel,
+  publishLevel,
+  isDuplicatePublication,
+  AVATARS,
+  isAvatarUnlocked,
+} from "./game/community-store.js";
 import { loadProfile, saveProfile } from "./game/storage.js";
+import { isPixelArtUnlocked } from "./sommation.js";
 
 const STORAGE_KEY = "lightup_custom_levels";
 const MAX_SIZE = 16;
@@ -204,9 +211,8 @@ export function initEditor({ levels }) {
   const importConfirmBtn = document.getElementById("ed-import-confirm");
   const importCancelBtn = document.getElementById("ed-import-cancel");
   const levelListSel = document.getElementById("ed-level-list");
-  const templateListSel = document.getElementById("ed-template-list");
   const exportOutput = document.getElementById("ed-export-output");
-  const statusEl = document.getElementById("ed-status");
+  const importStatusEl = document.getElementById("ed-import-status");
 
   const renderer = createBoardRenderer(boardEl);
 
@@ -222,8 +228,27 @@ export function initEditor({ levels }) {
   let testLights = new Set(); // clés "r,c", persistantes entre bascules Édition/Test
   let currentCustomIndex = -1; // index dans customLevels si un niveau sauvegardé est chargé
 
-  function setStatus(msg) {
-    statusEl.textContent = msg;
+  // Round 18 (retour utilisateur): #ed-status ("juste un texte de la
+  // dernière action effectuée") est retiré — la plupart des actions de
+  // l'éditeur sont déjà visibles directement dans la grille/le panneau
+  // (une ligne ajoutée, une solution qui s'affiche...), ce texte ne faisait
+  // que dupliquer ce qui se voit déjà. Les deux cas où une action pouvait
+  // échouer SILENCIEUSEMENT sans lui (nom manquant, import invalide) ont
+  // chacun leur propre remplacement ciblé : markNameError() ci-dessous pour
+  // le premier, importStatusEl pour le second (voir plus bas).
+  function markNameError(shake = true) {
+    nameInput.classList.add("input-error");
+    if (shake) {
+      nameInput.classList.remove("input-error--shake");
+      // eslint-disable-next-line no-unused-expressions
+      nameInput.offsetWidth; // force un reflow pour rejouer l'animation même si elle vient déjà de tourner
+      nameInput.classList.add("input-error--shake");
+      nameInput.focus();
+    }
+  }
+
+  function clearNameError() {
+    nameInput.classList.remove("input-error", "input-error--shake");
   }
 
   // Onglets du bas (Format grille / Features / Expérimentales / Options,
@@ -251,16 +276,12 @@ export function initEditor({ levels }) {
       levelListSel.appendChild(opt);
     });
     levelListSel.value = currentCustomIndex >= 0 ? String(currentCustomIndex) : "";
-  }
-
-  function refreshTemplateList() {
-    templateListSel.innerHTML = '<option value="">— charger un niveau du jeu —</option>';
-    levels.forEach((lvl, i) => {
-      const opt = document.createElement("option");
-      opt.value = String(i);
-      opt.textContent = `${i + 1}. ${lvl.name}`;
-      templateListSel.appendChild(opt);
-    });
+    // Round 18 (retour utilisateur): bouton Supprimer désactivé plutôt que
+    // message d'échec — currentCustomIndex est toujours à jour juste avant
+    // chaque appel à refreshLevelList (voir loadLevelIntoEditor/saveBtn/
+    // deleteBtn), donc un seul endroit suffit à garder l'état du bouton
+    // synchronisé.
+    deleteBtn.disabled = currentCustomIndex < 0;
   }
 
   function tokenAt(r, c) {
@@ -366,7 +387,6 @@ export function initEditor({ levels }) {
       }
       if (testGrid.isWon()) {
         playWin();
-        setStatus("Résolu ! Repasse en édition pour continuer à ajuster ce niveau.");
       }
       return;
     }
@@ -397,11 +417,7 @@ export function initEditor({ levels }) {
   prismFirstColorSel.addEventListener("change", () => setTool("prism"));
 
   function guardStructureEdit() {
-    if (testMode) {
-      setStatus("Repasse en édition pour modifier la grille.");
-      return false;
-    }
-    return true;
+    return !testMode;
   }
 
   // Ces 4 actions permettent d'insérer
@@ -410,58 +426,42 @@ export function initEditor({ levels }) {
   // laisser en place.
   insertRowTopBtn.addEventListener("click", () => {
     if (!guardStructureEdit()) return;
-    if (editLevel.rows >= MAX_SIZE) {
-      setStatus("Taille maximale atteinte.");
-      return;
-    }
+    if (editLevel.rows >= MAX_SIZE) return;
     editLevel.cells.unshift(Array.from({ length: editLevel.cols }, () => "."));
     editLevel.rows += 1;
     rowsInput.value = editLevel.rows;
     testLights.clear();
     rebuildEditGrid();
-    setStatus("Ligne ajoutée en haut.");
   });
 
   removeRowTopBtn.addEventListener("click", () => {
     if (!guardStructureEdit()) return;
-    if (editLevel.rows <= MIN_SIZE) {
-      setStatus("Impossible de retirer la dernière ligne.");
-      return;
-    }
+    if (editLevel.rows <= MIN_SIZE) return;
     editLevel.cells.shift();
     editLevel.rows -= 1;
     rowsInput.value = editLevel.rows;
     testLights.clear();
     rebuildEditGrid();
-    setStatus("Ligne du haut retirée.");
   });
 
   insertColLeftBtn.addEventListener("click", () => {
     if (!guardStructureEdit()) return;
-    if (editLevel.cols >= MAX_SIZE) {
-      setStatus("Taille maximale atteinte.");
-      return;
-    }
+    if (editLevel.cols >= MAX_SIZE) return;
     editLevel.cells.forEach((row) => row.unshift("."));
     editLevel.cols += 1;
     colsInput.value = editLevel.cols;
     testLights.clear();
     rebuildEditGrid();
-    setStatus("Colonne ajoutée à gauche.");
   });
 
   removeColLeftBtn.addEventListener("click", () => {
     if (!guardStructureEdit()) return;
-    if (editLevel.cols <= MIN_SIZE) {
-      setStatus("Impossible de retirer la dernière colonne.");
-      return;
-    }
+    if (editLevel.cols <= MIN_SIZE) return;
     editLevel.cells.forEach((row) => row.shift());
     editLevel.cols -= 1;
     colsInput.value = editLevel.cols;
     testLights.clear();
     rebuildEditGrid();
-    setStatus("Colonne de gauche retirée.");
   });
 
   // Symétriques des 4 actions ci-dessus, pour bas/droite (jusqu'ici seul
@@ -470,75 +470,57 @@ export function initEditor({ levels }) {
   // redessiner).
   insertRowBottomBtn.addEventListener("click", () => {
     if (!guardStructureEdit()) return;
-    if (editLevel.rows >= MAX_SIZE) {
-      setStatus("Taille maximale atteinte.");
-      return;
-    }
+    if (editLevel.rows >= MAX_SIZE) return;
     editLevel.cells.push(Array.from({ length: editLevel.cols }, () => "."));
     editLevel.rows += 1;
     rowsInput.value = editLevel.rows;
     testLights.clear();
     rebuildEditGrid();
-    setStatus("Ligne ajoutée en bas.");
   });
 
   removeRowBottomBtn.addEventListener("click", () => {
     if (!guardStructureEdit()) return;
-    if (editLevel.rows <= MIN_SIZE) {
-      setStatus("Impossible de retirer la dernière ligne.");
-      return;
-    }
+    if (editLevel.rows <= MIN_SIZE) return;
     editLevel.cells.pop();
     editLevel.rows -= 1;
     rowsInput.value = editLevel.rows;
     testLights.clear();
     rebuildEditGrid();
-    setStatus("Ligne du bas retirée.");
   });
 
   insertColRightBtn.addEventListener("click", () => {
     if (!guardStructureEdit()) return;
-    if (editLevel.cols >= MAX_SIZE) {
-      setStatus("Taille maximale atteinte.");
-      return;
-    }
+    if (editLevel.cols >= MAX_SIZE) return;
     editLevel.cells.forEach((row) => row.push("."));
     editLevel.cols += 1;
     colsInput.value = editLevel.cols;
     testLights.clear();
     rebuildEditGrid();
-    setStatus("Colonne ajoutée à droite.");
   });
 
   removeColRightBtn.addEventListener("click", () => {
     if (!guardStructureEdit()) return;
-    if (editLevel.cols <= MIN_SIZE) {
-      setStatus("Impossible de retirer la dernière colonne.");
-      return;
-    }
+    if (editLevel.cols <= MIN_SIZE) return;
     editLevel.cells.forEach((row) => row.pop());
     editLevel.cols -= 1;
     colsInput.value = editLevel.cols;
     testLights.clear();
     rebuildEditGrid();
-    setStatus("Colonne de droite retirée.");
   });
 
   testResetBtn.addEventListener("click", () => {
     testLights.clear();
-    if (testMode) {
-      rebuildEditGrid();
-      setStatus("Test réinitialisé : toutes les lumières ont été retirées.");
-    } else {
-      setStatus("L'avancée du test a été réinitialisée.");
-    }
+    if (testMode) rebuildEditGrid();
   });
 
   nameInput.addEventListener("input", () => {
-    // Le nom est obligatoire pour sauvegarder/exporter (voir saveBtn et
-    // exportBtn) : on laisse le champ vide tel quel plutôt que de
-    // retomber sur un nom générique qui masquerait l'obligation.
+    // Le nom est obligatoire pour sauvegarder/exporter/publier (voir
+    // saveBtn/exportBtn/publishBtn) : on laisse le champ vide tel quel
+    // plutôt que de retomber sur un nom générique qui masquerait
+    // l'obligation. Dès que le joueur tape quelque chose, l'état d'erreur
+    // (voir markNameError) n'a plus lieu d'être.
     editLevel.name = nameInput.value;
+    if (nameInput.value.trim()) clearNameError();
   });
 
   // Centralise tout ce qui dépend du mode Test (icône Play/Edit du header,
@@ -576,38 +558,38 @@ export function initEditor({ levels }) {
     setTestMode(false);
     exportOutput.classList.add("hidden");
     importPanel.classList.add("hidden");
+    // Round 18 (retour utilisateur): le champ Titre porte lui-même
+    // l'obligation d'un nom (voir markNameError) plutôt qu'un message à
+    // part — un niveau qui vient d'être chargé avec un nom vide (nouveau
+    // niveau vierge, import sans nom) doit donc démarrer avec le champ déjà
+    // signalé, pas seulement après un premier essai de sauvegarde raté.
+    if (editLevel.name.trim()) clearNameError();
+    else markNameError(false);
     rebuildEditGrid();
     refreshLevelList();
   }
 
   newBtn.addEventListener("click", () => {
     loadLevelIntoEditor({ name: "", rows: 5, cols: 5, cells: blankCells(5, 5) });
-    setStatus("Nouveau niveau vierge. Donne-lui un nom avant de le sauvegarder ou de l'exporter.");
   });
 
   testBtn.addEventListener("click", () => {
     setTestMode(!testMode);
-    setStatus(testMode ? "Mode test : clique pour poser/retirer une lumière." : "Mode édition.");
     rebuildEditGrid();
   });
 
   solveBtn.addEventListener("click", () => {
     if (!testMode) return;
-    setStatus("Recherche d'une solution…");
     const solution = findSolution(buildLevelObject(), 300_000);
-    if (!solution) {
-      setStatus("Aucune solution trouvée (niveau insoluble en l'état, ou trop complexe pour le solveur).");
-      return;
-    }
+    if (!solution) return;
     testLights = new Set(solution.map(([r, c]) => `${r},${c}`));
     rebuildEditGrid();
-    setStatus(`Solution posée automatiquement : ${solution.length} lumière${solution.length === 1 ? "" : "s"}.`);
     if (testGrid.isWon()) playWin();
   });
 
   saveBtn.addEventListener("click", () => {
     if (!editLevel.name.trim()) {
-      setStatus("Donne un nom au niveau avant de sauvegarder.");
+      markNameError();
       return;
     }
     const toSave = buildLevelObject();
@@ -620,24 +602,23 @@ export function initEditor({ levels }) {
     }
     saveCustomLevels(customLevels);
     refreshLevelList();
-    setStatus(`Niveau "${toSave.name}" sauvegardé.`);
   });
 
+  // Round 18 (retour utilisateur): plutôt qu'un message succès/échec, le
+  // bouton Supprimer est simplement désactivé quand il n'y a rien à
+  // supprimer (aucun niveau sauvegardé chargé) — voir refreshLevelList
+  // ci-dessus, qui tient deleteBtn.disabled à jour à chaque appel.
   deleteBtn.addEventListener("click", () => {
-    if (currentCustomIndex < 0) {
-      setStatus("Ce niveau n'est pas sauvegardé, rien à supprimer.");
-      return;
-    }
-    const removed = customLevels.splice(currentCustomIndex, 1)[0];
+    if (currentCustomIndex < 0) return;
+    customLevels.splice(currentCustomIndex, 1);
     saveCustomLevels(customLevels);
     currentCustomIndex = -1;
     refreshLevelList();
-    setStatus(`Niveau "${removed.name}" supprimé.`);
   });
 
   exportBtn.addEventListener("click", () => {
     if (!editLevel.name.trim()) {
-      setStatus("Donne un nom au niveau avant de l'exporter.");
+      markNameError();
       return;
     }
     // levelToCode attend des cellules en tableaux de tokens (comme
@@ -654,42 +635,56 @@ export function initEditor({ levels }) {
     importPanel.classList.add("hidden");
     exportOutput.focus();
     exportOutput.select();
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(code).then(
-        () => setStatus("Code copié dans le presse-papiers (et affiché ci-dessous)."),
-        () => setStatus("Code affiché ci-dessous — copie-le manuellement.")
-      );
-    } else {
-      setStatus("Code affiché ci-dessous — copie-le manuellement.");
-    }
+    navigator.clipboard?.writeText(code).catch(() => {});
   });
 
   // Publier: envoie le niveau courant dans la Communauté (voir
-  // community-store.js) — valide d'abord qu'il a une solution (même exigence
-  // qu'Exporter/Sauvegarder, plus stricte: une grille sans solution n'a
-  // simplement aucun sens à proposer à d'autres joueurs). La toute première
-  // publication demande un pseudo/avatar (voir openPublishModal), les
-  // suivantes réutilisent le profil déjà enregistré sans rouvrir la modale.
-  let selectedPublishAvatar = AVATAR_CHOICES[0];
+  // community-store.js). Round 18 (retour utilisateur): "un modal de
+  // confirmation serait bien, pour éviter le spam + vérifier qu'il n'existe
+  // pas de niveau qui a le même combo 'nom + auteur'" — la modale s'ouvre
+  // désormais TOUJOURS (plus de raccourci "profil déjà enregistré = publie
+  // sans demander"), pré-remplie avec le pseudo/avatar déjà connus s'il y
+  // en a, et porte elle-même toute la validation (solution + doublon) au
+  // moment de confirmer plutôt qu'avant l'ouverture — ainsi un refus a
+  // toujours un endroit où s'expliquer (publishStatusEl).
+  function avatarUnlocks() {
+    return { pixelart: isPixelArtUnlocked() };
+  }
+
+  let selectedPublishAvatar = AVATARS[0].emoji;
 
   function refreshPublishAvatarPicker() {
     publishAvatarPicker.innerHTML = "";
-    for (const avatar of AVATAR_CHOICES) {
+    const unlocks = avatarUnlocks();
+    for (const avatar of AVATARS) {
+      const unlocked = isAvatarUnlocked(avatar, unlocks);
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "profile-avatar-btn" + (avatar === selectedPublishAvatar ? " active" : "");
-      btn.textContent = avatar;
-      btn.addEventListener("click", () => {
-        selectedPublishAvatar = avatar;
-        refreshPublishAvatarPicker();
-      });
+      btn.className =
+        "profile-avatar-btn" +
+        (avatar.emoji === selectedPublishAvatar ? " active" : "") +
+        (unlocked ? "" : " locked");
+      btn.textContent = avatar.emoji;
+      btn.disabled = !unlocked;
+      btn.title = unlocked ? "" : "Avatar verrouillé";
+      if (unlocked) {
+        btn.addEventListener("click", () => {
+          selectedPublishAvatar = avatar.emoji;
+          refreshPublishAvatarPicker();
+        });
+      }
       publishAvatarPicker.appendChild(btn);
     }
   }
 
   function openPublishModal() {
-    publishPseudoInput.value = "";
-    selectedPublishAvatar = AVATAR_CHOICES[0];
+    const profile = loadProfile();
+    publishPseudoInput.value = profile?.pseudo ?? "";
+    const savedUnlocked = profile?.avatar && isAvatarUnlocked(
+      AVATARS.find((a) => a.emoji === profile.avatar) ?? {},
+      avatarUnlocks()
+    );
+    selectedPublishAvatar = savedUnlocked ? profile.avatar : AVATARS[0].emoji;
     refreshPublishAvatarPicker();
     publishStatusEl.textContent = "";
     publishModal.classList.remove("hidden");
@@ -699,42 +694,12 @@ export function initEditor({ levels }) {
     publishModal.classList.add("hidden");
   }
 
-  function doPublish(profile) {
-    // Revalide à chaque publication (pas seulement mis en cache depuis le
-    // clic sur "Publier"): couvre le cas rare où la modale de profil est
-    // restée ouverte pendant qu'on aurait modifié la grille — impossible
-    // dans l'UI actuelle (l'éditeur est masqué derrière la modale), mais ne
-    // coûte rien à revérifier plutôt qu'à supposer.
-    const levelObj = buildLevelObject();
-    const check = validatePlayableLevel(levelObj);
-    if (check.error) {
-      setStatus(`Publication impossible : ${check.error}`);
-      return;
-    }
-    publishLevel({
-      title: editLevel.name,
-      rows: levelObj.rows,
-      cols: levelObj.cols,
-      cells: levelObj.cells,
-      author: profile,
-      difficulty: check.difficulty,
-    });
-    setStatus(`"${editLevel.name}" publié dans la Communauté !`);
-  }
-
   publishBtn.addEventListener("click", () => {
     if (!editLevel.name.trim()) {
-      setStatus("Donne un nom au niveau avant de le publier.");
+      markNameError();
       return;
     }
-    const check = validatePlayableLevel(buildLevelObject());
-    if (check.error) {
-      setStatus(`Publication impossible : ${check.error}`);
-      return;
-    }
-    const profile = loadProfile();
-    if (profile) doPublish(profile);
-    else openPublishModal();
+    openPublishModal();
   });
 
   document.querySelectorAll("[data-editor-publish-close]").forEach((el) => (el.onclick = closePublishModal));
@@ -745,43 +710,63 @@ export function initEditor({ levels }) {
       publishStatusEl.textContent = "Choisis un pseudo avant de publier.";
       return;
     }
-    const profile = { pseudo, avatar: selectedPublishAvatar };
-    saveProfile(profile);
+    if (isDuplicatePublication(editLevel.name, pseudo)) {
+      publishStatusEl.textContent = "Tu as déjà publié un niveau du même nom sous ce pseudo.";
+      return;
+    }
+    const levelObj = buildLevelObject();
+    const check = validatePlayableLevel(levelObj);
+    if (check.error) {
+      publishStatusEl.textContent = `Publication impossible : ${check.error}`;
+      return;
+    }
+    // Le badge "actif" (voir main.js: sélection dans "Mon profil") est
+    // capturé ici comme le pseudo/avatar — un instantané au moment de la
+    // publication, pas une référence live (même principe déjà en place pour
+    // pseudo/avatar avant ce round).
+    const savedProfile = { ...(loadProfile() || {}), pseudo, avatar: selectedPublishAvatar };
+    saveProfile(savedProfile);
+    publishLevel({
+      title: editLevel.name,
+      rows: levelObj.rows,
+      cols: levelObj.cols,
+      cells: levelObj.cells,
+      author: { pseudo, avatar: selectedPublishAvatar, badge: savedProfile.activeBadge ?? null },
+      difficulty: check.difficulty,
+    });
     closePublishModal();
-    doPublish(profile);
   });
 
   // Importer: colle le code d'un niveau (typiquement le résultat
   // d'Exporter, ou une entrée copiée depuis levels.js) et le charge dans
-  // l'éditeur comme point de départ — pas encore sauvegardé, exactement
-  // comme "Repartir d'un niveau du jeu" (voir templateListSel ci-dessous):
-  // currentCustomIndex reste à -1 tant que le joueur n'a pas cliqué
-  // "Sauvegarder" lui-même, pour ne jamais écraser silencieusement un
-  // niveau existant du même nom.
+  // l'éditeur comme point de départ — pas encore sauvegardé : currentCustomIndex
+  // reste à -1 tant que le joueur n'a pas cliqué "Sauvegarder" lui-même,
+  // pour ne jamais écraser silencieusement un niveau existant du même nom.
   importBtn.addEventListener("click", () => {
     importPanel.classList.remove("hidden");
     exportOutput.classList.add("hidden");
     importInput.value = "";
     importInput.focus();
-    setStatus("Colle le code d'un niveau ci-dessous, puis clique \"Charger ce niveau\".");
+    importStatusEl.textContent = "";
   });
 
   importCancelBtn.addEventListener("click", () => {
     importPanel.classList.add("hidden");
     importInput.value = "";
-    setStatus("Import annulé.");
+    importStatusEl.textContent = "";
   });
 
   importConfirmBtn.addEventListener("click", () => {
     const { level, note, error } = parseLevelFromCode(importInput.value);
     if (error) {
-      setStatus(`Import impossible : ${error}`);
+      importStatusEl.textContent = `Import impossible : ${error}`;
       return;
     }
     loadLevelIntoEditor(level, -1);
     importPanel.classList.add("hidden");
     importInput.value = "";
-    setStatus(`Niveau "${level.name || "(sans nom)"}" importé — pas encore sauvegardé.${note || ""}`);
+    importStatusEl.textContent = "";
+    if (note) importStatusEl.textContent = note.trim();
   });
 
   levelListSel.addEventListener("change", () => {
@@ -792,22 +777,10 @@ export function initEditor({ levels }) {
     }
     const idx = parseInt(val, 10);
     loadLevelIntoEditor(customLevels[idx], idx);
-    setStatus(`Niveau "${customLevels[idx].name}" chargé.`);
-  });
-
-  templateListSel.addEventListener("change", () => {
-    const val = templateListSel.value;
-    if (val === "") return;
-    const idx = parseInt(val, 10);
-    const lvl = levels[idx];
-    loadLevelIntoEditor({ name: `${lvl.name} (copie)`, rows: lvl.rows, cols: lvl.cols, cells: lvl.cells }, -1);
-    setStatus(`Niveau "${lvl.name}" chargé comme point de départ (pas encore sauvegardé).`);
-    templateListSel.value = "";
   });
 
   setTool("empty");
   setActiveTab("grid");
-  refreshTemplateList();
   refreshLevelList();
   updateSizeReadout();
 

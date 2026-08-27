@@ -153,3 +153,14 @@ export function saveProfile(profile) {
 export function hasProfile() {
   return loadProfile() != null;
 }
+
+/** Met à jour PARTIELLEMENT le profil (pseudo/avatar/activeBadge...) sans
+ * écraser les champs non fournis — utile pour un réglage isolé comme le
+ * badge "actif" (voir main.js: sélection dans "Mon profil", round 18)
+ * pendant que le formulaire pseudo/avatar reste géré séparément par
+ * saveProfile ci-dessus. */
+export function updateProfile(partial) {
+  const next = { ...(loadProfile() || {}), ...partial };
+  saveProfile(next);
+  return next;
+}
