@@ -46,31 +46,31 @@
 
 export const levels = [
   {
-    name: "Where am i ?",
+    name: "First Step",
     rows: 2,
     cols: 2,
     cells: ["..", ".."],
   },
   {
-    name: "a path ?",
+    name: "Second Step",
     rows: 3,
     cols: 3,
     cells: [".X.", ".X.", "..."],
   },
   {
-    name: "pathes",
+    name: "Neurone",
     rows: 2,
     cols: 5,
     cells: ["..2..", ".XXXX"],
   },
   {
-    name: "connect",
+    name: "Neurones",
     rows: 4,
     cols: 4,
     cells: ["....", ".X..", "..X.", "1..1"],
   },
   {
-    name: "eliminate",
+    name: "Synapses",
     rows: 5,
     cols: 5,
     cells: [
@@ -82,7 +82,7 @@ export const levels = [
     ],
   },
   {
-    name: "synapses",
+    name: "Synapses 2",
     rows: 10,
     cols: 5,
     cells: [
@@ -99,7 +99,7 @@ export const levels = [
     ],
   },
   {
-    name: "remember",
+    name: "Akari",
     rows: 7,
     cols: 7,
     cells: [
@@ -113,7 +113,7 @@ export const levels = [
     ],
   },
   {
-    name: "images",
+    name: "Akari 2",
     rows: 8,
     cols: 8,
     cells: [
@@ -128,7 +128,7 @@ export const levels = [
     ],
   },
   {
-    name: "another path",
+    name: "Colors",
     rows: 6,
     cols: 6,
     cells: [
@@ -141,13 +141,13 @@ export const levels = [
     ],
   },
   {
-    name: "other pathes",
+    name: "Colors Fusion",
     rows: 4,
     cols: 4,
     cells: [". . 1r .", ". X y .", "1g y . .", "0 . . ."],
   },
   {
-    name: "Éclat",
+    name: "Synups",
     rows: 7,
     cols: 7,
     cells: [
@@ -161,7 +161,7 @@ export const levels = [
     ],
   },
   {
-    name: "Mixes",
+    name: "Synups 2",
     rows: 7,
     cols: 7,
     cells: [
@@ -175,7 +175,7 @@ export const levels = [
     ],
   },
   {
-    name: "reflect",
+    name: "Miroirs",
     rows: 6,
     cols: 4,
     cells: [
@@ -188,7 +188,7 @@ export const levels = [
     ],
   },
   {
-    name: "La grosse salope",
+    name: "Miroirs de Yanis le boss",
     rows: 6,
     cols: 7,
     cells: [
@@ -201,7 +201,7 @@ export const levels = [
     ],
   },
   {
-    name: "Mirror",
+    name: "Mirrors 2",
     rows: 6,
     cols: 6,
     cells: [
@@ -214,7 +214,7 @@ export const levels = [
     ],
   },
   {
-    name: "Fusion",
+    name: "Fusion sur mirroir",
     rows: 5,
     cols: 7,
     cells: [
@@ -226,7 +226,7 @@ export const levels = [
     ],
   },
     {
-    name: "Sleep",
+    name: "Lets play",
     rows: 9,
     cols: 10,
     cells: [
@@ -242,6 +242,24 @@ export const levels = [
     ],
   },
   {
+    name: "white",
+    rows: 11,
+    cols: 5,
+    cells: [
+      ". . . . .",
+      "2g . w . .",
+      ". . . . .",
+      ". . . . .",
+      "/ . \\ . 2b",
+      ". w . w .",
+      "\\ . X . \\",
+      ". w . w .",
+      "w . / . X",
+      "2r . X . /",
+      ". . . . .",
+    ],
+  },
+  {
     name: "Pyra",
     rows: 5,
     cols: 5,
@@ -254,7 +272,7 @@ export const levels = [
     ],
   },
   {
-    name: "Pyra2",
+    name: "Pyra 2",
     rows: 10,
     cols: 8,
     cells: [
@@ -271,7 +289,7 @@ export const levels = [
     ],
   },
   {
-    name: "Pyras",
+    name: "Pyra 3",
     rows: 11,
     cols: 8,
     cells: [
@@ -286,6 +304,22 @@ export const levels = [
       "2 . . m . . 1r .",
       ". . 2g . 2 . . .",
       "X . . . 0 . . X",
+    ],
+  },
+  {
+    name: "Pyra hard",
+    rows: 9,
+    cols: 8,
+    cells: [
+      ". . X . . . . .",
+      "c . . 3b . . y 0",
+      ". 1 . . . . . 0",
+      ". 2 . Y . . . m",
+      ". . Y . Y . . .",
+      ". . . Y . . . .",
+      "X 0 . . . X 1b .",
+      ". 1g . w . . / .",
+      ". . . X 2 . . .",
     ],
   },
   {
@@ -304,8 +338,24 @@ export const levels = [
       "r w . . y",
     ],
   },
-  {
+    {
     name: "Prisme 2",
+    rows: 9,
+    cols: 5,
+    cells: [
+      "X X . . X",
+      ". y . . .",
+      "0 . . Pr .",
+      ". . 1 . .",
+      ". . . X X",
+      ". 2g . . .",
+      ". . . . .",
+      "X c . . 2",
+      "X . . . .",
+    ],
+  },
+  {
+    name: "Prisme 3",
     rows: 11,
     cols: 7,
     cells: [
@@ -323,16 +373,17 @@ export const levels = [
     ],
   },
   {
-    name: "intro neurone miroir",
-    rows: 2,
+    name: "Neurone miroir intro",
+    rows: 3,
     cols: 5,
     cells: [
       "1 X X X 1",
       ". . M . .",
+      "X X X . X",
     ],
   },
   {
-    name: "Neumir",
+    name: "Neurone miroir chain",
     rows: 7,
     cols: 5,
     cells: [
@@ -342,11 +393,43 @@ export const levels = [
       "M X X X X",
       ". X X X X",
       "2 X X X X",
-      ". X X X X",
+      ". X X . X",
+    ],
+  },
+    {
+    name: "Neurone Miroir 1",
+    rows: 9,
+    cols: 6,
+    cells: [
+      "X . . 0 . .",
+      "c . . . . c",
+      ". X . 1 X .",
+      ". . . . . .",
+      ". M . X . 1g",
+      ". . . X . .",
+      ". . . . . .",
+      "c . . 3b . X",
+      "0 . . . . X",
     ],
   },
   {
-    name: "Neurone mirroir",
+    name: "Neurones mirroirs avoid",
+    rows: 9,
+    cols: 7,
+    cells: [
+      "X X . 0 X X X",
+      ". M . 1 X X .",
+      ". . . . M . .",
+      ". X . 1 X . .",
+      ". . . . . . .",
+      ". 0 . . . . .",
+      ". X M . X . 1",
+      ". 1 . . 1 . X",
+      ". . . . . . 0",
+    ],
+  },
+  {
+    name: "Neurone mirroir 2",
     rows: 9,
     cols: 7,
     cells: [
@@ -362,21 +445,39 @@ export const levels = [
     ],
   },
   {
-    name: "white",
-    rows: 11,
-    cols: 5,
+    name: "Prisme + Miroir",
+    rows: 10,
+    cols: 9,
     cells: [
-      "w w w w w",
-      "2g w w w w",
-      "w w w w w",
-      "w w w w w",
-      "/ w \\ w 2b",
-      "w w w w w",
-      "\\ w X w \\",
-      "w w w w w",
-      "w w / w X",
-      "2r w X w /",
-      "w w w w w",
+      ". 1 . . . . . X .",
+      ". . 1 . . 2 . . .",
+      "b . . . . . . . .",
+      "0 . . 0 . . . r .",
+      "X . M . . 1b X . /",
+      "0 . . . . . . . \\",
+      ". . . . . X Pr . .",
+      ". . w . . . . . 1r",
+      "2 . . 0 . X . . .",
+      ". . 0 X . . . m X",
+    ],
+  },
+  {
+    name: "Hard",
+    rows: 12,
+    cols: 8,
+    cells: [
+      "X . . 1 . 2 . .",
+      ". c . . . . 3b .",
+      ". . 1 . . X . .",
+      "2 . . . 3 . . .",
+      ". . 0 2 . . . .",
+      ". . y w . . . .",
+      ". Pr m . . Pr . .",
+      ". . . . . . X .",
+      "1 . . X . . Y 0",
+      ". . X 1b . . . .",
+      "b . . . . . . 0",
+      "X \\ . 2g . w X X",
     ],
   },
 ];
