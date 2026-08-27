@@ -29,17 +29,25 @@
         </svg>
       </button>
 
-      <!-- Éditeur: outil de développement temporaire, volontairement à part
-           du menu principal — un simple bouton flottant, visible seulement à
-           l'écran titre (voir style.css/main.js). -->
-      <button id="btn-floating-editor" class="floating-editor-btn" aria-label="Éditeur de niveaux (développeur)" title="Éditeur de niveaux (développeur)">
-        <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
-        </svg>
-      </button>
+      <!-- Round 17 (retour utilisateur): bouton flottant éditeur retiré de
+           l'accueil — l'éditeur reste accessible via Communauté (bouton
+           "Créer", voir btnCommunityCreate dans main.js). -->
 
       <!-- ================= ÉCRAN TITRE ================= -->
       <section id="view-title" class="screen screen--title">
+        <!-- Round 17 (retour utilisateur): "tout en haut de la page la
+             banniere du profil, et si on clique dessus on arrive dans
+             'profil'" — même identité (avatar+pseudo) que #profile-panel,
+             juste condensée en une ligne cliquable. Toujours affichée, y
+             compris avant tout réglage de profil (voir renderTitleProfileBanner
+             dans main.js: retombe sur l'avatar par défaut + "Configurer mon
+             profil" tant qu'aucun pseudo n'est enregistré). -->
+        <button id="title-profile-banner" class="title-profile-banner" type="button">
+          <span id="title-profile-avatar" class="title-profile-avatar">🙂</span>
+          <span id="title-profile-pseudo" class="title-profile-pseudo">Configurer mon profil</span>
+          <svg viewBox="0 0 24 24" class="icon-svg title-profile-chevron" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </button>
+
         <h1 class="game-logo">Synups</h1>
         <p class="game-tagline">Reconnecte le réseau</p>
 
@@ -420,7 +428,16 @@
              — le seul "visible par les autres joueurs" que ce prototype tout
              local sait offrir: la même surface que le pseudo/avatar. -->
         <div class="options-section">
-          <span class="options-label">Badges Remember</span>
+          <div class="profile-badges-header">
+            <span class="options-label">Badges Remember</span>
+            <!-- Round 17 (retour utilisateur): bouton admin temporaire pour
+                 tester l'affichage des 4 badges sans finir Remember —
+                 réutilise debugUnlockPixelArt (voir sommation.js), déjà
+                 câblé à un bouton équivalent dans Options (même esprit,
+                 même fonction, effet de bord "PixelArt aussi débloqué"
+                 accepté là-bas). -->
+            <button id="btn-profile-badges-debug-unlock" class="som-debug-btn" type="button">Déverrouiller (admin)</button>
+          </div>
           <div id="profile-sommation-badges" class="profile-badges"></div>
         </div>
 
@@ -466,31 +483,17 @@
             <div class="editor-bottom-panel-handle" aria-hidden="true"></div>
             <div class="editor-tab-panel" id="editor-tab-panel">
               <section class="editor-tab" id="ed-tab-grid" data-tab="grid">
-              <div class="grid-size-row">
-                <div class="stepper" data-target="ed-rows">
-                  <button type="button" class="stepper-btn" data-step="-1" data-step-target="ed-rows" aria-label="Moins de lignes" title="Moins de lignes">
-                    <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                  </button>
-                  <span class="stepper-label">Lignes<input id="ed-rows" type="number" min="1" max="16" value="5" /></span>
-                  <button type="button" class="stepper-btn" data-step="1" data-step-target="ed-rows" aria-label="Plus de lignes" title="Plus de lignes">
-                    <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                  </button>
-                </div>
-                <div class="stepper" data-target="ed-cols">
-                  <button type="button" class="stepper-btn" data-step="-1" data-step-target="ed-cols" aria-label="Moins de colonnes" title="Moins de colonnes">
-                    <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                  </button>
-                  <span class="stepper-label">Colonnes<input id="ed-cols" type="number" min="1" max="16" value="5" /></span>
-                  <button type="button" class="stepper-btn" data-step="1" data-step-target="ed-cols" aria-label="Plus de colonnes" title="Plus de colonnes">
-                    <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                  </button>
-                </div>
-                <button id="ed-resize" class="icon-btn" aria-label="Appliquer la taille" title="Appliquer la taille (ajoute/retire de l'espace en bas et à droite)">
-                  <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                </button>
-              </div>
-
-              <p class="grid-frame-hint">Insérer/retirer une ligne ou une colonne sur un bord précis :</p>
+              <!-- Round 17 (retour utilisateur): le formulaire "Lignes/
+                   Colonnes" (compteur tapable + bouton Appliquer) est retiré
+                   — le cadre d'insertion/retrait ci-dessous couvre déjà la
+                   même fonction en immédiat, sans étape de validation
+                   séparée. ed-rows/ed-cols restent en <input type="hidden">
+                   car editor.js s'en sert encore comme état interne
+                   (rebuildEditGrid lit editLevel.rows/cols directement pour
+                   l'affichage, voir ed-size-readout — ces deux champs ne
+                   sont donc plus qu'une mémoire technique, jamais montrés). -->
+              <input id="ed-rows" type="hidden" value="5" />
+              <input id="ed-cols" type="hidden" value="5" />
               <div class="resize-frame">
                 <div class="resize-edge-duo" data-edge="top">
                   <button id="ed-remove-row-top" class="frame-btn" title="Retirer la ligne du haut" aria-label="Retirer la ligne du haut">
@@ -578,6 +581,42 @@
                   </svg>
                   <span class="tool-label">Miroir</span>
                 </button>
+                <!-- Round 17 (retour utilisateur): tuiles auparavant sous un
+                     onglet "Expérimentales" séparé, fusionnées ici dans le
+                     même onglet/palette que les tuiles normales (le texte
+                     d'avertissement dédié est retiré). -->
+                <button data-tool="filter" class="tool-btn" title="Filtre">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <path d="M15,25 85,25 60,50 60,80 40,80 40,50 Z" fill="none" stroke="#9aa6bc" stroke-width="6" stroke-linejoin="round"/>
+                  </svg>
+                  <span class="tool-label">Filtre</span>
+                </button>
+                <button data-tool="prism" class="tool-btn" title="Prisme">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <polygon points="50,50 50,10 90,50" fill="#ff5d6c"/>
+                    <polygon points="50,50 90,50 50,90" fill="#59e39d"/>
+                    <polygon points="50,50 50,90 10,50" fill="#5da9ff"/>
+                    <polygon points="50,50 10,50 50,10" fill="#eef1f8"/>
+                  </svg>
+                  <span class="tool-label">Prisme</span>
+                </button>
+                <button data-tool="mirror_neuron" class="tool-btn" title="Neurone miroir">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <line x1="50" y1="10" x2="50" y2="90" stroke="#b98fe0" stroke-width="5" stroke-dasharray="7 6" stroke-linecap="round"/>
+                    <circle cx="26" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
+                    <circle cx="74" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
+                  </svg>
+                  <span class="tool-label">Neurone miroir</span>
+                </button>
+                <button data-tool="pyra" class="tool-btn" title="Pyra">
+                  <svg class="tool-icon" viewBox="0 0 100 100">
+                    <polygon points="50,15 85,80 15,80" fill="none" stroke="#8a97a3" stroke-width="6" stroke-linejoin="round"/>
+                    <circle cx="50" cy="15" r="5" fill="#ff5d6c"/>
+                    <circle cx="85" cy="80" r="5" fill="#59e39d"/>
+                    <circle cx="15" cy="80" r="5" fill="#5da9ff"/>
+                  </svg>
+                  <span class="tool-label">Pyra</span>
+                </button>
               </div>
 
               <div id="ed-charge-options" class="tool-options hidden">
@@ -620,44 +659,6 @@
                     <option value="\">\ (haut-gauche &harr; bas-droit)</option>
                   </select>
                 </label>
-              </div>
-            </section>
-
-            <section class="editor-tab hidden" id="ed-tab-experimental" data-tab="experimental">
-              <p class="tool-experimental-label">Expérimental — pas encore recommandé dans un niveau destiné à être publié</p>
-              <div class="tool-palette" id="ed-tools-experimental">
-                <button data-tool="filter" class="tool-btn" title="Filtre">
-                  <svg class="tool-icon" viewBox="0 0 100 100">
-                    <path d="M15,25 85,25 60,50 60,80 40,80 40,50 Z" fill="none" stroke="#9aa6bc" stroke-width="6" stroke-linejoin="round"/>
-                  </svg>
-                  <span class="tool-label">Filtre</span>
-                </button>
-                <button data-tool="prism" class="tool-btn" title="Prisme">
-                  <svg class="tool-icon" viewBox="0 0 100 100">
-                    <polygon points="50,50 50,10 90,50" fill="#ff5d6c"/>
-                    <polygon points="50,50 90,50 50,90" fill="#59e39d"/>
-                    <polygon points="50,50 50,90 10,50" fill="#5da9ff"/>
-                    <polygon points="50,50 10,50 50,10" fill="#eef1f8"/>
-                  </svg>
-                  <span class="tool-label">Prisme</span>
-                </button>
-                <button data-tool="mirror_neuron" class="tool-btn" title="Neurone miroir">
-                  <svg class="tool-icon" viewBox="0 0 100 100">
-                    <line x1="50" y1="10" x2="50" y2="90" stroke="#b98fe0" stroke-width="5" stroke-dasharray="7 6" stroke-linecap="round"/>
-                    <circle cx="26" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
-                    <circle cx="74" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
-                  </svg>
-                  <span class="tool-label">Neurone miroir</span>
-                </button>
-                <button data-tool="pyra" class="tool-btn" title="Pyra">
-                  <svg class="tool-icon" viewBox="0 0 100 100">
-                    <polygon points="50,15 85,80 15,80" fill="none" stroke="#8a97a3" stroke-width="6" stroke-linejoin="round"/>
-                    <circle cx="50" cy="15" r="5" fill="#ff5d6c"/>
-                    <circle cx="85" cy="80" r="5" fill="#59e39d"/>
-                    <circle cx="15" cy="80" r="5" fill="#5da9ff"/>
-                  </svg>
-                  <span class="tool-label">Pyra</span>
-                </button>
               </div>
 
               <div id="ed-filter-options" class="tool-options hidden">
@@ -736,9 +737,6 @@
               </button>
               <button class="editor-tab-btn" data-tab-target="features" aria-label="Features" title="Features">
                 <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.07"></path><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"></path></svg>
-              </button>
-              <button class="editor-tab-btn" data-tab-target="experimental" aria-label="Expérimentales" title="Expérimentales">
-                <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6.5L4.5 17a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L15 8.5V2"></path><line x1="9" y1="2" x2="15" y2="2"></line><line x1="9.5" y1="13" x2="14.5" y2="13"></line></svg>
               </button>
               <button class="editor-tab-btn" data-tab-target="options" aria-label="Options" title="Options">
                 <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>

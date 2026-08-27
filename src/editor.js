@@ -152,17 +152,20 @@ export function initEditor({ levels }) {
   // comme le vrai plateau de jeu.
   const editorViewEl = document.getElementById("editor-view");
   const nameInput = document.getElementById("ed-name");
+  // ed-rows/ed-cols: <input type="hidden"> depuis le round 17 (retour
+  // utilisateur: retrait du formulaire Lignes/Colonnes tapable + bouton
+  // Appliquer) — gardés uniquement comme mémoire technique pour le code
+  // ci-dessous qui continue d'y écrire après chaque insertion/retrait de
+  // ligne/colonne, sans plus jamais être affichés (voir index.html).
   const rowsInput = document.getElementById("ed-rows");
   const colsInput = document.getElementById("ed-cols");
   const sizeReadoutEl = document.getElementById("ed-size-readout");
-  const stepperBtns = document.querySelectorAll(".stepper-btn");
   const tabBtns = document.querySelectorAll(".editor-tab-btn");
   const tabSections = document.querySelectorAll(".editor-tab");
-  const resizeBtn = document.getElementById("ed-resize");
-  // Deux groupes de boutons-outils (courants + expérimentaux, voir
-  // index.html): on les traite comme un seul ensemble pour le câblage des
-  // clics et la mise en surbrillance de l'outil actif.
-  const toolBtns = document.querySelectorAll("#ed-tools .tool-btn, #ed-tools-experimental .tool-btn");
+  // Round 17: les tuiles "expérimentales" ont été fusionnées dans la même
+  // palette #ed-tools (plus d'onglet séparé, voir index.html) — un seul
+  // sélecteur suffit désormais.
+  const toolBtns = document.querySelectorAll("#ed-tools .tool-btn");
   const chargeOptions = document.getElementById("ed-charge-options");
   const chargeNumberSel = document.getElementById("ed-charge-number");
   const chargeColorSel = document.getElementById("ed-charge-color");
@@ -233,20 +236,6 @@ export function initEditor({ levels }) {
 
   tabBtns.forEach((btn) => {
     btn.addEventListener("click", () => setActiveTab(btn.dataset.tabTarget));
-  });
-
-  // Compteurs −/+ à côté de Lignes/Colonnes (voir style.css: .stepper) :
-  // n'ajustent QUE la valeur affichée, comme si le joueur avait tapé au
-  // clavier — il faut toujours valider avec "Appliquer" (ed-resize) pour
-  // que le redimensionnement ait réellement lieu, aucun changement
-  // silencieux de la grille.
-  stepperBtns.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const input = document.getElementById(btn.dataset.stepTarget);
-      const step = parseInt(btn.dataset.step, 10);
-      const next = Math.min(MAX_SIZE, Math.max(MIN_SIZE, (parseInt(input.value, 10) || 0) + step));
-      input.value = next;
-    });
   });
 
   function updateSizeReadout() {
@@ -415,28 +404,7 @@ export function initEditor({ levels }) {
     return true;
   }
 
-  resizeBtn.addEventListener("click", () => {
-    if (!guardStructureEdit()) return;
-    const rows = Math.min(MAX_SIZE, Math.max(MIN_SIZE, parseInt(rowsInput.value, 10) || editLevel.rows));
-    const cols = Math.min(MAX_SIZE, Math.max(MIN_SIZE, parseInt(colsInput.value, 10) || editLevel.cols));
-    const next = blankCells(rows, cols);
-    for (let r = 0; r < Math.min(rows, editLevel.rows); r++) {
-      for (let c = 0; c < Math.min(cols, editLevel.cols); c++) {
-        next[r][c] = editLevel.cells[r][c];
-      }
-    }
-    editLevel.rows = rows;
-    editLevel.cols = cols;
-    editLevel.cells = next;
-    rowsInput.value = rows;
-    colsInput.value = cols;
-    testLights.clear();
-    rebuildEditGrid();
-    setStatus(`Grille redimensionnée en ${rows}×${cols}.`);
-  });
-
-  // Le redimensionnement ci-dessus n'ajoute/retire de l'espace qu'en bas et
-  // à droite (ancré en haut-à-gauche). Ces 4 actions permettent d'insérer
+  // Ces 4 actions permettent d'insérer
   // ou de retirer une ligne/colonne en haut/à gauche sans devoir tout
   // redessiner : elles décalent le contenu existant plutôt que de le
   // laisser en place.

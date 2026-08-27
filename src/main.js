@@ -930,6 +930,10 @@ const profilePublishedEmptyEl = document.getElementById("profile-published-empty
 const profileLikedEl = document.getElementById("profile-liked");
 const profileLikedEmptyEl = document.getElementById("profile-liked-empty");
 const profileSommationBadgesEl = document.getElementById("profile-sommation-badges");
+const btnProfileBadgesDebugUnlock = document.getElementById("btn-profile-badges-debug-unlock");
+const titleProfileBanner = document.getElementById("title-profile-banner");
+const titleProfileAvatarEl = document.getElementById("title-profile-avatar");
+const titleProfilePseudoEl = document.getElementById("title-profile-pseudo");
 
 let communitySearch = "";
 let communitySort = "recent";
@@ -1176,6 +1180,22 @@ function refreshProfileAvatarPicker() {
   }
 }
 
+/** Bannière compacte avatar+pseudo tout en haut de l'écran titre (round 17,
+ * retour utilisateur) — cliquer dessus mène à "Mon profil" (voir
+ * titleProfileBanner.onclick plus bas). Retombe sur l'avatar par défaut +
+ * un texte d'invite tant qu'aucun profil n'a encore été enregistré (voir
+ * storage.js: loadProfile renvoie null), plutôt que d'afficher un pseudo
+ * vide ou "undefined". Ré-exécutée à chaque retour au titre (showView),
+ * même principe que renderPointsEverywhere: jamais figée sur un profil
+ * modifié depuis (pseudo changé dans "Mon profil" puis retour ici). */
+function renderTitleProfileBanner() {
+  const profile = loadProfile();
+  titleProfileAvatarEl.textContent = profile?.avatar ?? AVATAR_CHOICES[0];
+  titleProfilePseudoEl.textContent = profile?.pseudo?.trim() || "Configurer mon profil";
+}
+
+titleProfileBanner.onclick = () => pushView("community-profile");
+
 /** Ré-exécutée à chaque affichage de l'écran (voir showView) — comme
  * renderLevelGrid/renderShop, jamais figée sur un rendu périmé (ex: un like
  * posé depuis le fil principal doit apparaître dans "Mes favoris" au
@@ -1249,6 +1269,17 @@ btnProfileSave.onclick = () => {
   saveProfile({ pseudo, avatar: selectedProfileAvatar });
   profileStatusEl.textContent = "Profil enregistré.";
 };
+
+// Round 17 (retour utilisateur): bouton admin temporaire pour tester les 4
+// badges sans finir Remember — même fonction que le bouton équivalent
+// d'Options (voir plus haut btnPixelartDebugUnlock), donc même effet de
+// bord accepté (débloque aussi le thème PixelArt en même temps).
+if (btnProfileBadgesDebugUnlock) {
+  btnProfileBadgesDebugUnlock.onclick = () => {
+    debugUnlockPixelArt();
+    renderCommunityProfile();
+  };
+}
 
 // ---------- Bascule Jouer / Infini / Éditeur ----------
 const playView = document.getElementById("play-view");
@@ -1332,17 +1363,11 @@ const SCREEN_IDS = {
 
 let viewStack = ["title"];
 
-const btnFloatingEditor = document.getElementById("btn-floating-editor");
-
 function renderActiveScreen() {
   const active = viewStack[viewStack.length - 1];
   for (const [name, id] of Object.entries(SCREEN_IDS)) {
     document.getElementById(id).classList.toggle("hidden", name !== active);
   }
-  // Éditeur (outil développeur): le bouton flottant qui y mène ne doit
-  // apparaître qu'à l'écran titre (voir style.css) — inutile ailleurs et
-  // risquerait de gêner le jeu.
-  btnFloatingEditor.classList.toggle("hidden", active !== "title");
 }
 
 /** Affiche un écran SANS toucher à la pile (utilisé par les raccourcis qui
@@ -1371,7 +1396,10 @@ function showView(name, opts) {
   // passages sans forcément s'accompagner d'un changement de points (voir
   // renderPointsEverywhere), donc jamais figé sur un état périmé, même
   // principe que renderPixelArtOption()/renderLevelGrid().
-  if (name === "title") renderPointsEverywhere();
+  if (name === "title") {
+    renderPointsEverywhere();
+    renderTitleProfileBanner();
+  }
   renderActiveScreen();
 }
 
@@ -1451,10 +1479,10 @@ document.getElementById("menu-infinite").onclick = enterInfiniteDirect;
 document.getElementById("menu-community").onclick = () => pushView("community");
 document.getElementById("menu-remember").onclick = enterRememberDirect;
 document.getElementById("menu-options").onclick = () => pushView("options");
-document.getElementById("btn-floating-editor").onclick = () => pushView("editor");
 
 renderActiveScreen();
 renderTitleStoryProgress();
+renderTitleProfileBanner();
 
 // Raccourci Ctrl+Z / Cmd+Z pour annuler, en jeu comme en Infini (pas en
 // éditeur: on laisse le Ctrl+Z natif du navigateur fonctionner dans les
