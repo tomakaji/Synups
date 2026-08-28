@@ -1,0 +1,457 @@
+/* ---------- Éditeur de niveaux ---------- */
+
+/* Refonte mobile (retour utilisateur): plus de panneau latéral fixe ni de
+   défilement horizontal — l'écran est désormais borné à 100vh (même
+   principe que #view-community/#view-play: voir ces commentaires) avec
+   SEULEMENT le panneau d'onglet qui scrolle, jamais la page entière. Les
+   marges négatives annulent le padding vertical de #app pour occuper
+   exactement le viewport réel. */
+#view-editor {
+  height: 100vh;
+  overflow: hidden;
+  margin-top: -24px;
+  margin-bottom: -48px;
+}
+
+#editor-view {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+}
+
+/* Plateau: absorbe TOUT l'espace vertical restant une fois le panneau du
+   bas déduit (voir .editor-bottom-panel ci-dessous, qui ne prend lui que
+   la hauteur de son contenu) — plutôt que l'inverse d'avant (plateau
+   borné à une hauteur fixe, panneau flex:1 avec un grand vide résiduel
+   sous un onglet court comme Options, retour utilisateur). En mode Test
+   (.editor--testing, voir editor.js), le panneau du bas disparaît
+   entièrement et le plateau récupère toute la hauteur, exactement comme
+   le vrai plateau de jeu. */
+.editor-board-wrap {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+
+#editor-view.editor--testing .editor-bottom-panel {
+  display: none;
+}
+
+#editor-board {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  gap: var(--gap);
+  background: transparent;
+  padding: var(--gap);
+  /* Même formule que #board (voir plus haut): tient dans la largeur
+     d'écran disponible plutôt que de déborder — l'éditeur n'a plus de
+     traitement à part maintenant qu'il n'a plus de panneau latéral fixe. */
+  --cell-size: min(
+    56px,
+    calc(
+      (min(100vw, 720px) - 32px - (var(--cols, 8) + 1) * var(--gap)) /
+        var(--cols, 8)
+    )
+  );
+}
+
+/* Mode "peinture" de l'éditeur: toutes les cases sont cliquables (pour
+   changer d'outil dessus), donc toutes affichent un curseur pointeur,
+   contrairement au jeu où seules les cases vides le sont. */
+#editor-board.board--paint .cell {
+  cursor: pointer;
+}
+
+/* Panneau du bas: un "sheet" bien démarqué du plateau au-dessus (fond
+   distinct, coins arrondis, ombre portée + poignée décorative) plutôt que
+   de se fondre dans le reste de l'écran — retour utilisateur. Sa hauteur
+   suit son contenu (flex-basis auto, PAS flex:1) et ne prend donc que le
+   strict nécessaire pour l'onglet actif ; plafonnée à max-height pour ne
+   jamais écraser le plateau si un onglet est exceptionnellement long, ce
+   qui fait alors défiler .editor-tab-panel en interne (voir plus bas)
+   plutôt que de pousser la barre d'onglets hors de l'écran. */
+.editor-bottom-panel {
+  flex: 0 1 auto;
+  max-height: 46vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-top: 1px solid #2a3040;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.editor-bottom-panel-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: #2a3040;
+  margin: 8px auto 2px;
+  flex-shrink: 0;
+}
+
+/* Panneau d'onglet: seule zone qui scrolle à l'intérieur du sheet (voir
+   .community-scroll pour le même principe déjà validé) — flex-basis auto
+   (pas flex:1) pour épouser la hauteur du contenu de l'onglet actif ;
+   min-height:0 + overflow-y:auto restent nécessaires pour le cas où ce
+   contenu dépasse quand même le max-height du sheet parent. */
+.editor-tab-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: 480px;
+  align-self: center;
+  overflow-y: auto;
+  padding: 4px 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.editor-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.editor-tab.hidden {
+  display: none;
+}
+
+.editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editor-row {
+  display: flex;
+  gap: 10px;
+}
+
+.editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  flex: 1;
+}
+
+.editor-field input,
+.editor-field select,
+#ed-level-list {
+  background: #0e1119;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+}
+
+/* Round 18 (retour utilisateur): plutôt qu'un message d'info séparé pour un
+   nom de niveau manquant (au moment de sauvegarder/exporter/publier, ou dès
+   la création d'un niveau vierge), le champ Titre lui-même passe en état
+   d'erreur — voir editor.js: markNameError/clearNameError. Le "shake"
+   (réutilise l'animation som-shake-fail, voir plus bas) ne joue que sur une
+   tentative active ayant échoué, pas sur le simple rappel passif affiché à
+   la création d'un niveau vierge.
+   Round 19: règle élargie en .input-error/.input-error--shake générique
+   (voir plus bas, section "Mon profil") pour couvrir aussi le champ pseudo
+   qui n'est pas enveloppé dans .editor-field — ce bloc-ci n'a plus besoin
+   de redéfinir quoi que ce soit, la règle générique s'applique déjà à
+   n'importe quel <input class="input-error">. */
+
+/* ---------- Onglet "Format grille": croix d'insertion/retrait par bord ----------
+   Round 17 (retour utilisateur): le formulaire "Lignes/Colonnes" tapable
+   (steppers −/valeur/+ + bouton "Appliquer") est retiré — seule la croix
+   d'insertion/retrait ci-dessous subsiste, elle agit déjà en immédiat. */
+
+/* Croix compacte d'icônes autour d'un repère central (taille actuelle) —
+   même idée qu'avant (voir historique: boutons pleine largeur "+ ligne
+   haut" etc.) mais en icônes minuscules pour prendre le moins de place
+   possible, la position dans la croix portant elle-même le sens (haut/
+   bas/gauche/droite), le texte complet restant disponible via title. */
+.resize-frame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.resize-row-middle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.resize-frame-center {
+  width: 52px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+
+/* Duo −/+ toujours affiché dans le même ordre (retour utilisateur: "le -
+   à gauche et le + à droite"), quel que soit le bord concerné (haut/bas/
+   gauche/droite) — regroupés visuellement en une seule pastille au lieu
+   de deux boutons libres, comme .stepper plus haut mais sans valeur au
+   milieu. */
+.resize-edge-duo {
+  display: flex;
+  border: 1px solid #2a3040;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.frame-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resize-edge-duo .frame-btn:first-child {
+  border-right: 1px solid #2a3040;
+}
+
+.frame-btn .icon-svg {
+  width: 15px;
+  height: 15px;
+}
+
+.frame-btn:hover {
+  color: var(--accent);
+  background: rgba(110, 231, 255, 0.08);
+}
+
+/* Retour utilisateur (round 17): distinguer visuellement insertion (+) et
+   retrait (−) par une teinte de stroke — vert/rouge harmonisés sur les
+   variables déjà utilisées ailleurs dans l'UI (--success/--error), pas de
+   nouvelle couleur inventée. */
+.frame-btn[id^="ed-insert-"] {
+  color: var(--success);
+}
+
+.frame-btn[id^="ed-insert-"]:hover {
+  color: var(--success);
+  background: rgba(103, 232, 160, 0.12);
+}
+
+.frame-btn[id^="ed-remove-"] {
+  color: var(--error);
+}
+
+.frame-btn[id^="ed-remove-"]:hover {
+  color: var(--error);
+  background: rgba(255, 107, 107, 0.12);
+}
+
+/* ---------- Onglets "Features"/"Expérimentales": palette d'outils ---------- */
+
+.tool-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Icône + petit libellé plutôt que du texte seul: reconnaissable d'un
+   coup d'oeil une fois qu'on connaît les outils, sans perdre le nom pour
+   les débutants (voir index.html: chaque bouton a un <svg class="tool-icon">
+   + <span class="tool-label">). */
+.tool-btn {
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text-dim);
+  padding: 6px 4px 5px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 62px;
+}
+
+.tool-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.tool-label {
+  font-size: 0.6rem;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.tool-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tool-btn.active {
+  background: var(--accent);
+  color: #06121a;
+  border-color: var(--accent);
+}
+
+.tool-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tool-options.hidden {
+  display: none;
+}
+
+/* ---------- Onglet "Options": actions en icônes + gestion des niveaux ---------- */
+
+.options-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Variante accent pour un icon-btn isolé (voir ed-publish) — même principe
+   que .options-btn--accent, décliné pour .icon-btn. */
+.icon-btn--accent {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(110, 231, 255, 0.06);
+}
+
+.editor-btn {
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  padding: 7px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: all 0.15s;
+  flex: 1;
+}
+
+.editor-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#ed-delete:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.editor-status {
+  min-height: 2.4em;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+#ed-export-output {
+  width: 100%;
+  background: #0e1119;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 0.72rem;
+  font-family: monospace;
+  resize: vertical;
+}
+
+#ed-export-output.hidden {
+  display: none;
+}
+
+#ed-import-input {
+  width: 100%;
+  background: #0e1119;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 0.72rem;
+  font-family: monospace;
+  resize: vertical;
+}
+
+#ed-import-panel.hidden {
+  display: none;
+}
+
+/* ---------- Barre d'onglets (dernier enfant du sheet .editor-bottom-panel) ---------- */
+
+/* Pas de position:fixed nécessaire ici (contrairement à .play-action-bar):
+   dernier enfant du flex column .editor-bottom-panel, avec .editor-tab-panel
+   juste au-dessus qui absorbe l'espace flexible restant (flex:1 1 auto) —
+   la barre se retrouve donc naturellement collée en bas du sheet sans
+   superposer quoi que ce soit. */
+.editor-tabbar {
+  flex: 0 0 auto;
+  width: 100%;
+  display: flex;
+  justify-content: space-around;
+  border-top: 1px solid #1c2130;
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Onglets non nommés (retour utilisateur: icônes seules) — le sens vient
+   du pictogramme + du title/aria-label pour l'accessibilité. */
+.editor-tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  width: 52px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.editor-tab-btn .icon-svg {
+  width: 22px;
+  height: 22px;
+}
+
+.editor-tab-btn:hover {
+  color: var(--text);
+}
+
+.editor-tab-btn.active {
+  color: #06121a;
+  background: var(--accent);
+}
+
+/* ==========================================================================
+   Écran titre, navigation, sélection de niveau, Options, Remember
+   ========================================================================== */
+

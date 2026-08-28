@@ -1,0 +1,540 @@
+/* ---------- Badges Remember (voir sommation.js: getSommationBadges,
+   main.js: renderCommunityProfile) ----------
+   Round 19 (retour utilisateur): "il faudrait que les badges prennent moins
+   de place, quand on sélectionne, qu'ils soient juste représentés par une
+   sorte de carré teaser [...] et le badge en lui-même lorsqu'il est
+   appliqué doit être plus fourni, plus stylisé" — deux composants
+   désormais bien distincts:
+   - .badge-teaser (ci-dessous): la grille de SÉLECTION, petits carrés,
+     chacun garde une identité propre (pas un simple aplat de couleur) mais
+     en version compacte.
+   - .badge-frame (plus bas dans le fichier): le rendu APPLIQUÉ (aperçu en
+     haut de "Mon profil", cartes communautaires, en-tête de jeu) — c'est
+     LUI qui porte le décor le plus élaboré désormais (inversion volontaire
+     par rapport à l'ancien .badge-banner unique (round ≤18), qui faisait
+     l'inverse). */
+.profile-badges-teasers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 8px;
+}
+
+.profile-badges-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* ---------- .badge-teaser: petits carrés de sélection ---------- */
+.badge-teaser {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  aspect-ratio: 1;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--panel);
+  transition: opacity 0.2s, filter 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+
+/* Un teaser gagné est un <button> qui sélectionne ce badge comme "actif"
+   (affiché publiquement) — reset des styles de bouton natifs, plus juste un
+   curseur + un état "selected" (voir main.js: refreshProfileBadges). Round
+   19: plus de bouton "Enregistrer" séparé — ce clic EST l'action. */
+.badge-teaser.selectable {
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.badge-teaser.selectable:hover {
+  transform: translateY(-1px);
+}
+
+.badge-teaser.selected {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 14px -4px var(--accent);
+}
+
+.badge-teaser.locked {
+  opacity: 0.5;
+  filter: grayscale(1);
+  cursor: default;
+}
+
+.badge-teaser-deco {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.badge-teaser-name {
+  position: relative;
+  font-size: 0.58rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.15;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tier 1 "Étincelle" — sobre: contour accent + une étincelle. */
+.badge-teaser--tier-1.earned {
+  border-color: rgba(110, 231, 255, 0.4);
+  background: linear-gradient(135deg, rgba(110, 231, 255, 0.1), var(--panel) 70%);
+}
+.badge-teaser--tier-1.earned .badge-teaser-deco::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 7px 2px rgba(110, 231, 255, 0.8);
+}
+.badge-teaser--tier-1.earned .badge-teaser-name {
+  color: var(--accent);
+}
+
+/* Tier 2 "Synapse" — deux nœuds reliés, écho de la mécanique synapse. */
+.badge-teaser--tier-2.earned {
+  border-color: rgba(110, 231, 255, 0.55);
+  background: linear-gradient(135deg, rgba(110, 231, 255, 0.18), var(--panel) 75%);
+  box-shadow: 0 0 12px -6px rgba(110, 231, 255, 0.6);
+}
+.badge-teaser--tier-2.earned .badge-teaser-deco::before,
+.badge-teaser--tier-2.earned .badge-teaser-deco::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 5px 1px rgba(110, 231, 255, 0.8);
+}
+.badge-teaser--tier-2.earned .badge-teaser-deco::before {
+  left: 10px;
+}
+.badge-teaser--tier-2.earned .badge-teaser-deco::after {
+  right: 10px;
+}
+.badge-teaser--tier-2.earned .badge-teaser-name {
+  color: var(--accent);
+}
+
+/* Tier 3 "Réseau" — violet, réseau de nœuds qui pulse. */
+.badge-teaser--tier-3.earned {
+  border-color: rgba(197, 139, 255, 0.55);
+  background: linear-gradient(135deg, rgba(197, 139, 255, 0.2), var(--panel) 78%);
+  box-shadow: 0 0 14px -6px rgba(197, 139, 255, 0.6);
+}
+.badge-teaser--tier-3.earned .badge-teaser-deco::before,
+.badge-teaser--tier-3.earned .badge-teaser-deco::after {
+  content: "";
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #c58bff;
+  box-shadow: 0 0 6px 1px rgba(197, 139, 255, 0.85);
+  animation: badge-network-pulse 2.4s ease-in-out infinite;
+}
+.badge-teaser--tier-3.earned .badge-teaser-deco::before {
+  top: 8px;
+  left: 8px;
+}
+.badge-teaser--tier-3.earned .badge-teaser-deco::after {
+  bottom: 10px;
+  right: 10px;
+  animation-delay: 1.1s;
+}
+.badge-teaser--tier-3.earned .badge-teaser-name {
+  color: #c58bff;
+}
+
+@keyframes badge-network-pulse {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.4);
+  }
+}
+
+/* Tier 4 "Constellation" — ambre, mini champ d'étoiles. */
+.badge-teaser--tier-4.earned {
+  border-color: rgba(232, 181, 99, 0.6);
+  background: linear-gradient(135deg, rgba(232, 181, 99, 0.22), var(--panel) 80%);
+  box-shadow: 0 0 16px -6px rgba(232, 181, 99, 0.65);
+}
+.badge-teaser--tier-4.earned .badge-teaser-deco::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1.3px 1.3px at 25% 30%, rgba(232, 181, 99, 0.85), transparent),
+    radial-gradient(1.3px 1.3px at 65% 20%, rgba(232, 181, 99, 0.6), transparent),
+    radial-gradient(1px 1px at 80% 60%, rgba(232, 181, 99, 0.7), transparent),
+    radial-gradient(1px 1px at 35% 75%, rgba(232, 181, 99, 0.5), transparent);
+}
+.badge-teaser--tier-4.earned .badge-teaser-name {
+  background: linear-gradient(90deg, #f4d9a8, #e8b563 60%, #f4d9a8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Tier 5 "Rétro" — vert CRT + scanlines, nom en police mono. */
+.badge-teaser--tier-5.earned {
+  border-color: rgba(57, 255, 20, 0.55);
+  background: linear-gradient(135deg, rgba(57, 255, 20, 0.16), var(--panel) 78%);
+  box-shadow: 0 0 14px -6px rgba(57, 255, 20, 0.6);
+}
+.badge-teaser--tier-5.earned .badge-teaser-deco::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(57, 255, 20, 0.1) 0px,
+    rgba(57, 255, 20, 0.1) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  animation: badge-retro-flicker 3.6s steps(2) infinite;
+}
+.badge-teaser--tier-5.earned .badge-teaser-name {
+  font-family: "Courier New", monospace;
+  color: #9dffa0;
+}
+
+@keyframes badge-retro-flicker {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ---------- .badge-frame: rendu APPLIQUÉ (avatar+pseudo encadrés) ----------
+   Réutilisé à 4 endroits (voir main.js: buildBadgeFrame): prévisualisation
+   en haut de "Mon profil", écran "terminé" de Remember, byline des cartes
+   communautaires, en-tête de jeu en mode Communauté. Sans tier (pas de
+   badge actif), reste visuellement neutre — aucun bruit visuel pour qui n'a
+   pas de badge sélectionné. Round 19 (retour utilisateur): "plus fourni,
+   plus stylisé, intégré des designs sur sa bordure qui n'est pas obligée
+   d'être toujours de la même forme [...] les bords sont pas forcément
+   arrondis partout" — chaque tier casse la pilule parfaite d'une façon
+   différente (coin coupé, angle tranché, rectangle net...) tout en gardant
+   le MÊME format général (hauteur/padding), voir chaque .badge-frame--tier-N
+   ci-dessous. */
+.badge-frame {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 12px 3px 3px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  vertical-align: middle;
+  transition: border-radius 0.2s;
+}
+
+.badge-frame-deco {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.badge-frame-avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #1c2130;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.badge-frame-pseudo {
+  position: relative;
+  font-size: inherit;
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Tier 1 "Étincelle" — le plus sobre: pilule intacte + une étincelle. */
+.badge-frame--tier-1 {
+  border-color: rgba(110, 231, 255, 0.45);
+  background: linear-gradient(135deg, rgba(110, 231, 255, 0.12), transparent 70%);
+}
+.badge-frame--tier-1 .badge-frame-deco::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 7px 2px rgba(110, 231, 255, 0.85);
+}
+.badge-frame--tier-1 .badge-frame-pseudo {
+  color: var(--accent);
+}
+
+/* Tier 2 "Synapse" — un coin (côté avatar) se dégage de la pilule, comme un
+   nœud qui rompt la courbe, + une paire de nœuds reliés sur la bordure. */
+.badge-frame--tier-2 {
+  border-radius: 6px 999px 999px 999px;
+  border-color: rgba(110, 231, 255, 0.6);
+  background: linear-gradient(135deg, rgba(110, 231, 255, 0.2), transparent 75%);
+  box-shadow: 0 0 14px -6px rgba(110, 231, 255, 0.6);
+}
+.badge-frame--tier-2 .badge-frame-avatar {
+  border-radius: 4px;
+}
+.badge-frame--tier-2 .badge-frame-deco::before,
+.badge-frame--tier-2 .badge-frame-deco::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 5px 1px rgba(110, 231, 255, 0.85);
+}
+.badge-frame--tier-2 .badge-frame-deco::before {
+  left: 30px;
+}
+.badge-frame--tier-2 .badge-frame-deco::after {
+  right: 10px;
+}
+.badge-frame--tier-2 .badge-frame-pseudo {
+  color: var(--accent);
+}
+
+/* Tier 3 "Réseau" — violet, angle tranché (clip-path) côté texte + un duo de
+   nœuds qui pulsent. */
+.badge-frame--tier-3 {
+  clip-path: polygon(0 0, 100% 0, 100% 70%, calc(100% - 14px) 100%, 0 100%);
+  border-color: rgba(197, 139, 255, 0.55);
+  background: linear-gradient(135deg, rgba(197, 139, 255, 0.2), transparent 78%);
+  box-shadow: 0 0 16px -6px rgba(197, 139, 255, 0.6);
+  padding-right: 18px;
+}
+.badge-frame--tier-3 .badge-frame-deco::before,
+.badge-frame--tier-3 .badge-frame-deco::after {
+  content: "";
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #c58bff;
+  box-shadow: 0 0 6px 1px rgba(197, 139, 255, 0.9);
+  animation: badge-network-pulse 2.4s ease-in-out infinite;
+}
+.badge-frame--tier-3 .badge-frame-deco::before {
+  top: 5px;
+  right: 22px;
+}
+.badge-frame--tier-3 .badge-frame-deco::after {
+  bottom: 6px;
+  right: 10px;
+  animation-delay: 1.1s;
+}
+.badge-frame--tier-3 .badge-frame-pseudo {
+  color: #dcc2ff;
+}
+
+/* Tier 4 "Constellation" — ambre, côté avatar carré / côté texte rond, champ
+   d'étoiles + point qui orbite, texte en dégradé. */
+.badge-frame--tier-4 {
+  border-radius: 6px 999px 999px 6px;
+  border-color: rgba(232, 181, 99, 0.6);
+  background: linear-gradient(135deg, rgba(232, 181, 99, 0.22), transparent 80%);
+  box-shadow: 0 0 18px -6px rgba(232, 181, 99, 0.65);
+  padding-right: 20px;
+}
+.badge-frame--tier-4 .badge-frame-avatar {
+  border-radius: 4px;
+}
+.badge-frame--tier-4 .badge-frame-deco::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1.3px 1.3px at 45% 25%, rgba(232, 181, 99, 0.85), transparent),
+    radial-gradient(1.3px 1.3px at 70% 60%, rgba(232, 181, 99, 0.6), transparent),
+    radial-gradient(1px 1px at 85% 30%, rgba(232, 181, 99, 0.7), transparent);
+}
+.badge-frame--tier-4 .badge-frame-deco::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 999px;
+  background: #e8b563;
+  box-shadow: 0 0 8px 3px rgba(232, 181, 99, 0.9);
+  animation: badge-orbit 5s linear infinite;
+}
+.badge-frame--tier-4 .badge-frame-pseudo {
+  background: linear-gradient(90deg, #f4d9a8, #e8b563 60%, #f4d9a8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 10px rgba(232, 181, 99, 0.35);
+}
+
+@keyframes badge-orbit {
+  0% {
+    transform: translate(6px, 0);
+  }
+  25% {
+    transform: translate(0, -5px);
+  }
+  50% {
+    transform: translate(-6px, 0);
+  }
+  75% {
+    transform: translate(0, 5px);
+  }
+  100% {
+    transform: translate(6px, 0);
+  }
+}
+
+/* Tier 5 "Rétro" — vert CRT, entièrement rectangulaire (aucun arrondi,
+   contraste maximal avec les 4 tiers précédents) + scanlines, pseudo en
+   police mono. */
+.badge-frame--tier-5 {
+  border-radius: 3px;
+  border-color: rgba(57, 255, 20, 0.55);
+  background: linear-gradient(135deg, rgba(57, 255, 20, 0.16), transparent 78%);
+  box-shadow: 0 0 14px -6px rgba(57, 255, 20, 0.6);
+}
+.badge-frame--tier-5 .badge-frame-avatar {
+  border-radius: 3px;
+}
+.badge-frame--tier-5 .badge-frame-deco::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(57, 255, 20, 0.1) 0px,
+    rgba(57, 255, 20, 0.1) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  animation: badge-retro-flicker 3.6s steps(2) infinite;
+}
+.badge-frame--tier-5 .badge-frame-pseudo {
+  font-family: "Courier New", monospace;
+  color: #9dffa0;
+  text-shadow: 0 0 8px rgba(57, 255, 20, 0.6);
+}
+
+/* Prévisualisation d'identité en haut de "Mon profil" (avatar+pseudo encadrés
+   par le badge sélectionné) — voir index.html: #profile-badge-preview,
+   main.js: refreshProfileBadgePreview. Centrée au-dessus du pseudo (retour
+   utilisateur round 19), et suffisamment agrandie pour rester la référence
+   visuelle principale de l'écran. */
+.badge-frame-preview {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 6px;
+  font-size: 1.15rem;
+}
+
+.badge-frame-preview .badge-frame {
+  padding: 6px 18px 6px 6px;
+}
+
+.badge-frame-preview .badge-frame-avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 1.3rem;
+}
+
+/* Variante compacte pour la modale de publication de l'éditeur (voir
+   index.html: #editor-publish-author-preview) — juste une prévisualisation
+   en lecture seule, pas besoin de la même taille que "Mon profil". */
+.badge-frame-preview--compact {
+  font-size: 0.95rem;
+  padding: 2px 0 10px;
+}
+
+.badge-frame-preview--compact .badge-frame-avatar {
+  width: 26px;
+  height: 26px;
+  font-size: 0.95rem;
+}
+
+.options-btn {
+  background: var(--panel);
+  border: 1px solid #2a3040;
+  color: var(--text);
+  padding: 14px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: all 0.2s;
+}
+
+.options-btn:hover {
+  border-color: var(--accent);
+}
+
+.options-btn-sub {
+  font-size: 0.74rem;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.options-btn--accent {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(110, 231, 255, 0.06);
+}
+
+.options-btn--danger {
+  color: var(--error);
+}
+
+.options-btn--danger:hover {
+  border-color: var(--error);
+}
+

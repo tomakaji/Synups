@@ -41,6 +41,12 @@
 // est un vrai geste de glisser, y compris nourrir une case verrouillée
 // active (plus de tap-déblocage, voir doDropOnLock).
 import { hexFor, colorFor } from "./game/colors.js";
+// Bouton "Mon profil" de l'écran "terminé" (voir onShow ci-dessous, round
+// 19) — réutilise directement loadProfile/getAvatarSvg, exactement comme la
+// bannière équivalente du menu titre (voir main.js: renderTitleProfileBanner),
+// plutôt que de faire remonter cette logique d'affichage à main.js.
+import { loadProfile } from "./game/storage.js";
+import { getAvatarSvg, DEFAULT_AVATAR } from "./game/community-store.js";
 // Sons: un son NEUF, court et étouffé, dédié à la génération (spammable via
 // le bouton "Générer" — voir spawnFromSelected) ; les autres actions
 // réutilisent des sons déjà existants du jeu principal, de façon symbolique
@@ -103,13 +109,16 @@ function genCost() {
 const AD_WATCH_REWARD = 200;
 
 // ---------- Objectifs: 50 objectifs progressifs + 1 objectif final ----------
-// Retour utilisateur round 8: "on peut dire qu'on programme 50 objectifs +
-// l'objectif final (donc 51)... je te laisse étalonner la difficulté" —
-// générés PROGRAMMATIQUEMENT (formule ci-dessous) plutôt qu'écrits à la
-// main un par un: `name` n'est plus affiché nulle part dans l'UI (l'ancien
-// message "Nouveau badge débloqué : « nom »" a été retiré au round 7 avec
-// tout texte explicatif), il ne sert qu'au débogage — donc un nommage
-// systématique "Palier N" est honnête plutôt qu'artificiellement poétique.
+// Round 19 (retour utilisateur): "les objectifs doivent être prévus en dur,
+// pas calculés. Comme ça je pourrais les modifier à la main moi-même dans le
+// code" — remplace l'ancienne génération programmatique (formule + cycle de
+// couleurs) par CETTE liste figée, un objectif par ligne, éditable
+// directement ici. Le contenu ci-dessous est la sortie EXACTE de l'ancienne
+// formule (aucun changement d'équilibrage à ce round) — seule la manière de
+// l'obtenir change: littérale plutôt que recalculée à chaque chargement de
+// page. `name` n'est affiché nulle part dans l'UI (l'ancien message "Nouveau
+// badge débloqué : « nom »" a été retiré au round 7 avec tout texte
+// explicatif), il ne sert qu'au débogage.
 function req(color, tier, qty = 1) {
   return { kind: "light", color, tier, qty };
 }
@@ -117,93 +126,71 @@ function genReq(color, level, qty = 1) {
   return { kind: "generator", color, level, qty };
 }
 
-/** Choisit une couleur en favorisant le BLANC — retour utilisateur: "n'hésite
- * pas à demander davantage de blanc dans les objectifs, actuellement c'est
- * un peu rare". Cycle déterministe (pas de hasard: la séquence doit être
- * reproductible d'une partie à l'autre) où le blanc revient environ une
- * exigence sur deux ; `includeMixed` ouvre aussi aux couleurs mélangées
- * (jaune/cyan/magenta, toujours atteignables en mélangeant deux couleurs
- * PURES différentes malgré le round 8 qui bloque les re-mélanges). */
-function pickColor(i, includeMixed) {
-  const cycle = includeMixed
-    ? ["w", "r", "w", "g", "y", "w", "b", "w", "c", "w", "r", "m", "w", "g", "w"]
-    : ["w", "r", "w", "g", "w", "b", "w", "r", "w", "g", "w", "b", "w", "r", "w"];
-  return cycle[i % cycle.length];
-}
-
-/** Construit la séquence complète — 5 bandes de 10 objectifs (rang et
- * nombre d'exigences croissants), puis l'objectif final (le 51e). */
-function buildObjectiveScript() {
-  const list = [];
-  let n = 0;
-
-  // Bande 1 (objectifs 1-10): une seule exigence, rang 1-3.
-  for (let i = 0; i < 10; i++) {
-    const tier = 1 + Math.floor(i / 4);
-    list.push({ name: `Palier ${n + 1}`, requirements: [req(pickColor(n, false), tier, 1)] });
-    n++;
-  }
-  // Bande 2 (11-20): deux exigences, rang 2-4, qty 1-2.
-  for (let i = 0; i < 10; i++) {
-    const tier = 2 + Math.floor(i / 4);
-    const qty = i % 5 === 4 ? 2 : 1;
-    list.push({
-      name: `Palier ${n + 1}`,
-      requirements: [req(pickColor(n, false), tier, qty), req(pickColor(n + 3, true), tier, 1)],
-    });
-    n++;
-  }
-  // Bande 3 (21-30): deux à trois exigences, rang 3-6.
-  for (let i = 0; i < 10; i++) {
-    const tier = 3 + Math.floor(i / 3);
-    const reqs = [req(pickColor(n, true), tier, i % 3 === 2 ? 2 : 1), req(pickColor(n + 5, true), Math.max(1, tier - 1), 1)];
-    if (i % 4 === 3) reqs.push(req("w", tier, 1));
-    list.push({ name: `Palier ${n + 1}`, requirements: reqs });
-    n++;
-  }
-  // Bande 4 (31-40): trois exigences, rang 5-8, qty 2-3.
-  for (let i = 0; i < 10; i++) {
-    const tier = 5 + Math.floor(i / 3);
-    const reqs = [
-      req("w", tier, i % 3 === 0 ? 2 : 1),
-      req(pickColor(n, false), tier, 1),
-      req(pickColor(n + 7, true), Math.max(1, tier - 2), i % 4 === 3 ? 2 : 1),
-    ];
-    list.push({ name: `Palier ${n + 1}`, requirements: reqs });
-    n++;
-  }
-  // Bande 5 (41-50): trois à quatre exigences, rang 7-10, forte présence de blanc.
-  for (let i = 0; i < 10; i++) {
-    const tier = Math.min(MAX_LIGHT_TIER, 7 + Math.floor(i / 3));
-    const reqs = [
-      req("w", tier, 2),
-      req(pickColor(n, false), tier, 1),
-      req(pickColor(n + 9, true), Math.max(1, tier - 3), i % 2 === 0 ? 2 : 1),
-    ];
-    if (i % 3 === 2) reqs.push(req("w", Math.max(1, tier - 2), 1));
-    list.push({ name: `Palier ${n + 1}`, requirements: reqs });
-    n++;
-  }
-
-  // Objectif final (51e, "pour finir le mini-jeu") — retour utilisateur:
-  // "nourrir l'objectif des 4 générateurs au niveau maximum (10)". Exigences
-  // de type "generator" (voir genReq) plutôt que "light" — voir
-  // doDropOnObjective()/predictDrop() pour le traitement spécifique.
-  list.push({
+// Bande 1 (1-10): une seule exigence, rang 1-3.
+// Bande 2 (11-20): deux exigences, rang 2-4, qty 1-2.
+// Bande 3 (21-30): deux à trois exigences, rang 3-6.
+// Bande 4 (31-40): trois exigences, rang 5-8, qty 2-3.
+// Bande 5 (41-50): trois à quatre exigences, rang 7-10, forte présence de blanc.
+// 51e (final, "pour finir le mini-jeu"): nourrir les 4 générateurs au niveau
+// maximum (10) — exigences "generator" (voir genReq), traitées à part par
+// doDropOnObjective()/predictDrop().
+const OBJECTIVE_SCRIPT = [
+  { name: "Palier 1", requirements: [req("w", 1)] },
+  { name: "Palier 2", requirements: [req("r", 1)] },
+  { name: "Palier 3", requirements: [req("w", 1)] },
+  { name: "Palier 4", requirements: [req("g", 1)] },
+  { name: "Palier 5", requirements: [req("w", 2)] },
+  { name: "Palier 6", requirements: [req("b", 2)] },
+  { name: "Palier 7", requirements: [req("w", 2)] },
+  { name: "Palier 8", requirements: [req("r", 2)] },
+  { name: "Palier 9", requirements: [req("w", 3)] },
+  { name: "Palier 10", requirements: [req("g", 3)] },
+  { name: "Palier 11", requirements: [req("w", 2), req("g", 2)] },
+  { name: "Palier 12", requirements: [req("b", 2), req("w", 2)] },
+  { name: "Palier 13", requirements: [req("w", 2), req("w", 2)] },
+  { name: "Palier 14", requirements: [req("r", 2), req("r", 2)] },
+  { name: "Palier 15", requirements: [req("w", 3, 2), req("w", 3)] },
+  { name: "Palier 16", requirements: [req("w", 3), req("g", 3)] },
+  { name: "Palier 17", requirements: [req("r", 3), req("y", 3)] },
+  { name: "Palier 18", requirements: [req("w", 3), req("w", 3)] },
+  { name: "Palier 19", requirements: [req("g", 4), req("b", 4)] },
+  { name: "Palier 20", requirements: [req("w", 4, 2), req("w", 4)] },
+  { name: "Palier 21", requirements: [req("w", 3), req("r", 2)] },
+  { name: "Palier 22", requirements: [req("b", 3), req("m", 2)] },
+  { name: "Palier 23", requirements: [req("w", 3, 2), req("w", 2)] },
+  { name: "Palier 24", requirements: [req("c", 4), req("g", 3), req("w", 4)] },
+  { name: "Palier 25", requirements: [req("w", 4), req("w", 3)] },
+  { name: "Palier 26", requirements: [req("r", 4, 2), req("w", 3)] },
+  { name: "Palier 27", requirements: [req("m", 5), req("r", 4)] },
+  { name: "Palier 28", requirements: [req("w", 5), req("w", 4), req("w", 5)] },
+  { name: "Palier 29", requirements: [req("g", 5, 2), req("g", 4)] },
+  { name: "Palier 30", requirements: [req("w", 6), req("y", 5)] },
+  { name: "Palier 31", requirements: [req("w", 5, 2), req("w", 5), req("w", 3)] },
+  { name: "Palier 32", requirements: [req("w", 5), req("r", 5), req("c", 3)] },
+  { name: "Palier 33", requirements: [req("w", 5), req("w", 5), req("w", 3)] },
+  { name: "Palier 34", requirements: [req("w", 6, 2), req("g", 6), req("r", 4, 2)] },
+  { name: "Palier 35", requirements: [req("w", 6), req("w", 6), req("m", 4)] },
+  { name: "Palier 36", requirements: [req("w", 6), req("b", 6), req("w", 4)] },
+  { name: "Palier 37", requirements: [req("w", 7, 2), req("w", 7), req("g", 5)] },
+  { name: "Palier 38", requirements: [req("w", 7), req("r", 7), req("w", 5, 2)] },
+  { name: "Palier 39", requirements: [req("w", 7), req("w", 7), req("w", 5)] },
+  { name: "Palier 40", requirements: [req("w", 8, 2), req("g", 8), req("r", 6)] },
+  { name: "Palier 41", requirements: [req("w", 7, 2), req("w", 7), req("y", 4, 2)] },
+  { name: "Palier 42", requirements: [req("w", 7, 2), req("b", 7), req("w", 4)] },
+  { name: "Palier 43", requirements: [req("w", 7, 2), req("w", 7), req("b", 4, 2), req("w", 5)] },
+  { name: "Palier 44", requirements: [req("w", 8, 2), req("r", 8), req("w", 5)] },
+  { name: "Palier 45", requirements: [req("w", 8, 2), req("w", 8), req("c", 5, 2)] },
+  { name: "Palier 46", requirements: [req("w", 8, 2), req("w", 8), req("w", 5), req("w", 6)] },
+  { name: "Palier 47", requirements: [req("w", 9, 2), req("r", 9), req("r", 6, 2)] },
+  { name: "Palier 48", requirements: [req("w", 9, 2), req("w", 9), req("m", 6)] },
+  { name: "Palier 49", requirements: [req("w", 9, 2), req("g", 9), req("w", 6, 2), req("w", 7)] },
+  { name: "Palier 50", requirements: [req("w", 10, 2), req("w", 10), req("g", 7)] },
+  {
     name: "Le Sommet",
     final: true,
-    requirements: [
-      genReq("r", MAX_GEN_LEVEL, 1),
-      genReq("g", MAX_GEN_LEVEL, 1),
-      genReq("b", MAX_GEN_LEVEL, 1),
-      genReq("w", MAX_GEN_LEVEL, 1),
-    ],
-  });
-
-  return list;
-}
-
-const OBJECTIVE_SCRIPT = buildObjectiveScript();
+    requirements: [genReq("r", MAX_GEN_LEVEL, 1), genReq("g", MAX_GEN_LEVEL, 1), genReq("b", MAX_GEN_LEVEL, 1), genReq("w", MAX_GEN_LEVEL, 1)],
+  },
+];
 
 // Paliers de badges — retour utilisateur round 9: "à chaque fois qu'on
 // remplit les objectifs, la barre progresse un peu. Toutes les 10
@@ -339,10 +326,32 @@ function saveMeta(meta) {
 // mémoire JS et disparaissaient au rechargement. Clé dédiée plutôt que
 // fusionnée à META_KEY: state "court terme, rejouable" bien distinct de la
 // progression "long terme, cumulative" — même découpage d'esprit que
-// storage.js (KEYS.progress vs KEYS.points). Hors storage.js/KEYS et hors
-// eraseAllProgress(), comme META_KEY/PROFILE_KEY: "Réinitialiser le jeu" ne
-// doit pas remettre Remember à zéro non plus.
+// storage.js (KEYS.progress vs KEYS.points).
+//
+// Round 19 (retour utilisateur): revirement — "réinitialiser le profil
+// joueur doit AUSSI réinitialiser le Remember + les bonus débloqués". Ce
+// module reste hors storage.js/KEYS (toujours pas concerné par une éventuelle
+// future réinitialisation PARTIELLE), mais expose désormais explicitement
+// `resetSommationProgress()` ci-dessous, que main.js appelle en plus de
+// storage.js: eraseAllProgress() au clic sur "Réinitialiser le jeu" — voir
+// main.js: btn-reset-confirm.
 const BOARD_KEY = "lightup-sommation-board";
+
+/** Efface TOUTE la progression Remember (badges/objectifs cumulés + partie
+ * en cours) — voir main.js: btn-reset-confirm. Ne touche jamais au profil
+ * (pseudo/avatar/badge actif, voir storage.js: PROFILE_KEY) ni aux données
+ * Communauté : main.js remet lui-même à part `activeBadge`/`avatar` du
+ * profil à leurs valeurs par défaut (le badge/avatar sélectionnés sont un
+ * "bonus débloqué" au même titre que le thème PixelArt, même si stockés
+ * ailleurs), sans jamais effacer le pseudo. */
+export function resetSommationProgress() {
+  try {
+    localStorage.removeItem(META_KEY);
+    localStorage.removeItem(BOARD_KEY);
+  } catch {
+    // voir storage.js: stockage indisponible, sans conséquence ici
+  }
+}
 
 /** Lue une seule fois à l'ouverture (voir initSommation ci-dessous) — valide
  * juste assez la forme du plateau (tableau SIZE×SIZE) pour ne jamais
@@ -576,6 +585,10 @@ const UNLOCK_COLORS = ["r", "g", "b", "w"];
  * dans le mode Sommation sont les mêmes que dans le mode infinity") — fourni
  * par main.js plutôt que géré localement, pour rester une seule source de
  * vérité (voir main.js: infinitePoints/spendSharedPoints/addSharedPoints).
+ * `pointsApi.goToProfile` (round 19): callback fourni par main.js pour
+ * naviguer vers "Mon profil" depuis l'écran "terminé" — même pattern
+ * d'injection que getPoints/spendPoints/addPoints, pour ne jamais faire
+ * dépendre ce module du routeur de main.js directement.
  */
 export function initSommation(pointsApi) {
   const gridEl = document.getElementById("sommation-grid");
@@ -607,6 +620,12 @@ export function initSommation(pointsApi) {
   const progressWrapEl = document.querySelector(".som-progress-wrap");
   const boardWrapEl = document.querySelector(".som-board-wrap");
   const actionsEl = document.querySelector(".som-actions");
+  // Lien "Mon profil" de l'écran "terminé" (round 19, retour utilisateur) —
+  // voir onShow() plus bas pour le remplissage avatar/pseudo.
+  const doneProfileLinkEl = document.getElementById("som-done-profile-link");
+  const doneProfileAvatarEl = document.getElementById("som-done-profile-avatar");
+  const doneProfilePseudoEl = document.getElementById("som-done-profile-pseudo");
+  if (doneProfileLinkEl) doneProfileLinkEl.onclick = () => pointsApi.goToProfile?.();
 
   // Partie en cours: restaurée depuis le disque si une sauvegarde valide
   // existe (voir BOARD_KEY/readBoardState plus haut) — retour utilisateur:
@@ -1560,7 +1579,14 @@ export function initSommation(pointsApi) {
       boardWrapEl?.classList.toggle("hidden", done);
       spawnInfoEl?.classList.toggle("hidden", done);
       actionsEl?.classList.toggle("hidden", done);
-      if (done) return;
+      if (done) {
+        const profile = loadProfile();
+        if (doneProfileAvatarEl) doneProfileAvatarEl.innerHTML = getAvatarSvg(profile?.avatar ?? DEFAULT_AVATAR);
+        if (doneProfilePseudoEl) {
+          doneProfilePseudoEl.textContent = profile?.pseudo?.trim() || "Configurer mon profil";
+        }
+        return;
+      }
       render();
     },
   };

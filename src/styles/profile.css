@@ -1,0 +1,167 @@
+/* ---------- Mon profil ---------- */
+
+.profile-panel {
+  width: min(480px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 28px;
+}
+
+/* Round 17 (retour utilisateur): "il manque une marge entre les badges et
+   les grilles publiées, les deux se chevauchent un peu". Contrairement à
+   l'écran Options (dont les .options-section sont enveloppées dans
+   .options-panel, gap: 26px), les sections de "Mon profil" sont des enfants
+   directs de .screen — qui n'a lui-même aucun gap — donc rien ne les
+   séparait. La marge inclut aussi de quoi absorber la lueur (box-shadow)
+   des bannières de badge tier 3/4, qui déborde légèrement de leur boîte. */
+#view-community-profile > .options-section {
+  margin-top: 24px;
+}
+
+/* Round 19 (retour utilisateur): "pas besoin de réafficher l'avatar a coté
+   du pseudo puisqu'on a la prévisu pour ca" — l'identité (prévisu badge,
+   choix d'avatar, pseudo) est maintenant une colonne centrée, la prévisu
+   servant elle-même d'aperçu avatar (plus de rond avatar dupliqué à côté du
+   pseudo). Remplace l'ancienne ligne flex (avatar rond + champ pseudo côte à
+   côte, round ≤18). */
+.profile-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.profile-avatar-picker {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.profile-avatar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid #2a3040;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.profile-avatar-btn:hover {
+  border-color: var(--accent);
+}
+
+.profile-avatar-btn.active {
+  border-color: var(--accent);
+  background: rgba(110, 231, 255, 0.08);
+}
+
+/* Round 18 (retour utilisateur): avatars déblocables au fil du jeu (voir
+   community-store.js: AVATARS/isAvatarUnlocked) — verrouillé se distingue
+   par une opacité réduite + un cadenas en overlay, jamais cliquable
+   (:disabled natif, pas juste visuel). */
+.profile-avatar-btn.locked {
+  opacity: 0.35;
+  cursor: not-allowed;
+  position: relative;
+}
+
+.profile-avatar-btn.locked:hover {
+  border-color: #2a3040;
+}
+
+.profile-avatar-btn.locked::after {
+  content: "🔒";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  background: rgba(6, 8, 14, 0.55);
+  border-radius: 7px;
+}
+
+/* Round 19 (retour utilisateur): "le pseudo devient un texte simple
+   cliquable [...] passe en mode édition [...] bouton coche pour valider" —
+   deux états mutuellement exclusifs (voir main.js: enterPseudoEditMode /
+   exitPseudoEditMode), jamais de bouton "Enregistrer" séparé: valider ==
+   committer immédiatement (voir updateProfile). */
+.profile-pseudo-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+}
+
+.profile-pseudo-text {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+
+.profile-pseudo-text:hover,
+.profile-pseudo-text:focus-visible {
+  border-color: #2a3040;
+  background: var(--panel);
+  outline: none;
+}
+
+.profile-pseudo-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Voir la convention .hidden du projet (pas de règle générique — chaque
+   élément basculé en visibilité a la sienne, voir aussi #som-done-state
+   round 19 pour l'historique de ce choix, qui a justement révélé ce piège:
+   sans CES DEUX règles scopées, enterPseudoEditMode/exitPseudoEditMode
+   (main.js) basculeraient bien la classe "hidden" mais SANS AUCUN EFFET
+   visuel — texte et input resteraient affichés en même temps). */
+.profile-pseudo-edit.hidden {
+  display: none;
+}
+
+.profile-pseudo-text.hidden {
+  display: none;
+}
+
+.profile-pseudo-input {
+  background: #0e1119;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 1rem;
+  width: 200px;
+}
+
+.profile-pseudo-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* Générique (contrairement à .editor-field input.input-error ci-dessus,
+   qui suppose un wrapper .editor-field): profile-pseudo-input n'est pas
+   enveloppé dans .editor-field, il lui faut donc une règle non scopée. */
+.input-error {
+  border-color: var(--error) !important;
+}
+
+.input-error--shake {
+  animation: som-shake-fail 0.4s ease-in-out;
+}
+

@@ -1,0 +1,218 @@
+/* ---------- Base ----------
+   Variables globales, reset, coquille de page (#app/.topbar), et les
+   boutons/icônes RÉUTILISABLES qui apparaissent sur presque tous les
+   écrans (.icon-btn/.icon-svg, réglages son en haut de plateau). Rien
+   ici n'est spécifique à une seule page — voir les fichiers suivants pour
+   le reste, découpé par page ou par bloc réutilisable plus ciblé. */
+
+:root {
+  --bg: #0b0d12;
+  --panel: #12151c;
+  --cell-empty: #262e46;
+  --cell-empty-illum: #7783ab;
+  --cell-border: rgba(160, 178, 230, 0.22);
+  --cell-light: #fbfcff;
+  --glow-light: 0 0 20px 6px rgba(255, 255, 255, 0.65);
+  --accent: #6ee7ff;
+  --success: #67e8a0;
+  --error: #ff6b6b;
+  --text: #e7ecf5;
+  --text-dim: #7b869c;
+  --cell-size: 56px;
+  --gap: 6px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Scroll vertical uniquement: la page ne doit jamais déborder
+   horizontalement sur mobile (l'éditeur, depuis sa refonte mobile, respecte
+   lui aussi cette contrainte — voir section Éditeur plus bas). */
+html {
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: radial-gradient(circle at 50% 0%, #171c2a 0%, var(--bg) 60%);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#app {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 48px;
+}
+
+.topbar {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 32px;
+}
+
+.topbar h1 {
+  letter-spacing: 0.3em;
+  font-weight: 300;
+  font-size: 1.4rem;
+  margin: 0;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.level-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.level-controls button {
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.85rem;
+}
+
+.level-controls button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.level-controls button:disabled {
+  opacity: 0.35;
+  cursor: default;
+  border-color: #2a3040;
+  color: var(--text-dim);
+}
+
+.level-controls button:disabled:hover {
+  border-color: #2a3040;
+  color: var(--text-dim);
+}
+
+/* Boutons icône (Annuler/Réinitialiser) — mêmes dimensions/comportement que
+   .level-controls button mais sans texte, l'icône SVG seule porte le sens
+   (voir aria-label/title dans le markup pour l'accessibilité). Plus grands
+   que les icônes toggle son/musique ci-dessous (retour utilisateur): ce
+   sont des actions de jeu fréquentes, elles doivent rester faciles à viser. */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  border-color: #2a3040;
+  color: var(--text-dim);
+}
+
+.icon-btn.hidden {
+  display: none;
+}
+
+.icon-svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Icônes plus grandes spécifiquement dans .icon-btn (Annuler/Réinitialiser)
+   — l'icône toggle son/musique (.icon-toggle) garde la taille par défaut
+   ci-dessus, plus discrète car ce sont des réglages, pas des actions de jeu. */
+.icon-btn .icon-svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* Rangée son/musique: deux icônes toggle (mute/unmute indépendants) + le
+   curseur de volume (UNIQUE, règle les deux flux à la fois) SUR LA MÊME
+   LIGNE — voir .volume-slider-full, qui prend tout l'espace restant via
+   flex: 1 plutôt que de passer à la ligne. */
+.audio-toggles-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.icon-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text-dim);
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.icon-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Barre oblique de coupure: masquée par défaut, révélée quand le bouton
+   porte .muted (voir main.js: btnSoundToggle/btnMusicToggle). */
+.icon-toggle .icon-mute-slash {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.icon-toggle.muted {
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.icon-toggle.muted .icon-mute-slash {
+  opacity: 1;
+}
+
+.volume-slider-full {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+#level-name {
+  min-width: 1.5em;
+  text-align: center;
+}
+

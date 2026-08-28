@@ -18,8 +18,11 @@
     <div id="app">
       <!-- Bouton mute global: PAS un écran, visible en permanence au-dessus de
            tous les autres (voir style.css: position fixed) — coupe/rétablit
-           sons+musique en un clic sans toucher aux réglages détaillés
-           d'Options (curseur de volume, mute son/musique indépendants). -->
+           sons+musique en un clic. Round 19 (retour utilisateur): pilote
+           EXACTEMENT la même variable que le bouton "Son" d'Options (voir
+           main.js: setMuted) — les deux sont deux apparences du même bouton,
+           jamais deux états indépendants. Le réglage de volume et le mute
+           musique-seule (#btn-music-toggle) restent, eux, indépendants. -->
       <button id="btn-global-mute" class="global-mute-btn" aria-label="Couper/rétablir le son" title="Couper/rétablir le son">
         <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"></polygon>
@@ -261,7 +264,11 @@
           <div class="options-section">
             <span class="options-label">Son</span>
             <div class="audio-toggles-row">
-              <button id="btn-sound-toggle" class="icon-toggle" aria-label="Activer/couper les sons" title="Effets sonores">
+              <!-- Round 19 (retour utilisateur): identique au bouton flottant
+                   (#btn-global-mute) — même variable, coupe son ET musique.
+                   Volontairement redondant avec lui (accessible aussi depuis
+                   Options), pas un mute "sons seuls" distinct. -->
+              <button id="btn-sound-toggle" class="icon-toggle" aria-label="Couper/rétablir le son" title="Couper le son">
                 <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"></polygon>
                   <path class="icon-wave icon-wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
@@ -339,7 +346,17 @@
         <div id="som-done-state" class="som-done-state hidden">
           <div class="som-done-icon" aria-hidden="true">✓</div>
           <p class="som-done-title">Bravo, Remember est terminé !</p>
-          <p class="som-done-message">Toutes les récompenses ont été débloquées. Il n'y a plus rien à faire ici — retrouve tes bannières dans Mon profil.</p>
+          <p class="som-done-message">Toutes les récompenses ont été débloquées. Il n'y a plus rien à faire ici.</p>
+          <!-- Round 19 (retour utilisateur): "on peut ajouter un bouton qui
+               fasse lien vers le profil en dessous (exactement la même chose
+               que dans 'Menu')" — réutilise telle quelle la bannière
+               avatar+pseudo du menu titre (voir #title-profile-banner),
+               juste sous d'autres IDs (même classe CSS) puisqu'un ID ne peut
+               apparaître qu'une fois dans le document. -->
+          <button id="som-done-profile-link" class="title-profile-banner som-done-profile-link" type="button">
+            <span id="som-done-profile-avatar" class="title-profile-avatar"></span>
+            <span id="som-done-profile-pseudo" class="title-profile-pseudo"></span>
+          </button>
         </div>
 
         <div class="som-progress-wrap" title="Progression vers la prochaine récompense">
@@ -415,36 +432,47 @@
           <h2 class="screen-title">Mon profil</h2>
         </header>
 
+        <!-- Round 19 (retour utilisateur): avatar, pseudo et badge forment UN
+             SEUL formulaire d'identité — plus de bouton "Enregistrer", chaque
+             choix s'applique immédiatement (voir main.js). La prévisualisation
+             (avatar + pseudo, encadrés par le badge sélectionné le cas
+             échéant) est centrée tout en haut, au-dessus des contrôles —
+             elle fait aussi office d'aperçu avatar ET d'aperçu badge, donc
+             l'avatar n'est plus dupliqué ailleurs à côté du pseudo. -->
         <div class="profile-panel">
           <div class="profile-identity">
-            <div id="profile-avatar-preview" class="profile-avatar-preview">🙂</div>
-            <label class="editor-field profile-pseudo-field">Pseudo
-              <input id="profile-pseudo" type="text" maxlength="20" placeholder="Ton pseudo" />
-            </label>
+            <div id="profile-badge-preview" class="badge-frame-preview"></div>
+            <div id="profile-avatar-picker" class="profile-avatar-picker"></div>
+
+            <div class="profile-pseudo-wrap">
+              <span id="profile-pseudo-text" class="profile-pseudo-text" role="button" tabindex="0" title="Modifier le pseudo"></span>
+              <span id="profile-pseudo-edit" class="profile-pseudo-edit hidden">
+                <input id="profile-pseudo-input" class="profile-pseudo-input" type="text" maxlength="20" placeholder="Ton pseudo" />
+                <button id="btn-profile-pseudo-confirm" class="icon-btn icon-btn--accent" type="button" aria-label="Valider le pseudo" title="Valider">
+                  <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </button>
+              </span>
+            </div>
           </div>
-          <div id="profile-avatar-picker" class="profile-avatar-picker"></div>
-          <button id="btn-profile-save" class="options-btn options-btn--accent">Enregistrer</button>
-          <p id="profile-status" class="editor-status"></p>
         </div>
 
-        <!-- Badges Remember, sous forme de bannières avec le pseudo (voir
-             sommation.js: getSommationBadges, main.js: renderCommunityProfile)
-             — le seul "visible par les autres joueurs" que ce prototype tout
-             local sait offrir: la même surface que le pseudo/avatar. -->
+        <!-- Badges Remember: petits carrés "teaser" cliquables (voir
+             main.js: renderCommunityProfile) — un clic sélectionne
+             immédiatement le badge public actif, sans validation séparée.
+             Le rendu "appliqué" (plus élaboré) vit dans .badge-frame,
+             utilisé par la prévisualisation ci-dessus + les cartes
+             communautaires + l'en-tête de jeu. -->
         <div class="options-section">
           <div class="profile-badges-header">
             <span class="options-label">Badges Remember</span>
             <!-- Round 17 (retour utilisateur): bouton admin temporaire pour
-                 tester l'affichage des 4 badges sans finir Remember —
-                 réutilise debugUnlockPixelArt (voir sommation.js), déjà
-                 câblé à un bouton équivalent dans Options (même esprit,
-                 même fonction, effet de bord "PixelArt aussi débloqué"
-                 accepté là-bas). -->
+                 tester l'affichage des badges sans finir Remember — réutilise
+                 debugUnlockPixelArt (voir sommation.js), déjà câblé à un
+                 bouton équivalent dans Options (même esprit, même fonction,
+                 effet de bord "PixelArt aussi débloqué" accepté là-bas). -->
             <button id="btn-profile-badges-debug-unlock" class="som-debug-btn" type="button">Déverrouiller (admin)</button>
           </div>
-          <p class="options-hint">Choisis le badge affiché autour de ton avatar et de ton pseudo pour les autres joueurs — reclique dessus pour le retirer.</p>
-          <div id="profile-badge-preview" class="badge-frame-preview"></div>
-          <div id="profile-sommation-badges" class="profile-badges"></div>
+          <div id="profile-sommation-badges" class="profile-badges-teasers"></div>
         </div>
 
         <div class="options-section">
@@ -811,7 +839,7 @@
         <div class="modal-backdrop" data-reset-modal-close></div>
         <div class="modal-card">
           <h3 class="modal-title">Réinitialiser le jeu ?</h3>
-          <p class="modal-text">Toute la progression Histoire, les points et les réglages seront définitivement effacés.</p>
+          <p class="modal-text">Toute la progression (Histoire, Infini, Remember) ainsi que les récompenses débloquées (badges, avatars, thème Rétro) seront définitivement effacées. Tes niveaux et favoris Communauté, tes réglages son et ton pseudo seront conservés.</p>
           <div class="modal-actions">
             <button id="btn-reset-cancel" class="options-btn" data-reset-modal-close>Annuler</button>
             <button id="btn-reset-confirm" class="options-btn options-btn--danger">Réinitialiser</button>
@@ -822,15 +850,20 @@
       <!-- Modale "Publier" (éditeur -> Communauté): demande un pseudo/avatar
            la toute première fois seulement (voir editor.js/storage.js:
            loadProfile) — les publications suivantes ne la rouvrent plus. -->
+      <!-- Round 19 (retour utilisateur): "lorsqu'on veut publier, on demande
+           le nom du niveau plutôt que le nom/emote du joueur (qui ne sera
+           pas modifiable autrement que dans le profil)" — l'identité de
+           l'auteur (avatar/pseudo/badge) vient désormais TOUJOURS du profil
+           enregistré (voir main.js: Mon profil), juste prévisualisée ici en
+           lecture seule ; le seul champ demandé est le titre du niveau. -->
       <div id="editor-publish-modal" class="modal hidden">
         <div class="modal-backdrop" data-editor-publish-close></div>
         <div class="modal-card">
           <h3 class="modal-title">Publier dans la Communauté</h3>
-          <p class="modal-text">Choisis un pseudo pour signer tes créations — modifiable plus tard depuis "Mon profil".</p>
-          <label class="editor-field">Pseudo
-            <input id="editor-publish-pseudo" type="text" maxlength="20" placeholder="Ton pseudo" />
+          <div id="editor-publish-author-preview" class="badge-frame-preview badge-frame-preview--compact"></div>
+          <label class="editor-field">Titre du niveau
+            <input id="editor-publish-title" type="text" maxlength="40" placeholder="Nom du niveau" />
           </label>
-          <div id="editor-publish-avatar-picker" class="profile-avatar-picker"></div>
           <p id="editor-publish-status" class="editor-status"></p>
           <div class="modal-actions">
             <button class="options-btn" data-editor-publish-close>Annuler</button>

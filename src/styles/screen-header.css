@@ -1,0 +1,102 @@
+/* ---------- En-tête commun aux écrans secondaires (Retour + titre) ---------- */
+
+.screen-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  /* Marge droite réservée: le bouton mute global est fixed en haut à droite
+     de l'écran (voir .global-mute-btn) — sans cette réserve, le contenu du
+     header (surtout .header-actions, poussé à droite) passe dessous et s'y
+     superpose sur les écrans étroits (retour utilisateur). */
+  padding: 18px 50px 18px 4px;
+}
+
+.screen-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Dans l'en-tête du jeu (#view-play), le titre est remplacé par les
+   contrôles de niveau (nav-static/nav-infinite) — occupe l'espace central,
+   les actions (Annuler/Réinitialiser) restent poussées à droite. */
+/* Juste à côté du bouton Retour, PAS centré (retour utilisateur: "le bouton
+   retour à gauche du titre/informations") — hugging son contenu plutôt que
+   flex:1, voir .header-actions ci-dessous pour ce qui pousse le reste à
+   droite. */
+.play-controls {
+  display: flex;
+  align-items: center;
+}
+
+/* Regroupe tous les AUTRES boutons du bandeau de jeu (sélection de niveau,
+   réglages Infini, nouveau niveau) — margin-left:auto les pousse en bloc
+   à l'extrémité droite du header, quel que soit lequel est visible pour le
+   mode courant (voir main.js: setMode()). */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Barre d'actions de jeu (Indice/Annuler/Réinitialiser/Aimer) — retour
+   utilisateur: "pas en bas de la grille, en bas de l'écran, de manière
+   fixed". `position:fixed` la sort du flux (elle ne pousse plus le contenu
+   au-dessus), donc #view-play réserve l'espace correspondant en bas (voir
+   plus bas) pour que le plateau ne se retrouve jamais caché derrière. Reste
+   un descendant de #view-play : masquée automatiquement avec le reste de
+   l'écran (voir .screen.hidden), sans classe ni logique JS séparée pour ça. */
+.play-action-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, rgba(11, 13, 18, 0.96) 40%, rgba(11, 13, 18, 0));
+  pointer-events: none;
+}
+
+.play-action-bar > * {
+  pointer-events: auto;
+}
+
+/* #view-play remplit la hauteur d'écran disponible et réserve la place de
+   .play-action-bar (fixed) en bas ; #play-view absorbe ensuite tout
+   l'espace restant sous l'en-tête et centre le plateau dedans à la fois
+   horizontalement et verticalement — s'adapte automatiquement à la taille
+   d'écran ET à la hauteur de la grille chargée (retour utilisateur), sans
+   calcul JS supplémentaire : c'est juste un flex qui absorbe l'espace
+   disponible.
+   margin-top/-bottom ANNULENT le padding vertical de #app (24px/48px, voir
+   #app plus haut) : sans ça, min-height:100vh se mesure bien sur 100% du
+   VRAI viewport mais la boîte démarre quand même 24px plus bas (padding du
+   parent), donc son propre milieu (utilisé pour centrer le plateau) tombe
+   ~24-40px plus bas que le centre réel de l'écran — la grille "paraissait
+   basse" (retour utilisateur). Ces marges négatives ramènent la boîte à
+   occuper exactement le viewport, sans toucher au padding horizontal. */
+#view-play {
+  min-height: 100vh;
+  margin-top: -24px;
+  margin-bottom: -48px;
+  padding-bottom: 78px;
+}
+
+#play-view {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+

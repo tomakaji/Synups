@@ -1,0 +1,449 @@
+/* ---------- Sommation: fx/animations + reste de l'UI de jeu ----------
+   Round 19: renommé depuis "animations.css" — en pratique la totalité des
+   sélecteurs de ce fichier sont préfixés "som-" (vérifié), ce n'est PAS un
+   fichier d'animations génériques mais la suite de sommation.css (page
+   "Remember"), simplement gardée dans un fichier à part parce que
+   l'auteur d'origine avait déjà distingué layout statique (sommation.css)
+   et effets animés/décor de jeu — cases, orbes, générateurs, spawn,
+   verrous (ce fichier-ci) au sein du même écran.
+   EXCEPTION documentée: @keyframes som-shake-fail est réutilisée
+   TELLE QUELLE par des pages sans rapport avec Sommation (voir style.css:
+   .input-error--shake, utilisée par l'éditeur ET "Mon profil") — un cas de
+   bloc réellement réutilisable malgré son nom, gardé ici plutôt que
+   dupliqué ou déplacé pour ne pas casser la référence historique.
+
+   Retour utilisateur (origine du contenu ci-dessous): "une animation
+   lorsqu'on fusionne des objets" + "animation lorsqu'on essaye de remplir
+   l'objectif pour savoir si ça a réussi ou échoué" + "animation de
+   réussite... en transition vers le prochain objectif" — voir
+   sommation.js: pendingFx/playPendingFx(). */
+
+@keyframes som-pulse-merge {
+  0% {
+    box-shadow: 0 0 0 0 rgba(110, 231, 255, 0.65);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(110, 231, 255, 0);
+  }
+}
+.som-fx-merge {
+  animation: som-pulse-merge 0.5s ease-out;
+}
+
+@keyframes som-pulse-move {
+  0% {
+    background: rgba(110, 231, 255, 0.28);
+  }
+  100% {
+    background: transparent;
+  }
+}
+.som-fx-move {
+  animation: som-pulse-move 0.4s ease-out;
+}
+
+/* Apparition d'un nouvel élément (lumière générée, morceau tombé, case
+   nouvellement débloquée) — distinct de la fusion (pop-in depuis rien
+   plutôt qu'un halo sur un élément déjà là). Voir sommation.js:
+   spawnFromSelected()/tryUnlock() (fx type "spawn"). */
+@keyframes som-pulse-spawn {
+  0% {
+    transform: scale(0.25);
+    opacity: 0;
+  }
+  65% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.som-fx-spawn {
+  animation: som-pulse-spawn 0.35s ease-out;
+}
+
+@keyframes som-shake-fail {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+.som-fx-obj-fail {
+  animation: som-shake-fail 0.4s ease-in-out;
+  border-color: var(--error) !important;
+}
+
+@keyframes som-pulse-complete {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 224, 102, 0.75);
+  }
+  40% {
+    transform: scale(1.09);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 20px rgba(255, 224, 102, 0);
+  }
+}
+.som-fx-obj-complete {
+  animation: som-pulse-complete 0.7s ease-out;
+}
+
+@keyframes som-pulse-recycle {
+  0% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+.som-fx-obj-recycle {
+  animation: som-pulse-recycle 0.35s ease-out;
+}
+
+.som-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 3px;
+  font-size: 0.5rem;
+  color: var(--text-dim);
+}
+
+.som-badge.som-badge-lvl {
+  bottom: auto;
+  right: auto;
+  top: 2px;
+  left: 3px;
+}
+
+/* Rendu "flagrant" des lumières (retour utilisateur) — voir sommation.js:
+   lightSvg(): un pip radial par rang, halo statique (drop-shadow inline)
+   qui grandit avec le rang. Le "souffle" de vie ci-dessous n'anime que la
+   TRANSFORM (jamais filter) pour ne pas écraser ce halo statique. */
+.som-light-svg {
+  animation: som-idle-breathe 2.4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes som-idle-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+/* Lueur douce continue sur le cœur des générateurs (neurone) uniquement —
+   voir sommation.js: neuronSvg() (classe .som-gen-svg). */
+@keyframes som-idle-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 1px currentColor);
+  }
+  50% {
+    filter: drop-shadow(0 0 5px currentColor);
+  }
+}
+.som-gen-svg circle[fill] {
+  animation: som-idle-glow 3.2s ease-in-out infinite;
+}
+
+/* Rotation indéfinie — réutilisée pour les pips d'une lumière au rang MAX
+   (voir .som-light-pips ci-dessous) ET pour l'anneau d'un générateur au
+   niveau MAX (voir .som-gen-halo ci-dessous) — même langage visuel "orbite"
+   pour les deux formes de plafond (retour utilisateur round 8: "il faut
+   trouver quelque chose de similaire" pour le générateur). `transform-box:
+   fill-box` recentre la rotation sur la bbox de l'élément plutôt que sur
+   l'origine du viewBox SVG (0,0), sinon la rotation tourne autour du coin. */
+@keyframes som-orbit-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.som-light-svg-max .som-light-pips {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: som-orbit-spin 5s linear infinite;
+}
+.som-gen-halo {
+  /* Couleur posée en attribut SVG inline (voir sommation.js: neuronSvg) —
+     currentColor ne fonctionnerait pas ici (le stroke du neurone est un
+     attribut de présentation, pas la couleur CSS héritée). */
+  fill: none;
+  stroke-width: 1;
+  opacity: 0.65;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: som-orbit-spin 7s linear infinite;
+}
+
+/* Léger frétillement du morceau de générateur (contour pointillé) en
+   attente — suggère une pièce instable/incomplète. */
+@keyframes som-frag-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.som-cell svg[stroke-dasharray] {
+  animation: som-frag-spin 9s linear infinite;
+  transform-origin: center;
+}
+
+/* Objectif: cellule spéciale 2x2, toujours en haut à gauche de la grille
+   (voir sommation.js: OBJ_R0/OBJ_C0/isReserved) — intégrée au plateau
+   plutôt que décrite dans une barre séparée (retour utilisateur). */
+.som-objective {
+  grid-column: span 2;
+  grid-row: span 2;
+  border: 1.5px solid var(--accent);
+  border-radius: 12px;
+  background: radial-gradient(circle, rgba(110, 231, 255, 0.06), transparent 70%);
+  padding: 6px;
+  cursor: default;
+  touch-action: auto;
+}
+
+/* Exigences précises (couleur + rang) — retour utilisateur: "dessiner juste
+   le cercle vide de la couleur voulue et afficher le niveau voulu en
+   dessous"; un cercle par unité requise (qty), qui "s'illumine" (prend
+   l'apparence d'une lumière) une fois fournie — voir sommation.js:
+   objectiveHtml()/doDropOnObjective(). */
+.som-obj-reqs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.som-obj-req {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.som-obj-orbs {
+  display: flex;
+  gap: 3px;
+}
+
+.som-obj-orb {
+  /* Retour utilisateur: "les objectifs sont très petits donc peu lisibles"
+     — agrandi nettement par rapport à la première version (13px). */
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--som-obj-color, #7b869c);
+  background: transparent;
+  box-sizing: border-box;
+  transition: background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.som-obj-orb-filled {
+  background: var(--som-obj-color, #7b869c);
+  box-shadow: 0 0 7px var(--som-obj-color, transparent);
+}
+
+/* Exigence de type "generator" (objectif FINAL uniquement — voir
+   sommation.js: buildObjectiveScript/genReq) — même cercle que
+   .som-obj-orb mais avec un petit neurone dedans plutôt que vide/plein,
+   estompé tant que le générateur au niveau max n'a pas été fourni. */
+.som-obj-orb-gen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+.som-obj-orb-gen svg {
+  opacity: 0.35;
+}
+.som-obj-orb-gen.som-obj-orb-filled svg {
+  opacity: 1;
+}
+
+.som-obj-req-tier {
+  /* Retour utilisateur: "surtout le niveau voulu" — texte agrandi et mis en
+     avant (couleur pleine + gras) plutôt que discret comme avant. */
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+
+/* Animation d'illumination d'un cercle précis au moment où il se remplit
+   (voir sommation.js: playPendingFx(), fx type "obj-progress"). */
+@keyframes som-orb-fill-pop {
+  0% {
+    transform: scale(0.5);
+  }
+  55% {
+    transform: scale(1.4);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.som-fx-orb-fill {
+  animation: som-orb-fill-pop 0.4s ease-out;
+}
+
+/* Réceptacles de déblocage d'une case verrouillée — retour utilisateur:
+   "on peut afficher 4 cercles réceptacles sous le cadenas, petits et sans
+   label" — mêmes principes que .som-obj-orb (voir plus haut) mais en plus
+   petit et SANS le texte de rang en dessous (le niveau requis se déduit,
+   il n'est plus affiché — voir sommation.js: lockedCellHtml()). Affichés
+   UNIQUEMENT sur la case active (la prochaine à débloquer, gauche à droite
+   — voir activeLockKey()) ; les autres cases verrouillées restent un simple
+   cadenas nu. */
+.som-lock-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.som-lock-orbs {
+  display: flex;
+  gap: 2px;
+  margin-top: 3px;
+}
+
+.som-lock-orb {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--som-lock-color, #7b869c);
+  background: transparent;
+  box-sizing: border-box;
+  transition: background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.som-lock-orb-filled {
+  background: var(--som-lock-color, #7b869c);
+  box-shadow: 0 0 5px var(--som-lock-color, transparent);
+}
+
+/* Retour utilisateur: "enlève tout texte explicatif dans le bas de l'écran,
+   on veut garder le mystère" — #sommation-hint et setHint() ont été retirés
+   de sommation.js/index.html ; .som-hint n'existe plus dans le DOM. */
+
+.som-spawn-info {
+  width: min(360px, 90vw);
+  /* Retour utilisateur: "un peu de marge en bas... c'est trop collé au
+     bouton générer" — marge basse ajoutée avant .som-actions. */
+  margin: 6px auto 16px;
+  display: flex;
+  justify-content: center;
+  min-height: 1.4em;
+}
+
+/* Voir .som-progress-wrap.hidden plus haut: même correctif nécessaire ici. */
+.som-spawn-info.hidden {
+  display: none;
+}
+
+.som-spawn-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Camembert de probabilités de spawn — retour utilisateur: "un graphique
+   fromage plutôt que des informations écrites, avec juste les couleurs,
+   c'est suffisant". Voir sommation.js: spawnRatiosChart(). Agrandi X2 au
+   round 8 (retour utilisateur: "j'aimerais aussi augmenter sa taille x2
+   [fromage + texte]") — corrige au passage le texte de la légende du
+   générateur blanc qui était coupé en haut/bas (5 lignes ne tenaient plus
+   dans l'ancienne hauteur contrainte, voir .som-spawn-legend ci-dessous). */
+.som-spawn-pie {
+  width: 104px;
+  height: 104px;
+  flex: none;
+  margin-top: 2px;
+  border-radius: 50%;
+  border: 1px solid rgba(160, 178, 230, 0.25);
+  animation: som-pulse-spawn 0.3s ease-out;
+}
+
+/* Légende en colonne À CÔTÉ du camembert (retour utilisateur round 7:
+   "ajoute une légende des probas en colonne à droite... ça ne prenne pas
+   plus que la hauteur du fromage") — plus de contrainte de hauteur stricte
+   (retour utilisateur round 8: le texte était coupé), la hauteur du
+   camembert x2 suffit largement à contenir les 5 lignes sans découpage. */
+.som-spawn-legend {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.som-spawn-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.som-spawn-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+  box-sizing: border-box;
+}
+
+.som-spawn-legend-pct {
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.som-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Voir .som-progress-wrap.hidden plus haut: même correctif nécessaire ici. */
+.som-actions.hidden {
+  display: none;
+}
+
+.som-actions .options-btn {
+  flex: 1;
+  min-width: 140px;
+}
+
+.som-actions .options-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+

@@ -1,0 +1,39 @@
+/* ---------- Éléments flottants globaux (visibles au-dessus de tous les écrans) ---------- */
+
+.global-mute-btn {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid #2a3040;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.global-mute-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.global-mute-btn .icon-mute-slash {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.global-mute-btn.muted {
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.global-mute-btn.muted .icon-mute-slash {
+  opacity: 1;
+}
+

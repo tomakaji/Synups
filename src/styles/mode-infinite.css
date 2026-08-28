@@ -1,0 +1,214 @@
+/* ---------- Mode Infini : navigation + panneau de réglages ---------- */
+
+.nav-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-group.hidden {
+  display: none;
+}
+
+#infinite-level-label {
+  color: var(--accent);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+
+.infinite-badge {
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+  color: var(--text-dim);
+  border: 1px solid #3a3550;
+  border-radius: 999px;
+  padding: 2px 9px;
+  cursor: help;
+}
+
+.infinite-badge.hidden {
+  display: none;
+}
+
+.infinite-points {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: var(--panel);
+  border: 1px solid #3a3550;
+  border-radius: 999px;
+  padding: 3px 11px;
+  white-space: nowrap;
+}
+
+.infinite-points.hidden {
+  display: none;
+}
+
+.infinite-points.points-gain {
+  animation: points-pulse 0.5s ease-out;
+}
+
+/* Bouton de test Sommation ("+500 pts") — retour utilisateur: "un petit
+   bouton flottant quelque part (tout en haut)". Placé DANS le header plutôt
+   qu'en position:fixed pour rester "tout en haut" sans jamais chevaucher le
+   bouton mute global (voir .global-mute-btn) — bordure pointillée, opacité
+   réduite: signal "outil de dev", pas une vraie feature de jeu. */
+.som-debug-btn {
+  font-size: 0.66rem;
+  color: var(--text-dim);
+  background: var(--panel);
+  border: 1px dashed #3a3550;
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+  opacity: 0.6;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.som-debug-btn:hover {
+  opacity: 1;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+@keyframes points-pulse {
+  0% {
+    transform: scale(1);
+    color: var(--accent);
+  }
+  35% {
+    transform: scale(1.18);
+    color: #ffe08a;
+  }
+  100% {
+    transform: scale(1);
+    color: var(--accent);
+  }
+}
+
+#btn-infinite-settings,
+#btn-infinite-next {
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text-dim);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: all 0.2s;
+}
+
+#btn-infinite-settings:hover,
+#btn-infinite-next:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.infinite-config {
+  width: min(520px, 92vw);
+  margin: 40px auto;
+  background: var(--panel);
+  border: 1px solid #1c2130;
+  border-radius: 12px;
+  padding: 28px 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.infinite-difficulty {
+  display: flex;
+  gap: 8px;
+}
+
+.infinite-star-btn {
+  flex: 1;
+  background: #0e1119;
+  border: 1px solid #2a3040;
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 1.1rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.infinite-star-btn:hover {
+  border-color: var(--accent);
+}
+
+.infinite-star-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(110, 231, 255, 0.08);
+}
+
+/* Mécaniques autorisées: grille d'icônes carrées, sans texte (retour
+   utilisateur: "pas de checkbox, juste des icônes carrées, qu'on
+   sélectionne ou désélectionne", puis "ca doit être exactement les mêmes
+   images qu'en jeu [...] mets-les dans des cases, ça ressemble bien au
+   jeu") — chaque tuile porte les classes `.cell.cell--empty` du plateau
+   (voir main.js: buildFeatureChecklist), donc hérite TELS QUELS le fond,
+   la bordure, le coin arrondi et la taille (`--cell-size`) d'une vraie case
+   de jeu, sans les redéfinir ici. `.infinite-feature-tile` n'ajoute donc
+   plus que les états propres à ce sélecteur (sélectionné/désactivé),
+   par-dessus. `.cell` n'a pas de largeur en %, donc une rangée qui s'enroule
+   (flex-wrap) est plus fidèle qu'une grille en colonnes fractionnaires. */
+.infinite-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Reset des à-plats par défaut d'un <button> (padding/font notamment) que
+   `.cell`/`.cell--empty` (pensés pour des <div>, voir render.js) ne
+   couvrent pas — sans ça, l'icône (positionnée en absolute inset:0 depuis
+   .cell-icon) serait très légèrement décalée du centre exact par rapport à
+   une vraie case du plateau. */
+.infinite-feature-tile {
+  padding: 0;
+  font: inherit;
+}
+
+.infinite-feature-tile.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.infinite-feature-tile.disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.infinite-feature-tile.disabled:hover {
+  border-color: var(--cell-border);
+}
+
+.infinite-generate-btn {
+  background: var(--accent);
+  color: #06121a;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: opacity 0.2s;
+}
+
+.infinite-generate-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.infinite-status {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  min-height: 1.2em;
+}
+

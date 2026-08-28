@@ -1,0 +1,139 @@
+/* ---------- Indice (ampoule) ---------- */
+/* Voir main.js: stock en mémoire, jamais persistant. */
+.hint-btn {
+  position: relative;
+}
+
+.hint-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid #2a3040;
+  color: var(--text);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.hint-btn:hover .hint-count {
+  border-color: var(--accent);
+}
+
+/* À zéro indice: le badge devient un signal doré ("tu peux en obtenir
+   plus") plutôt qu'un simple "0" neutre — invite au clic sans désactiver
+   le bouton (voir main.js: btnHint reste cliquable, ouvre la modale). */
+.hint-btn--empty .hint-count {
+  background: #ffcf6b;
+  border-color: #ffcf6b;
+  color: #3a2c0f;
+  animation: hint-empty-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes hint-empty-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+/* Halo "sonar doré" posé temporairement sur la case indiquée par un indice
+   (voir main.js: showHintAt) — même motif que le halo sonar d'une case-
+   lumière (.cell-sonar-halo) mais parti du bord de la case plutôt que d'un
+   petit anneau central, en doré plutôt qu'en blanc, pour se superposer
+   SANS se confondre avec l'icône/halo déjà actifs sur une case-lumière. Un
+   seul passage (pas de boucle infinie): dure HINT_HIGHLIGHT_MS puis la
+   classe est retirée par main.js. */
+.cell--hint::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  border: 3px solid #ffcf6b;
+  pointer-events: none;
+  animation: cell-hint-sonar 2.4s ease-out 1;
+}
+
+@keyframes cell-hint-sonar {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* ---------- Modale générique (pour l'instant: "plus d'indices") ---------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 7, 12, 0.72);
+}
+
+.modal-card {
+  position: relative;
+  width: min(360px, 100%);
+  background: var(--panel);
+  border: 1px solid #2a3040;
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--text);
+}
+
+.modal-text {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.modal-actions .options-btn {
+  flex: 1;
+  text-align: center;
+  align-items: center;
+  padding: 12px 14px;
+}
+
+/* Texte de partage (codes SYN1-…) dans les modales Publier/Importer/
+   Partager — même look que les zones de code de l'éditeur
+   (#ed-export-output/#ed-import-input), dupliqué ici en pleine largeur de
+   modale plutôt que le sélecteur d'ID (les deux vivent dans des écrans
+   différents). */
+.community-code-textarea {
+  width: 100%;
+  background: #0e1119;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 0.72rem;
+  font-family: monospace;
+  resize: vertical;
+}
+

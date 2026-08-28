@@ -36,7 +36,13 @@ import {
   mirrorNeuronIcon,
 } from "./game/render.js";
 import { initEditor } from "./editor.js";
-import { initSommation, getSommationBadges, isPixelArtUnlocked, debugUnlockPixelArt } from "./sommation.js";
+import {
+  initSommation,
+  getSommationBadges,
+  isPixelArtUnlocked,
+  debugUnlockPixelArt,
+  resetSommationProgress,
+} from "./sommation.js";
 import { FEATURES } from "./game/generator.js";
 import { requestLevel, ensureLevelBuffer, takeBufferedLevel } from "./game/infiniteClient.js";
 import {
@@ -64,6 +70,8 @@ import {
   importSharedLevel,
   AVATARS,
   isAvatarUnlocked,
+  getAvatarSvg,
+  DEFAULT_AVATAR,
 } from "./game/community-store.js";
 
 let currentLevelIndex = 0;
@@ -449,57 +457,69 @@ renderHintUI();
 // ---------- Réglages persistants (son/musique/thème PixelArt) ----------
 // Un seul curseur de volume commun aux sons ET à la musique (retour
 // utilisateur: "ajouter une barre de réglage volume qui regle les deux en
-// même temps pour plus de cohérence"), plus deux icônes toggle indépendantes
-// pour couper/rétablir chaque flux sans toucher au niveau réglé par le
-// curseur — le tout persistant (voir storage.js), plus un toggle GLOBAL
-// (`globalMuted`, bouton flottant visible sur tous les écrans) qui coupe/
-// remet tout d'un coup SANS écraser ces réglages détaillés.
+// même temps pour plus de cohérence"), le tout persistant (voir storage.js).
+//
+// Round 19 (retour utilisateur): remise à plat du modèle de coupure du son.
+// - `settings.muted` est un SEUL état "coupé", piloté indifféremment par le
+//   bouton flottant (btnGlobalMute) ET le bouton Options (btnSoundToggle) —
+//   "elles appellent la même fonction et variable: si l'un est activé,
+//   l'autre aussi, et vice versa" (voir setMuted ci-dessous, seul point
+//   d'écriture de `settings.muted`). Coupe son ET musique, et ramène
+//   visuellement le curseur à 0 (voir applyVolumes) — mais ne touche JAMAIS
+//   `settings.volume` lui-même, qui reste la valeur réelle voulue par le
+//   joueur : la réactivation retrouve donc exactement le volume ET l'état
+//   "musique coupée ou non" (musicMuted, indépendant) d'avant la coupure,
+//   sans avoir besoin d'une sauvegarde séparée à restaurer.
+// - Bouger le curseur manuellement à 0 n'active PAS `settings.muted` (retour
+//   utilisateur: "si on réduit simplement le slider du son à zéro, ça ne
+//   veut pas dire qu'on coupe le son [...] le résultat est le même mais dans
+//   la logique de l'applicatif non") — le son est bien silencieux (volume
+//   réel à 0), mais l'état interne "coupé" reste faux. À l'inverse, bouger
+//   le curseur PENDANT que `muted` est actif démute automatiquement (sinon
+//   le curseur mentirait en affichant une valeur non nulle alors que le son
+//   resterait coupé).
+// - `musicMuted` reste un réglage à part, orthogonal: couper UNIQUEMENT la
+//   musique en gardant les effets sonores (bouton "Musique" d'Options).
 const volumeSlider = document.getElementById("volume-slider");
 const btnSoundToggle = document.getElementById("btn-sound-toggle");
 const btnMusicToggle = document.getElementById("btn-music-toggle");
 const btnGlobalMute = document.getElementById("btn-global-mute");
 
 const settings = loadSettings();
-volumeSlider.value = String(settings.volume);
-btnSoundToggle.classList.toggle("muted", settings.soundMuted);
 btnMusicToggle.classList.toggle("muted", settings.musicMuted);
-btnGlobalMute.classList.toggle("muted", settings.globalMuted);
 
 function applyVolumes() {
-  const level = Number(volumeSlider.value) / 100;
-  const globallyMuted = settings.globalMuted;
-  setMasterVolume(globallyMuted || settings.soundMuted ? 0 : level);
-  setMusicVolume(globallyMuted || settings.musicMuted ? 0 : level);
+  const level = Number(settings.volume) / 100;
+  setMasterVolume(settings.muted ? 0 : level);
+  setMusicVolume(settings.muted || settings.musicMuted ? 0 : level);
+  volumeSlider.value = settings.muted ? "0" : String(settings.volume);
+  btnSoundToggle.classList.toggle("muted", settings.muted);
+  btnGlobalMute.classList.toggle("muted", settings.muted);
+}
+
+/** Seul point d'écriture de `settings.muted` — voir commentaire ci-dessus:
+ * le bouton flottant ET celui d'Options appellent tous les deux CETTE MÊME
+ * fonction, jamais chacun leur propre variable. */
+function setMuted(value) {
+  settings.muted = value;
+  saveSettings(settings);
+  applyVolumes();
 }
 
 volumeSlider.addEventListener("input", () => {
   settings.volume = Number(volumeSlider.value);
+  if (settings.muted) settings.muted = false; // voir commentaire ci-dessus: bouger le curseur démute
   saveSettings(settings);
   applyVolumes();
 });
 
-btnSoundToggle.addEventListener("click", () => {
-  settings.soundMuted = !settings.soundMuted;
-  saveSettings(settings);
-  btnSoundToggle.classList.toggle("muted", settings.soundMuted);
-  applyVolumes();
-});
+btnSoundToggle.addEventListener("click", () => setMuted(!settings.muted));
+btnGlobalMute.addEventListener("click", () => setMuted(!settings.muted));
 
 btnMusicToggle.addEventListener("click", () => {
   settings.musicMuted = !settings.musicMuted;
   saveSettings(settings);
   btnMusicToggle.classList.toggle("muted", settings.musicMuted);
-  applyVolumes();
-});
-
-// Toggle global (accessible partout, voir index.html): coupe/remet TOUT
-// d'un coup sans toucher aux deux toggles détaillés ci-dessus — les rouvrir
-// (désactiver le mute global) restaure exactement l'état qu'ils décrivaient
-// avant, pas un état "tout remis à zéro".
-btnGlobalMute.addEventListener("click", () => {
-  settings.globalMuted = !settings.globalMuted;
-  saveSettings(settings);
-  btnGlobalMute.classList.toggle("muted", settings.globalMuted);
   applyVolumes();
 });
 
@@ -529,8 +549,18 @@ document.querySelectorAll("[data-reset-modal-close]").forEach((el) => {
   el.onclick = () => resetConfirmModal.classList.add("hidden");
 });
 
+// Round 19 (retour utilisateur): "réinitialiser le profil joueur doit aussi
+// réinitialiser le Remember + les bonus débloqués. La seule donnée conservée
+// sera les niveaux dans Communauté [...], les réglages son et le pseudo" —
+// en plus de eraseAllProgress() (Histoire/Infini/pixelartEnabled, voir
+// storage.js), efface aussi la progression Remember (sommation.js) et remet
+// à zéro avatar+badge actif du profil (des "bonus débloqués" au même titre
+// que PixelArt) SANS toucher au pseudo — updateProfile fusionne, jamais
+// saveProfile qui écraserait tout l'objet.
 document.getElementById("btn-reset-confirm").onclick = () => {
   eraseAllProgress();
+  resetSommationProgress();
+  updateProfile({ avatar: DEFAULT_AVATAR, activeBadge: null });
   window.location.reload();
 };
 
@@ -922,11 +952,11 @@ const communityLevelTitleEl = document.getElementById("community-level-title");
 const communityLevelAuthorEl = document.getElementById("community-level-author");
 const btnCommunityLike = document.getElementById("btn-community-like");
 
-const profileAvatarPreviewEl = document.getElementById("profile-avatar-preview");
-const profilePseudoInput = document.getElementById("profile-pseudo");
+const profilePseudoTextEl = document.getElementById("profile-pseudo-text");
+const profilePseudoEditEl = document.getElementById("profile-pseudo-edit");
+const profilePseudoInput = document.getElementById("profile-pseudo-input");
+const btnProfilePseudoConfirm = document.getElementById("btn-profile-pseudo-confirm");
 const profileAvatarPicker = document.getElementById("profile-avatar-picker");
-const btnProfileSave = document.getElementById("btn-profile-save");
-const profileStatusEl = document.getElementById("profile-status");
 const profilePublishedEl = document.getElementById("profile-published");
 const profilePublishedEmptyEl = document.getElementById("profile-published-empty");
 const profileLikedEl = document.getElementById("profile-liked");
@@ -941,7 +971,7 @@ const titleProfilePseudoEl = document.getElementById("title-profile-pseudo");
 let communitySearch = "";
 let communitySort = "recent";
 let currentCommunityLevel = null; // grille en cours en mode "community" — voir loadCommunityLevel
-let selectedProfileAvatar = AVATARS[0].emoji;
+let selectedProfileAvatar = AVATARS[0].id;
 // Tier (1-5) du badge choisi pour affichage public, ou null ("aucun badge") —
 // voir renderCommunityProfile/refreshProfileBadgePreview. Simple reflet local
 // de profile.activeBadge, ré-synchronisé à chaque entrée dans "Mon profil".
@@ -964,17 +994,27 @@ function avatarUnlocks() {
  * (prévisualisation en direct) — dans les deux cas un simple nombre opaque,
  * jamais recalculé depuis la progression Sommation de l'observateur. Sans
  * badge (null/undefined), le cadre reste neutre — même apparence qu'avant
- * cette fonctionnalité. */
-function buildBadgeFrame(avatarEmoji, pseudoText, badgeTier) {
+ * cette fonctionnalité.
+ *
+ * Round 19: `avatarId` (pas un emoji) — voir community-store.js: AVATARS
+ * stocke désormais un SVG par ID, jamais un caractère à afficher tel quel,
+ * donc innerHTML (pas textContent) pour l'avatar. Cette même fonction sert
+ * aussi de prévisualisation d'IDENTITÉ complète (avatar+pseudo+badge) en
+ * haut de "Mon profil" (retour utilisateur: la prévisu remplace l'ancien
+ * avatar dupliqué à côté du pseudo). */
+function buildBadgeFrame(avatarId, pseudoText, badgeTier) {
   const frame = document.createElement("span");
   frame.className = "badge-frame" + (badgeTier ? ` badge-frame--tier-${badgeTier}` : "");
+  const deco = document.createElement("span");
+  deco.className = "badge-frame-deco";
+  deco.setAttribute("aria-hidden", "true");
   const avatarEl = document.createElement("span");
   avatarEl.className = "badge-frame-avatar";
-  avatarEl.textContent = avatarEmoji || "🙂";
+  avatarEl.innerHTML = getAvatarSvg(avatarId);
   const pseudoEl = document.createElement("span");
   pseudoEl.className = "badge-frame-pseudo";
   pseudoEl.textContent = pseudoText || "Joueur";
-  frame.append(avatarEl, pseudoEl);
+  frame.append(deco, avatarEl, pseudoEl);
   return frame;
 }
 
@@ -1200,6 +1240,14 @@ btnCommunityLike.onclick = () => {
 };
 
 // ---------- Mon profil ----------
+// Round 19 (retour utilisateur): avatar/pseudo/badge forment un seul
+// formulaire d'identité sans bouton "Enregistrer" — chaque choix persiste
+// immédiatement (voir updateProfile ci-dessous, appelé directement par
+// chaque handler). Les fonctions refreshXxx ci-dessous ne redessinent QUE
+// leur propre morceau (jamais tout renderCommunityProfile) pour ne pas
+// perturber un autre champ en cours d'édition (ex: cliquer un avatar
+// pendant que le pseudo est en mode édition ne doit pas fermer ce dernier).
+
 function refreshProfileAvatarPicker() {
   profileAvatarPicker.innerHTML = "";
   const unlocks = avatarUnlocks();
@@ -1209,15 +1257,15 @@ function refreshProfileAvatarPicker() {
     btn.type = "button";
     btn.className =
       "profile-avatar-btn" +
-      (avatar.emoji === selectedProfileAvatar ? " active" : "") +
+      (avatar.id === selectedProfileAvatar ? " active" : "") +
       (unlocked ? "" : " locked");
-    btn.textContent = avatar.emoji;
+    btn.innerHTML = avatar.svg;
     btn.disabled = !unlocked;
-    btn.title = unlocked ? "" : "Avatar verrouillé";
+    btn.title = unlocked ? avatar.label : `${avatar.label} (verrouillé)`;
     if (unlocked) {
       btn.addEventListener("click", () => {
-        selectedProfileAvatar = avatar.emoji;
-        profileAvatarPreviewEl.textContent = avatar.emoji;
+        selectedProfileAvatar = avatar.id;
+        updateProfile({ avatar: avatar.id });
         refreshProfileAvatarPicker();
         refreshProfileBadgePreview();
       });
@@ -1236,22 +1284,18 @@ function refreshProfileAvatarPicker() {
  * modifié depuis (pseudo changé dans "Mon profil" puis retour ici). */
 function renderTitleProfileBanner() {
   const profile = loadProfile();
-  titleProfileAvatarEl.textContent = profile?.avatar ?? AVATARS[0].emoji;
+  titleProfileAvatarEl.innerHTML = getAvatarSvg(profile?.avatar ?? AVATARS[0].id);
   titleProfilePseudoEl.textContent = profile?.pseudo?.trim() || "Configurer mon profil";
 }
 
 titleProfileBanner.onclick = () => pushView("community-profile");
 
-/** Ré-exécutée à chaque affichage de l'écran (voir showView) — comme
- * renderLevelGrid/renderShop, jamais figée sur un rendu périmé (ex: un like
- * posé depuis le fil principal doit apparaître dans "Mes favoris" au
- * prochain passage ici). */
-/** Reconstruit l'encadré de prévisualisation "Mon profil" (retour
- * utilisateur round 18: "on selectionne le badge qu'on souhaite mettre et on
- * peut voir en direct la prévisualisation") — appelée à chaque changement
- * d'avatar, de pseudo tapé, ou de badge sélectionné, toujours à partir de
- * l'état actuellement affiché dans le formulaire (pas forcément déjà
- * enregistré). */
+/** Reconstruit l'encadré de prévisualisation "Mon profil" (avatar + pseudo,
+ * encadrés par le badge actif) — appelée à chaque changement d'avatar, de
+ * pseudo tapé, ou de badge sélectionné, toujours à partir de l'état
+ * actuellement affiché dans le formulaire (pas forcément déjà enregistré :
+ * le pseudo en cours de frappe s'y reflète avant même la validation par le
+ * bouton check). */
 function refreshProfileBadgePreview() {
   if (!profileBadgePreviewEl) return;
   profileBadgePreviewEl.innerHTML = "";
@@ -1259,16 +1303,72 @@ function refreshProfileBadgePreview() {
   profileBadgePreviewEl.appendChild(buildBadgeFrame(selectedProfileAvatar, pseudo, selectedActiveBadge));
 }
 
+/** Petits carrés "teaser" de sélection (retour utilisateur round 19: "moins
+ * de place [...] juste représentés par une sorte de carré teaser [...] pas
+ * juste une couleur, on veut une vraie identité") — chaque tier garde son
+ * propre décor (voir style.css: .badge-teaser-deco), juste redimensionné,
+ * plutôt qu'un simple aplat de couleur. Le pseudo n'apparaît plus ICI (déjà
+ * visible dans la grande prévisualisation ci-dessus) : un badge gagné se
+ * (dé)sélectionne d'un clic, sans confirmation séparée. */
+function refreshProfileBadges() {
+  if (!profileSommationBadgesEl) return;
+  profileSommationBadgesEl.innerHTML = "";
+  for (const badge of getSommationBadges()) {
+    const tile = document.createElement(badge.earned ? "button" : "div");
+    if (badge.earned) tile.type = "button";
+    tile.className =
+      `badge-teaser badge-teaser--tier-${badge.tier}` +
+      (badge.earned ? " earned selectable" : " locked") +
+      (badge.earned && selectedActiveBadge === badge.tier ? " selected" : "");
+
+    const deco = document.createElement("span");
+    deco.className = "badge-teaser-deco";
+    deco.setAttribute("aria-hidden", "true");
+    tile.appendChild(deco);
+
+    const nameEl = document.createElement("span");
+    nameEl.className = "badge-teaser-name";
+    nameEl.textContent = badge.earned ? badge.name : "?";
+    tile.appendChild(nameEl);
+
+    if (badge.earned) {
+      tile.title = selectedActiveBadge === badge.tier ? `${badge.name} (actif — cliquer pour retirer)` : badge.name;
+      tile.addEventListener("click", () => {
+        selectedActiveBadge = selectedActiveBadge === badge.tier ? null : badge.tier;
+        updateProfile({ activeBadge: selectedActiveBadge });
+        refreshProfileBadges();
+        refreshProfileBadgePreview();
+      });
+    } else {
+      tile.title = "Badge verrouillé";
+    }
+
+    profileSommationBadgesEl.appendChild(tile);
+  }
+}
+
+/** Ré-exécutée à chaque affichage de l'écran (voir showView) — comme
+ * renderLevelGrid/renderShop, jamais figée sur un rendu périmé (ex: un like
+ * posé depuis le fil principal doit apparaître dans "Mes favoris" au
+ * prochain passage ici). Contrairement aux refreshXxx ci-dessus (déclenchées
+ * par une action ponctuelle), celle-ci resynchronise TOUT depuis le profil
+ * enregistré — c'est pour ça que le mode édition du pseudo se referme ici
+ * (voir exitPseudoEditMode): on ne veut pas rouvrir "Mon profil" avec une
+ * frappe en cours d'une visite précédente. */
 function renderCommunityProfile() {
   const profile = loadProfile();
   profilePseudoInput.value = profile?.pseudo ?? "";
+  profilePseudoTextEl.textContent = profile?.pseudo?.trim() || "Configurer mon pseudo";
+  exitPseudoEditMode();
+
   const savedAvatarUnlocked =
-    profile?.avatar && isAvatarUnlocked(AVATARS.find((a) => a.emoji === profile.avatar) ?? {}, avatarUnlocks());
-  selectedProfileAvatar = savedAvatarUnlocked ? profile.avatar : AVATARS[0].emoji;
-  profileAvatarPreviewEl.textContent = selectedProfileAvatar;
-  refreshProfileAvatarPicker();
+    profile?.avatar && isAvatarUnlocked(AVATARS.find((a) => a.id === profile.avatar) ?? {}, avatarUnlocks());
+  selectedProfileAvatar = savedAvatarUnlocked ? profile.avatar : AVATARS[0].id;
   selectedActiveBadge = profile?.activeBadge ?? null;
-  profileStatusEl.textContent = "";
+
+  refreshProfileAvatarPicker();
+  refreshProfileBadges();
+  refreshProfileBadgePreview();
 
   const mine = listLevels().filter((l) => l.source === "local");
   profilePublishedEl.innerHTML = "";
@@ -1285,83 +1385,58 @@ function renderCommunityProfile() {
     profileLikedEl.appendChild(buildCommunityCard(level, { onChange: renderCommunityProfile }));
   }
   profileLikedEmptyEl.classList.toggle("hidden", liked.length > 0);
+}
 
-  // Bannières Remember — retour utilisateur round 10: "les badges doivent
-  // être progressifs et englober le pseudo du joueur (comme une sorte de
-  // bannière)". Construites via DOM API (pas innerHTML) pour que le pseudo,
-  // saisi librement par le joueur, ne soit jamais interprété comme du HTML
-  // — même principe que buildCommunityCard: pseudo/textContent (voir plus
-  // bas). Le tier (1-4, voir sommation.js: getSommationBadges) pilote
-  // uniquement l'habillage CSS (.badge-banner--tier-N), de plus en plus
-  // élaboré à mesure que le joueur progresse.
-  if (profileSommationBadgesEl) {
-    profileSommationBadgesEl.innerHTML = "";
-    const pseudo = profile?.pseudo?.trim() || "Joueur";
-    for (const badge of getSommationBadges()) {
-      // Round 18 (retour utilisateur): "dans le profil, on sélectionne le
-      // badge qu'on souhaite mettre" — une bannière gagnée devient un bouton
-      // qui (dé)sélectionne ce tier comme badge public actif (voir
-      // storage.js: updateProfile, editor.js: snapshot dans author.badge à
-      // la publication). Un second clic sur le badge déjà actif le retire
-      // ("aucun badge affiché"), pour ne pas obliger à en choisir un.
-      const banner = document.createElement(badge.earned ? "button" : "div");
-      if (badge.earned) banner.type = "button";
-      banner.className =
-        `badge-banner badge-banner--tier-${badge.tier}` +
-        (badge.earned ? " earned selectable" : " locked") +
-        (badge.earned && selectedActiveBadge === badge.tier ? " selected" : "");
+// ---------- Pseudo: texte cliquable (lecture) <-> input + bouton check
+// (édition) — retour utilisateur round 19: "pas de bouton enregistrer,
+// cliquer sur un choix suffit [...] un simple texte cliquable [...] un
+// bouton-icon valider qui prendra juste la forme d'un Check". ----------
+function enterPseudoEditMode() {
+  profilePseudoInput.value = loadProfile()?.pseudo ?? "";
+  profilePseudoInput.classList.remove("input-error", "input-error--shake");
+  profilePseudoTextEl.classList.add("hidden");
+  profilePseudoEditEl.classList.remove("hidden");
+  profilePseudoInput.focus();
+  profilePseudoInput.select();
+}
 
-      const deco = document.createElement("div");
-      deco.className = "badge-banner-deco";
-      deco.setAttribute("aria-hidden", "true");
-      banner.appendChild(deco);
+function exitPseudoEditMode() {
+  profilePseudoEditEl.classList.add("hidden");
+  profilePseudoTextEl.classList.remove("hidden");
+}
 
-      const pseudoEl = document.createElement("span");
-      pseudoEl.className = "badge-banner-pseudo";
-      pseudoEl.textContent = badge.earned ? pseudo : "?????";
-      banner.appendChild(pseudoEl);
-
-      const nameEl = document.createElement("span");
-      nameEl.className = "badge-banner-name";
-      nameEl.textContent = badge.earned ? badge.name : "Verrouillé";
-      banner.appendChild(nameEl);
-
-      if (badge.earned) {
-        banner.addEventListener("click", () => {
-          selectedActiveBadge = selectedActiveBadge === badge.tier ? null : badge.tier;
-          updateProfile({ activeBadge: selectedActiveBadge });
-          renderCommunityProfile();
-        });
-      }
-
-      profileSommationBadgesEl.appendChild(banner);
-    }
+function commitPseudo() {
+  const pseudo = profilePseudoInput.value.trim();
+  if (!pseudo) {
+    profilePseudoInput.classList.remove("input-error--shake");
+    void profilePseudoInput.offsetWidth;
+    profilePseudoInput.classList.add("input-error", "input-error--shake");
+    profilePseudoInput.focus();
+    return;
   }
-
+  updateProfile({ pseudo });
+  profilePseudoTextEl.textContent = pseudo;
+  exitPseudoEditMode();
   refreshProfileBadgePreview();
 }
 
-btnProfileSave.onclick = () => {
-  const pseudo = profilePseudoInput.value.trim();
-  if (!pseudo) {
-    profileStatusEl.textContent = "Choisis un pseudo avant d'enregistrer.";
-    return;
+profilePseudoTextEl.addEventListener("click", enterPseudoEditMode);
+profilePseudoTextEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    enterPseudoEditMode();
   }
-  // updateProfile (pas saveProfile) pour ne jamais écraser activeBadge, réglé
-  // séparément par un clic sur une bannière (voir plus haut) — même si ce
-  // bouton n'enregistre pas lui-même le badge, il ne doit pas non plus
-  // l'effacer.
-  updateProfile({ pseudo, avatar: selectedProfileAvatar });
-  profileStatusEl.textContent = "Profil enregistré.";
-};
-
-// Prévisualisation en direct dès que le pseudo est modifié, avant même
-// d'enregistrer (retour utilisateur round 18) — même esprit que le pseudo
-// tapé dans la modale de publication de l'éditeur, qui n'attend pas non plus
-// une sauvegarde pour refléter la saisie en cours.
+});
+btnProfilePseudoConfirm.addEventListener("click", commitPseudo);
+profilePseudoInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") commitPseudo();
+});
+// Prévisualisation en direct dès que le pseudo est tapé, avant même la
+// validation par le bouton check (retour utilisateur round 18, toujours
+// valable round 19 malgré la disparition du bouton Enregistrer).
 profilePseudoInput.addEventListener("input", refreshProfileBadgePreview);
 
-// Round 17 (retour utilisateur): bouton admin temporaire pour tester les 4
+// Round 17 (retour utilisateur): bouton admin temporaire pour tester les
 // badges sans finir Remember — même fonction que le bouton équivalent
 // d'Options (voir plus haut btnPixelartDebugUnlock), donc même effet de
 // bord accepté (débloque aussi le thème PixelArt en même temps).
@@ -1421,7 +1496,14 @@ function setMode(next) {
 }
 
 const editorApi = initEditor({ levels });
-const sommationApi = initSommation({ getPoints: () => infinitePoints, spendPoints: spendSharedPoints, addPoints: addSharedPoints });
+const sommationApi = initSommation({
+  getPoints: () => infinitePoints,
+  spendPoints: spendSharedPoints,
+  addPoints: addSharedPoints,
+  // Round 19 (retour utilisateur): bouton "Mon profil" sous le message
+  // "terminé" — voir sommation.js: onShow().
+  goToProfile: () => pushView("community-profile"),
+});
 
 // ---------- Navigation (pile d'écrans + bouton Retour générique) ----------
 // Prototype mono-page: tous les écrans coexistent dans le DOM, un seul est

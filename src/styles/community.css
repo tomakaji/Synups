@@ -1,0 +1,267 @@
+/* ---------- Communauté (fil, tout local) ---------- */
+
+/* Seule .community-scroll (voir plus bas) défile — le header, la barre de
+   recherche/tri et la rangée d'actions restent fixes en haut (retour
+   utilisateur). Nécessite une hauteur BORNÉE (pas juste min-height) pour
+   que le flex:1 de .community-scroll puisse réellement se limiter et
+   scroller au lieu de simplement pousser toute la page — d'où
+   height:100vh + overflow:hidden ici, avec les mêmes marges négatives que
+   #view-play pour annuler le padding de #app (voir son commentaire). */
+#view-community {
+  height: 100vh;
+  overflow: hidden;
+  margin-top: -24px;
+  margin-bottom: -48px;
+}
+
+.community-scroll {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.community-toolbar {
+  width: min(560px, 100%);
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.community-search {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid #2a3040;
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.community-search::placeholder {
+  color: var(--text-dim);
+}
+
+.community-sort {
+  background: var(--panel);
+  border: 1px solid #2a3040;
+  color: var(--text);
+  padding: 10px 10px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+}
+
+/* Bouton "Mon profil" du header Communauté: poussé sur la droite (retour
+   utilisateur) — seul élément du header à en avoir besoin, donc un
+   margin-left:auto ciblé plutôt que de rendre .screen-title flex:1
+   (éviterait d'affecter les autres écrans qui suivent ce même motif
+   d'en-tête, ex. Remember). */
+#btn-community-profile {
+  margin-left: auto;
+}
+
+.community-actions-row {
+  width: min(560px, 100%);
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.community-actions-row .options-btn {
+  flex: 1;
+  padding: 12px 14px;
+  font-size: 0.82rem;
+}
+
+.community-feed {
+  width: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 24px;
+}
+
+.community-feed--compact {
+  padding-bottom: 4px;
+}
+
+.community-card {
+  background: var(--panel);
+  border: 1px solid #1c2130;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.community-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.community-card-title {
+  flex: 1;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.community-card-difficulty {
+  font-size: 0.78rem;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.community-card-byline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.community-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #1c2130;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.community-card-mechanics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.community-mechanic-icon {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--cell-empty);
+  border: 1px solid var(--cell-border);
+  flex-shrink: 0;
+}
+
+.community-mechanic-icon .cell-icon-svg,
+.community-mechanic-icon .cell-icon {
+  position: absolute;
+  inset: 0;
+}
+
+.community-card-bottom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.community-card-stat {
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.community-card-spacer {
+  flex: 1;
+}
+
+.community-card-btn {
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: all 0.15s;
+}
+
+.community-card-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.community-card-like {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 6px;
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.community-card-like:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.community-card-like.liked {
+  border-color: var(--error);
+  color: var(--error);
+  background: rgba(255, 107, 107, 0.08);
+}
+
+.community-card-like .icon-svg {
+  width: 16px;
+  height: 16px;
+}
+
+.community-card-like.liked .icon-svg path {
+  fill: currentColor;
+}
+
+.community-empty {
+  width: min(560px, 100%);
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  padding: 12px 0;
+}
+
+.community-empty.hidden {
+  display: none;
+}
+
+/* En-tête de jeu, mode Communauté (voir main.js: setMode "community") —
+   remplace nav-static/nav-infinite: le titre + l'auteur de la grille en
+   cours plutôt qu'un numéro de niveau ou un compteur de points. */
+.community-level-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-right: 6px;
+}
+
+.community-level-author {
+  font-size: 0.76rem;
+  color: var(--text-dim);
+}
+
+/* Bouton "aimer" dans l'en-tête de jeu — même gabarit que .icon-btn (voir
+   HTML: cumule les deux classes), coloré comme .community-card-like une
+   fois aimé. */
+.community-like-btn.liked {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.community-like-btn.liked .icon-svg path {
+  fill: currentColor;
+}
+

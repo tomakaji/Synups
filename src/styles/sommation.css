@@ -1,0 +1,267 @@
+/* ---------- Sommation (mode bonus, prototype de test) ---------- */
+/* Même coquille mobile que #view-community/#view-editor: hauteur bornée au
+   viewport + une seule zone qui défile (ici .som-board-wrap), pour que le
+   plateau ne pousse jamais le header hors écran sur petit format. */
+#view-sommation {
+  height: 100vh;
+  overflow: hidden;
+  margin-top: -24px;
+  margin-bottom: -48px;
+}
+
+/* Barre de progression vers la prochaine récompense (badge) — remplace
+   l'ancien texte "Objectifs complétés : N" (retour utilisateur: "en haut
+   une barre de progression jusqu'à obtention d'une récompense"). Reflète la
+   part remplie de l'objectif EN COURS (somme fulfilled/qty): le vider
+   déclenche toujours une récompense, nouvelle ou déjà connue — voir
+   sommation.js: render(). */
+.som-progress-wrap {
+  width: min(360px, 90vw);
+  margin: 6px auto 0;
+  flex-shrink: 0;
+}
+
+/* Round 19 (correctif): TOUTES les classes ".hidden" de cet écran (voir
+   sommation.js: onShow) sont scoped — cette codebase n'a pas de règle
+   ".hidden" générique (chaque élément bascule-visibilité doit la définir
+   lui-même, voir les autres ".xxx.hidden" du fichier). .som-progress-wrap
+   n'avait PAS la sienne : le badge "hidden" posé par onShow() n'avait donc
+   RIGOUREUSEMENT AUCUN EFFET visuel, ce qui provoquait exactement le bug
+   signalé ("l'écran affiche toujours la barre de progression [...] même une
+   fois Remember terminé" ET, symétriquement, l'inverse — voir
+   .som-done-state.hidden juste en dessous, touché par le même oubli). */
+.som-progress-wrap.hidden {
+  display: none;
+}
+
+/* État "terminé" (round 12, devenu l'écran normal du menu "Remember" round
+   18 — voir index.html: #som-done-state, main.js: enterRememberDirect).
+   Centré, sans interaction — "y a plus rien à voir ici" (retour
+   utilisateur), donc pas de bouton de jeu, juste une confirmation
+   chaleureuse + un lien vers le profil (voir .som-done-profile-link). */
+.som-done-state {
+  width: min(360px, 90vw);
+  margin: 72px auto 0;
+  text-align: center;
+}
+
+/* Voir commentaire de .som-progress-wrap.hidden ci-dessus: même oubli, même
+   correctif — c'est LUI qui causait le bug inverse ("on voit le message de
+   réussite" avant même d'avoir terminé Remember), #som-done-state restant
+   visible en permanence faute de cette règle. */
+.som-done-state.hidden {
+  display: none;
+}
+
+.som-done-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  border-radius: 999px;
+  background: rgba(110, 231, 255, 0.1);
+  border: 1px solid rgba(110, 231, 255, 0.4);
+  color: var(--accent);
+  font-size: 1.5rem;
+}
+
+.som-done-title {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.som-done-message {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Teaser de la prochaine récompense — retour utilisateur round 11: "au
+   dessus de la barre de progression, il faut teaser le joueur en affichant
+   la prochaine récompense à débloquer". Masqué (voir sommation.js: render())
+   au-delà du 5e palier, une fois qu'il n'y a plus rien de nouveau à annoncer
+   — la barre continue de tourner mais on ne promet pas un contenu inexistant. */
+.som-next-reward-teaser {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.som-next-reward-teaser.hidden {
+  display: none;
+}
+
+.som-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.som-badge-progress {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(160, 178, 230, 0.15);
+  overflow: hidden;
+}
+
+.som-badge-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), #ffe066);
+  transition: width 0.35s ease-out;
+}
+
+/* "x/y" — retour utilisateur: "avec un x/y par exemple 0/20 pour le premier
+   badge" — remplace la galerie de badges qui était en bas. */
+.som-badge-progress-label {
+  font-size: 0.62rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.som-board-wrap {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+
+/* Voir .som-progress-wrap.hidden plus haut: même correctif nécessaire ici. */
+.som-board-wrap.hidden {
+  display: none;
+}
+
+.som-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 6px;
+  width: min(360px, 90vw);
+  aspect-ratio: 1;
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.som-cell {
+  border-radius: 6px;
+  border: 1px solid rgba(160, 178, 230, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: grab;
+  /* Indispensable pour que les Pointer Events de glisser (voir
+     sommation.js: startDrag/onDragMove) reçoivent bien les mouvements du
+     doigt au lieu que le navigateur les intercepte pour faire défiler la
+     page (comportement tactile par défaut sur un élément draggable). */
+  touch-action: none;
+}
+
+/* Fond très légèrement teinté sur une case LUMIÈRE (retour utilisateur
+   round 8: "je préfère le fond teinté sur les lumières" plutôt qu'un cadre
+   redessiné sur les générateurs) — distingue les deux types de case sans
+   toucher aux illustrations. --som-light-tint est posé en inline par
+   sommation.js: render() (couleur de la lumière à 12% d'opacité, voir
+   game/colors.js: colorFor). Placée ICI (avant .som-empty et surtout avant
+   .som-drop-hover-valid/.som-fx-move plus bas) pour que ces états, à
+   spécificité CSS égale, gagnent grâce à l'ordre du fichier plutôt que
+   d'être masqués par cette teinte de fond. */
+.som-cell.som-light-cell {
+  background: var(--som-light-tint, transparent);
+}
+
+.som-cell.som-empty {
+  border-style: dashed;
+  cursor: default;
+}
+
+/* Case verrouillée (2 dernières lignes au départ) — retour utilisateur:
+   "verrouillées et à débloquer en les achetant une par une". Pas de
+   glisser possible (voir sommation.js: render()/tryUnlock), juste un tap
+   qui tente le déblocage. */
+.som-cell.som-locked {
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.18);
+  border-style: dotted;
+  opacity: 0.6;
+}
+
+.som-cell.som-selected {
+  border-color: var(--accent);
+  border-width: 2px;
+}
+
+/* Case survolée pendant un glisser en cours — verte si le dépôt serait
+   valide, rouge sinon (retour utilisateur: "au survol, pour prévisualiser
+   ce qui va se passer") — voir sommation.js: onDragMove/predictDrop(). */
+.som-cell.som-drop-hover-valid {
+  border-color: var(--success);
+  border-width: 2px;
+  background: rgba(103, 232, 160, 0.12);
+}
+
+.som-cell.som-drop-hover-invalid {
+  border-color: var(--error);
+  border-width: 2px;
+  background: rgba(255, 107, 107, 0.1);
+}
+
+/* La case source reste visible mais estompée pendant qu'on la glisse (le
+   "ghost" flottant, voir .som-drag-ghost, porte la vraie représentation). */
+.som-cell.som-drag-source {
+  opacity: 0.35;
+}
+
+/* Élément flottant qui suit le doigt/curseur pendant un glisser — ajouté
+   directement à <body>, positionné en fixed via left/top mis à jour à
+   chaque pointermove (voir sommation.js). */
+.som-drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 999;
+  background: var(--panel);
+  box-shadow: none;
+  opacity: 0.9;
+}
+
+/* Bulle d'aperçu textuel qui suit le glisser (voir sommation.js:
+   predictDrop) — "Fusionner → rang 2", "Déplacer ici", "Ne correspond à
+   rien — recyclage", etc. */
+.som-drag-preview {
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  z-index: 1000;
+  background: var(--panel);
+  border: 1px solid var(--success);
+  color: var(--text);
+  font-size: 0.62rem;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.som-drag-preview-invalid {
+  border-color: var(--error);
+  color: var(--error);
+}
+

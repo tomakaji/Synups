@@ -1,0 +1,458 @@
+/* ---------- Plateau de jeu (cases/lasers) ----------
+   Bloc RÉUTILISABLE: rendu du plateau (grille de cases, rayons laser,
+   icônes de case, animations de résolution) partagé tel quel par les trois
+   modes qui affichent un plateau (Histoire, Infini, aperçu Éditeur) — voir
+   game/render.js/grid.js, qui ciblent ces mêmes classes sans savoir dans
+   quel écran elles s'affichent. */
+
+#board-container {
+  display: flex;
+  justify-content: center;
+}
+
+#board {
+  position: relative;
+  /* Établit son propre contexte d'empilement: sans ça, un z-index négatif
+     sur une case (voir .cell--target-glow) s'échappe jusqu'à la racine de
+     la page et peut y perturber l'ordre de superposition (et donc la
+     détection de clic) au lieu de rester local aux cases du plateau. */
+  isolation: isolate;
+  display: grid;
+  gap: var(--gap);
+  background: transparent;
+  padding: var(--gap);
+  /* Cellule responsive: ne dépasse jamais 56px (taille de confort desktop),
+     mais rétrécit pour que la grille tienne dans la largeur d'écran
+     disponible sur mobile plutôt que de déborder horizontalement. `--cols`
+     est posé dynamiquement par render.js (build()) selon le niveau chargé.
+     32px = padding horizontal de #app (16px de chaque côté, voir plus
+     haut); (cols+1) gaps car #board a lui-même un padding de --gap en plus
+     des gaps entre cellules. #editor-board reprend exactement la même
+     formule (voir plus bas, section Éditeur) depuis sa refonte mobile. */
+  --cell-size: min(
+    56px,
+    calc(
+      (min(100vw, 720px) - 32px - (var(--cols, 8) + 1) * var(--gap)) /
+        var(--cols, 8)
+    )
+  );
+}
+
+.cell {
+  position: relative;
+  width: var(--cell-size);
+  height: var(--cell-size);
+  border-radius: 6px;
+  border: 1px solid var(--cell-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+  transition: background 0.25s, box-shadow 0.25s, color 0.25s, border-color 0.25s;
+  user-select: none;
+}
+
+.cell--void {
+  background: transparent;
+  border-color: transparent;
+}
+
+/* Les obstacles (hors-grille, charge, synapse) n'ont ni fond ni contour:
+   seules les cases avec lesquelles on peut interagir (vides, lumières) ont
+   un "corps" visuel. Ça rend la distinction cliquable/non-cliquable
+   immédiate. */
+
+.cell--empty {
+  background: var(--cell-empty);
+  cursor: pointer;
+}
+
+.cell--empty:hover {
+  background: #232838;
+}
+
+/* Fallback si colors.js ne fournit pas de valeur (ne devrait plus arriver:
+   illuminatedColor()/lightColor() couvrent maintenant toutes les couleurs,
+   y compris le blanc). Les deux partagent le même ratio de mélange — seule
+   l'icône de la case-source (voir neuronIcon) la distingue désormais. */
+.cell--illuminated {
+  background: var(--cell-empty-illum);
+}
+
+.cell--light {
+  background: var(--cell-empty-illum);
+  cursor: pointer;
+}
+
+/* [Expérimental] Duplicata de neurone miroir: pas interactif (voir
+   grid.js: toggleLight le refuse) — le curseur ne doit pas laisser croire
+   qu'un clic ici fait quoi que ce soit d'utile. */
+.cell--light-duplicate {
+  cursor: default;
+}
+
+/* Halo autour d'une case-cible une fois la bonne couleur atteinte, pour
+   plus de présence visuelle. z-index négatif (plutôt que de compter sur
+   l'ordre du DOM) pour garantir que le halo déborde TOUJOURS derrière les
+   cases voisines, quel que soit le sens du débordement. */
+.cell--target-glow {
+  z-index: -1;
+  box-shadow: 0 0 9px 1px var(--target-glow-color, rgba(255, 255, 255, 0.28));
+}
+
+/* Case traversée par au moins deux rayons distincts: couleur pleine (pas de
+   demi-transparence), avec un léger liseré pour marquer le croisement. */
+.cell--intersection {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.cell--clue {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* Pyra (neurone pyramidal): activé dès 1 lumière adjacente (jusqu'à 3),
+   surcharge à 4 — voir CellType.PYRA et pyraIcon(). */
+.cell--pyra {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* Case interdite ("synapse"): aucune lumière ne peut jamais lui être
+   adjacente. Son icône (voir cell-icon) part d'un état intact et se
+   "rompt" visuellement au contact d'une impulsion adjacente. */
+.cell--forbidden {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* Miroir: dévie un laser coloré de 90° (voir CellType.MIRROR). Même
+   traitement "sans corps" que les autres obstacles. */
+.cell--mirror {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* Mur: bloque lumière blanche ET lasers colorés (voir CellType.WALL) —
+   contrairement au void, qui lui est transparent aux lasers colorés. Même
+   traitement "sans corps", l'icône (hachures) suffit à le distinguer d'un
+   void qui n'affiche rien. */
+.cell--wall {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* Filtre: ne garde qu'un canal fixe d'un laser coloré qui le traverse (voir
+   CellType.FILTER). Couleur décidée au level-design, jamais cliquable. */
+.cell--filter {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* Prisme: colore ses 4 voisins directs selon une rotation dépendant du
+   nombre de lumières actuellement adjacentes (voir CellType.PRISM). */
+.cell--prism {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* [Expérimental] Neurone miroir: duplique en symétrie toute lumière qui
+   l'éclaire (voir CellType.MIRROR_NEURON). */
+.cell--mirror-neuron {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+/* Le groupe "rotor" de l'icône prisme (voir render.js: prismIcon +
+   renderPrismIcon) est mis à jour en place (son `transform`, pas son
+   innerHTML) pour que cette transition s'applique réellement — sans ça,
+   le noeud serait recréé à chaque rendu et ne pourrait jamais animer. */
+.prism-rotor {
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Conteneur de l'icône injectée par main.js (neurone, charge, synapse,
+   cible). Toujours en overlay plein cadre, jamais interactif lui-même. */
+.cell-icon {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+}
+
+.cell-icon-svg {
+  /* Plusieurs icônes (ex: neurone + cadre de case-cible) peuvent être
+     empilées dans le même .cell-icon: chacune doit couvrir exactement le
+     cadre de la case plutôt que s'enchaîner en flux, sinon la deuxième
+     déborde visuellement sur la case suivante. */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Respiration lente d'une case à charge satisfaite: elle "prend vie". */
+.cell-breathe {
+  animation: cell-breathe 2.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes cell-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.09); opacity: 1; }
+}
+
+/* Scintillement rapide d'un influx en surcharge (jamais de couleur rouge
+   ici: les couleurs sont réservées aux canaux des lasers). */
+.cell-flicker {
+  animation: cell-flicker 0.45s steps(2) infinite;
+}
+
+@keyframes cell-flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Case-cible atteinte: "respiration" avec quart de tour. L'icône (coins de
+   viseur) a une symétrie 4 (chaque bras est à 90° du suivant), donc une
+   rotation de 90° la ramène visuellement à son état de départ — la boucle
+   ne "saute" jamais, chaque cycle ajoute juste 90° de plus au cumul.
+   Rétrécissement volontairement léger (0.88): appliqué directement sur le
+   <svg> (pas sur une forme interne), donc transform-origin center d'un
+   bloc CSS normal, sans les soucis de fill-box vus sur le halo sonar. */
+.cell-target-breathe {
+  animation: cell-target-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes cell-target-breathe {
+  0% { transform: scale(1) rotate(0deg); }
+  15% { transform: scale(0.88) rotate(45deg); }
+  25% { transform: scale(0.88) rotate(90deg); }
+  40% { transform: scale(0.88) rotate(90deg); }
+  70% { transform: scale(1) rotate(90deg); }
+  100% { transform: scale(1) rotate(90deg); }
+}
+
+/* Halo "sonar" de la case-lumière: part du centre de l'anneau et s'étend
+   en s'effaçant, en boucle — signale "ceci est LA source" par le
+   mouvement plutôt que par une opacité de fond différente. */
+.cell-sonar-halo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44%;
+  height: 44%;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid;
+  pointer-events: none;
+  animation: cell-sonar 2s ease-out infinite;
+}
+
+/* Amplitude volontairement large (jusqu'à dépasser la case): avec une
+   amplitude trop faible, l'oeil ne perçoit pas une expansion continue mais
+   un "saut" entre deux tailles proches (rapporté par l'utilisateur). Un
+   seul segment 0% -> 100% (pas de palier intermédiaire) pour une
+   progression fluide plutôt qu'un temps mort avant la boucle suivante. */
+@keyframes cell-sonar {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 0.75; }
+  100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+}
+
+/* Impulsion (laser): contour sombre derrière un trait de couleur pour
+   rester lisible sur fond sombre, plus deux points qui voyagent le long
+   du trait pour indiquer le sens de propagation. */
+.laser {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Laser tiré par une charge satisfaite mais qui ne rencontre aucune
+   lumière avant un obstacle ou le bord de la grille: reste visible (le
+   joueur sait qu'un laser part d'ici) mais nettement plus discret, sans
+   points animés (rien à connecter). */
+.laser--unconnected {
+  opacity: 0.4;
+}
+
+/* [Expérimental] Dernier segment d'un laser qui atteint directement un
+   duplicata de neurone miroir: n'a AUCUN effet sur sa couleur (voir
+   grid.js: _mirrorLaserBlocked) — dégradé répété au lieu d'un trait plein
+   (posé en JS sur laser-core, voir render.js) + opacité réduite ici, pour
+   lire "grésille, ne se connecte pas" plutôt qu'un laser normal. */
+.laser--blocked {
+  opacity: 0.55;
+}
+
+/* [Expérimental] Pulsation du neurone miroir au moment où une duplication
+   (ou une chaîne) vient de réussir — voir render.js: playMirrorSuccess.
+   Purement cosmétique et éphémère (la classe se retire elle-même). */
+@keyframes mirror-neuron-pulse-anim {
+  0% { transform: scale(1); }
+  25% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+.mirror-neuron-pulse {
+  animation: mirror-neuron-pulse-anim 0.6s ease-out 1;
+}
+
+/* [Expérimental] Tressautement du neurone miroir quand une duplication
+   était impossible — voir render.js: playMirrorFailure. Un mouvement
+   saccadé plutôt qu'un simple changement de couleur: pas besoin
+   d'introduire une teinte "erreur" dans le langage violet du neurone
+   miroir, le comportement suffit à signaler l'échec. */
+@keyframes mirror-neuron-fail-anim {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+.mirror-neuron-fail {
+  animation: mirror-neuron-fail-anim 0.5s ease-in-out 1;
+}
+
+/* [Expérimental] Fil éphémère entre l'origine, chaque neurone miroir
+   traversé et son duplicata — voir render.js: spawnMirrorThread. Jamais
+   persistant: chaque <svg> se retire lui-même une fois l'animation
+   terminée (animationend, avec un filet de sécurité en JS). */
+.mirror-thread-overlay {
+  position: absolute;
+  pointer-events: none;
+  z-index: 3;
+  overflow: visible;
+}
+
+@keyframes mirror-thread-draw {
+  0% { stroke-dashoffset: var(--len); opacity: 1; }
+  40% { stroke-dashoffset: 0; opacity: 1; }
+  65% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.mirror-thread-line--ok {
+  animation: mirror-thread-draw 0.6s ease-out 1 forwards;
+}
+
+/* Le fil n'atteint jamais sa cible: il se dessine à mi-chemin puis se
+   retire (retour à dashoffset = longueur totale = invisible) avant de
+   s'effacer — pour montrer la direction où la duplication a échoué sans
+   laisser croire qu'elle a fini par réussir. */
+@keyframes mirror-thread-fail-anim {
+  0% { stroke-dashoffset: var(--len); opacity: 1; }
+  35% { stroke-dashoffset: calc(var(--len) * 0.55); opacity: 1; }
+  60% { stroke-dashoffset: var(--len); opacity: 1; }
+  100% { opacity: 0; }
+}
+.mirror-thread-line--fail {
+  animation: mirror-thread-fail-anim 0.5s ease-in-out 1 forwards;
+}
+
+.laser-outline--h,
+.laser-core--h {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 2px;
+}
+
+.laser-outline--v,
+.laser-core--v {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 2px;
+}
+
+.laser-outline--h { height: 6px; background: #0a0c10; }
+.laser-outline--v { width: 6px; background: #0a0c10; }
+.laser-core--h { height: 2.4px; }
+.laser-core--v { width: 2.4px; }
+
+.laser-dot {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.4px solid;
+}
+
+/* Le sens d'animation doit toujours suivre "de la charge vers sa cible",
+   jamais un sens d'écran fixe: selon que la cible est à droite/à gauche
+   (ou en bas/en haut) du départ sur ce segment, on choisit la variante
+   normale ou inversée (voir game/render.js). */
+.laser-dot--h {
+  top: 50%;
+  transform: translate(-50%, -50%);
+  animation: laser-travel-h 2.4s linear infinite;
+}
+
+.laser-dot--h-reverse {
+  top: 50%;
+  transform: translate(-50%, -50%);
+  animation: laser-travel-h-reverse 2.4s linear infinite;
+}
+
+.laser-dot--v {
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: laser-travel-v 2.4s linear infinite;
+}
+
+.laser-dot--v-reverse {
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: laser-travel-v-reverse 2.4s linear infinite;
+}
+
+@keyframes laser-travel-h {
+  0% { left: 0%; }
+  100% { left: 100%; }
+}
+
+@keyframes laser-travel-h-reverse {
+  0% { left: 100%; }
+  100% { left: 0%; }
+}
+
+@keyframes laser-travel-v {
+  0% { top: 0%; }
+  100% { top: 100%; }
+}
+
+@keyframes laser-travel-v-reverse {
+  0% { top: 100%; }
+  100% { top: 0%; }
+}
+
+/* Transition de fin de niveau (voir main.js: advanceAfterWin) — remplace
+   l'ancien menu "Niveau suivant" bloquant: le plateau s'efface en fondu au
+   lieu d'afficher un écran à cliquer, le niveau suivant se charge pendant
+   que l'écran est effacé, puis réapparaît en fondu. Portée sur
+   #board-container (jamais recréé par renderer.build, contrairement à
+   #board dont le contenu est reconstruit à chaque niveau) pour que la
+   transition CSS ne soit jamais interrompue par un remplacement de DOM. */
+#board-container {
+  transition: opacity 0.45s ease;
+}
+
+#board-container.board-fade {
+  opacity: 0;
+}
+

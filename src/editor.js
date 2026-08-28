@@ -23,11 +23,10 @@ import {
   validatePlayableLevel,
   publishLevel,
   isDuplicatePublication,
-  AVATARS,
-  isAvatarUnlocked,
+  DEFAULT_AVATAR,
+  getAvatarSvg,
 } from "./game/community-store.js";
-import { loadProfile, saveProfile } from "./game/storage.js";
-import { isPixelArtUnlocked } from "./sommation.js";
+import { loadProfile } from "./game/storage.js";
 
 const STORAGE_KEY = "lightup_custom_levels";
 const MAX_SIZE = 16;
@@ -201,8 +200,8 @@ export function initEditor({ levels }) {
   const exportBtn = document.getElementById("ed-export");
   const publishBtn = document.getElementById("ed-publish");
   const publishModal = document.getElementById("editor-publish-modal");
-  const publishPseudoInput = document.getElementById("editor-publish-pseudo");
-  const publishAvatarPicker = document.getElementById("editor-publish-avatar-picker");
+  const publishAuthorPreviewEl = document.getElementById("editor-publish-author-preview");
+  const publishTitleInput = document.getElementById("editor-publish-title");
   const publishStatusEl = document.getElementById("editor-publish-status");
   const publishConfirmBtn = document.getElementById("btn-editor-publish-confirm");
   const importBtn = document.getElementById("ed-import");
@@ -217,10 +216,13 @@ export function initEditor({ levels }) {
   const renderer = createBoardRenderer(boardEl);
 
   let customLevels = loadCustomLevels();
-  // Un niveau tout neuf n'a pas de nom par défaut: le champ est
-  // obligatoire pour sauvegarder/exporter (voir saveBtn/exportBtn), donc
-  // pas la peine de pré-remplir un nom générique qu'on oublierait de
-  // changer.
+  // Un niveau tout neuf n'a pas de nom par défaut. Round 19 (retour
+  // utilisateur): le nom n'est plus obligatoire pour Sauvegarder (il le
+  // reste pour Exporter — le code généré a besoin d'un vrai nom pour
+  // levels.js) — voir saveBtn: un niveau sauvegardé sans nom obtient un ID +
+  // une date, affichés comme nom généré dans "Mes niveaux" (voir
+  // refreshLevelList/autoLevelName), sans jamais écrire cette valeur dans
+  // `name` lui-même.
   let editLevel = { name: "", rows: 5, cols: 5, cells: blankCells(5, 5) };
   let selectedTool = "empty";
   let testMode = false;
@@ -228,14 +230,28 @@ export function initEditor({ levels }) {
   let testLights = new Set(); // clés "r,c", persistantes entre bascules Édition/Test
   let currentCustomIndex = -1; // index dans customLevels si un niveau sauvegardé est chargé
 
+  /** Nom affiché dans "Mes niveaux" pour un niveau SANS vrai nom — dérivé de
+   * sa date de création (voir saveBtn: `createdAt` posé au tout premier
+   * enregistrement). Jamais stocké dans `lvl.name` lui-même (retour
+   * utilisateur: "pas de vrai nom enregistré [...] c'est comme si il
+   * n'existait aucun nom") — recalculé à chaque affichage de la liste. */
+  function autoLevelName(lvl) {
+    if (!lvl.createdAt) return "Niveau sans nom";
+    const d = new Date(lvl.createdAt);
+    const date = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+    const time = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    return `Niveau du ${date} ${time}`;
+  }
+
   // Round 18 (retour utilisateur): #ed-status ("juste un texte de la
   // dernière action effectuée") est retiré — la plupart des actions de
   // l'éditeur sont déjà visibles directement dans la grille/le panneau
   // (une ligne ajoutée, une solution qui s'affiche...), ce texte ne faisait
   // que dupliquer ce qui se voit déjà. Les deux cas où une action pouvait
-  // échouer SILENCIEUSEMENT sans lui (nom manquant, import invalide) ont
-  // chacun leur propre remplacement ciblé : markNameError() ci-dessous pour
-  // le premier, importStatusEl pour le second (voir plus bas).
+  // échouer SILENCIEUSEMENT sans lui (nom manquant à l'export, import
+  // invalide) ont chacun leur propre remplacement ciblé : markNameError()
+  // ci-dessous pour le premier, importStatusEl pour le second (voir plus
+  // bas).
   function markNameError(shake = true) {
     nameInput.classList.add("input-error");
     if (shake) {
@@ -272,7 +288,7 @@ export function initEditor({ levels }) {
     customLevels.forEach((lvl, i) => {
       const opt = document.createElement("option");
       opt.value = String(i);
-      opt.textContent = lvl.name;
+      opt.textContent = lvl.name?.trim() || autoLevelName(lvl);
       levelListSel.appendChild(opt);
     });
     levelListSel.value = currentCustomIndex >= 0 ? String(currentCustomIndex) : "";
@@ -558,13 +574,11 @@ export function initEditor({ levels }) {
     setTestMode(false);
     exportOutput.classList.add("hidden");
     importPanel.classList.add("hidden");
-    // Round 18 (retour utilisateur): le champ Titre porte lui-même
-    // l'obligation d'un nom (voir markNameError) plutôt qu'un message à
-    // part — un niveau qui vient d'être chargé avec un nom vide (nouveau
-    // niveau vierge, import sans nom) doit donc démarrer avec le champ déjà
-    // signalé, pas seulement après un premier essai de sauvegarde raté.
-    if (editLevel.name.trim()) clearNameError();
-    else markNameError(false);
+    // Round 19 (retour utilisateur): le nom n'est plus obligatoire en
+    // général (voir saveBtn) — un niveau chargé sans nom n'est donc plus
+    // signalé en erreur par défaut ; l'état d'erreur ne sert plus qu'à
+    // Exporter, qui le pose lui-même à son propre clic si besoin.
+    clearNameError();
     rebuildEditGrid();
     refreshLevelList();
   }
@@ -587,16 +601,24 @@ export function initEditor({ levels }) {
     if (testGrid.isWon()) playWin();
   });
 
+  // Round 19 (retour utilisateur): "le champ 'nom' n'est plus obligatoire et
+  // si on enregistre sans, on enregistre avec un ID et on garde une date
+  // dont on se sert pour le nommer automatiquement dans la liste [...] mais
+  // pas de vrai nom enregistré". `id`/`createdAt` sont posés une seule fois
+  // (au tout premier enregistrement) et conservés tels quels aux
+  // enregistrements suivants du même niveau — seuls name/rows/cols/cells
+  // changent à chaque re-sauvegarde.
   saveBtn.addEventListener("click", () => {
-    if (!editLevel.name.trim()) {
-      markNameError();
-      return;
-    }
     const toSave = buildLevelObject();
     toSave.cells = editLevel.cells.map((row) => row.join(" "));
     if (currentCustomIndex >= 0) {
+      const existing = customLevels[currentCustomIndex];
+      toSave.id = existing.id;
+      toSave.createdAt = existing.createdAt;
       customLevels[currentCustomIndex] = toSave;
     } else {
+      toSave.id = `custom-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      toSave.createdAt = new Date().toISOString();
       customLevels.push(toSave);
       currentCustomIndex = customLevels.length - 1;
     }
@@ -639,53 +661,43 @@ export function initEditor({ levels }) {
   });
 
   // Publier: envoie le niveau courant dans la Communauté (voir
-  // community-store.js). Round 18 (retour utilisateur): "un modal de
-  // confirmation serait bien, pour éviter le spam + vérifier qu'il n'existe
-  // pas de niveau qui a le même combo 'nom + auteur'" — la modale s'ouvre
-  // désormais TOUJOURS (plus de raccourci "profil déjà enregistré = publie
-  // sans demander"), pré-remplie avec le pseudo/avatar déjà connus s'il y
-  // en a, et porte elle-même toute la validation (solution + doublon) au
-  // moment de confirmer plutôt qu'avant l'ouverture — ainsi un refus a
-  // toujours un endroit où s'expliquer (publishStatusEl).
-  function avatarUnlocks() {
-    return { pixelart: isPixelArtUnlocked() };
+  // community-store.js). Round 19 (retour utilisateur): "on demande le nom
+  // du niveau plutôt que le nom/emote du joueur (qui ne sera pas modifiable
+  // autrement que dans le profil)" — l'identité de l'auteur vient TOUJOURS
+  // du profil déjà enregistré (voir main.js: Mon profil), simplement
+  // prévisualisée en lecture seule ; le seul champ demandé ici est le titre
+  // du niveau, obligatoire uniquement à CE moment précis (voir
+  // markPublishTitleError ci-dessous — même logique que markNameError, sur
+  // un champ différent).
+  function markPublishTitleError() {
+    publishTitleInput.classList.remove("input-error--shake");
+    void publishTitleInput.offsetWidth;
+    publishTitleInput.classList.add("input-error", "input-error--shake");
+    publishTitleInput.focus();
   }
 
-  let selectedPublishAvatar = AVATARS[0].emoji;
-
-  function refreshPublishAvatarPicker() {
-    publishAvatarPicker.innerHTML = "";
-    const unlocks = avatarUnlocks();
-    for (const avatar of AVATARS) {
-      const unlocked = isAvatarUnlocked(avatar, unlocks);
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className =
-        "profile-avatar-btn" +
-        (avatar.emoji === selectedPublishAvatar ? " active" : "") +
-        (unlocked ? "" : " locked");
-      btn.textContent = avatar.emoji;
-      btn.disabled = !unlocked;
-      btn.title = unlocked ? "" : "Avatar verrouillé";
-      if (unlocked) {
-        btn.addEventListener("click", () => {
-          selectedPublishAvatar = avatar.emoji;
-          refreshPublishAvatarPicker();
-        });
-      }
-      publishAvatarPicker.appendChild(btn);
-    }
-  }
+  publishTitleInput.addEventListener("input", () => {
+    if (publishTitleInput.value.trim()) publishTitleInput.classList.remove("input-error", "input-error--shake");
+  });
 
   function openPublishModal() {
     const profile = loadProfile();
-    publishPseudoInput.value = profile?.pseudo ?? "";
-    const savedUnlocked = profile?.avatar && isAvatarUnlocked(
-      AVATARS.find((a) => a.emoji === profile.avatar) ?? {},
-      avatarUnlocks()
-    );
-    selectedPublishAvatar = savedUnlocked ? profile.avatar : AVATARS[0].emoji;
-    refreshPublishAvatarPicker();
+    publishAuthorPreviewEl.innerHTML = "";
+    const avatarEl = document.createElement("span");
+    avatarEl.className = "badge-frame-avatar";
+    avatarEl.innerHTML = getAvatarSvg(profile?.avatar ?? DEFAULT_AVATAR);
+    const pseudoEl = document.createElement("span");
+    pseudoEl.className = "badge-frame-pseudo";
+    pseudoEl.textContent = profile?.pseudo?.trim() || "(pseudo non configuré)";
+    const frame = document.createElement("span");
+    frame.className = "badge-frame" + (profile?.activeBadge ? ` badge-frame--tier-${profile.activeBadge}` : "");
+    frame.append(avatarEl, pseudoEl);
+    publishAuthorPreviewEl.appendChild(frame);
+    // Pré-remplit avec le nom local du niveau s'il en a déjà un — sinon
+    // vide: le nom auto (ID+date, voir refreshLevelList) n'est PAS un vrai
+    // nom, donc c'est comme si aucun nom n'existait encore à cet instant.
+    publishTitleInput.value = editLevel.name || "";
+    publishTitleInput.classList.remove("input-error", "input-error--shake");
     publishStatusEl.textContent = "";
     publishModal.classList.remove("hidden");
   }
@@ -694,23 +706,23 @@ export function initEditor({ levels }) {
     publishModal.classList.add("hidden");
   }
 
-  publishBtn.addEventListener("click", () => {
-    if (!editLevel.name.trim()) {
-      markNameError();
-      return;
-    }
-    openPublishModal();
-  });
+  publishBtn.addEventListener("click", openPublishModal);
 
   document.querySelectorAll("[data-editor-publish-close]").forEach((el) => (el.onclick = closePublishModal));
 
   publishConfirmBtn.addEventListener("click", () => {
-    const pseudo = publishPseudoInput.value.trim();
+    const profile = loadProfile();
+    const pseudo = profile?.pseudo?.trim();
     if (!pseudo) {
-      publishStatusEl.textContent = "Choisis un pseudo avant de publier.";
+      publishStatusEl.textContent = "Configure d'abord ton pseudo dans Mon profil avant de publier.";
       return;
     }
-    if (isDuplicatePublication(editLevel.name, pseudo)) {
+    const title = publishTitleInput.value.trim();
+    if (!title) {
+      markPublishTitleError();
+      return;
+    }
+    if (isDuplicatePublication(title, pseudo)) {
       publishStatusEl.textContent = "Tu as déjà publié un niveau du même nom sous ce pseudo.";
       return;
     }
@@ -720,18 +732,12 @@ export function initEditor({ levels }) {
       publishStatusEl.textContent = `Publication impossible : ${check.error}`;
       return;
     }
-    // Le badge "actif" (voir main.js: sélection dans "Mon profil") est
-    // capturé ici comme le pseudo/avatar — un instantané au moment de la
-    // publication, pas une référence live (même principe déjà en place pour
-    // pseudo/avatar avant ce round).
-    const savedProfile = { ...(loadProfile() || {}), pseudo, avatar: selectedPublishAvatar };
-    saveProfile(savedProfile);
     publishLevel({
-      title: editLevel.name,
+      title,
       rows: levelObj.rows,
       cols: levelObj.cols,
       cells: levelObj.cells,
-      author: { pseudo, avatar: selectedPublishAvatar, badge: savedProfile.activeBadge ?? null },
+      author: { pseudo, avatar: profile.avatar ?? DEFAULT_AVATAR, badge: profile.activeBadge ?? null },
       difficulty: check.difficulty,
     });
     closePublishModal();

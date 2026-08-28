@@ -27,47 +27,93 @@ const KEYS = {
   plays: "lightup-community-plays",
 };
 
-/** Choix d'avatar pour le profil joueur (voir storage.js: loadProfile) et la
- * modale "Publier" de l'éditeur — un seul endroit pour cette liste plutôt
- * que dupliquée entre main.js et editor.js, pour qu'un ajout futur (ou un
- * jour, de vraies photos de profil) n'ait qu'un seul fichier à toucher.
- * Même famille que les auteurs fictifs de community-seed.js, pour que les
- * créations des vrais joueurs se mêlent visuellement au fil simulé.
+/** Choix d'avatar pour le profil joueur (voir storage.js: loadProfile) — un
+ * seul endroit pour cette liste plutôt que dupliquée entre main.js et
+ * editor.js. Même famille que les auteurs fictifs de community-seed.js,
+ * pour que les créations des vrais joueurs se mêlent visuellement au fil
+ * simulé.
  *
- * Round 18 (retour utilisateur): "il nous faut une liste d'avatars qu'on
- * débloque au fil du jeu [...] en rapport avec le jeu et son design" — la
- * plupart restent débloqués d'office (c'était déjà le cas, aucune
- * régression) le temps que la vraie logique de déblocage soit décidée
- * ailleurs, mais la STRUCTURE est prête : `locked` porte une clé de
- * déblocage optionnelle, résolue par l'appelant (voir isAvatarUnlocked
- * ci-dessous) plutôt que ce module ne connaisse la progression du jeu.
- * "retro" est le premier avatar réellement verrouillé, aligné sur la 5e et
- * dernière récompense Remember (voir sommation.js: isPixelArtUnlocked). */
+ * Round 19 (retour utilisateur): "on supprime tous les avatars sauf ceux
+ * qui sont en lien avec le jeu [...] pas juste des sortes d'émoticones" —
+ * remplace les emojis génériques par 9 icônes SVG dérivées du langage
+ * visuel du plateau (mêmes formes/couleurs que game/render.js, mais
+ * redessinées en statique: un avatar n'a pas d'état de cellule vivant à
+ * refléter) + "retro", un sprite façon envahisseur 8-bit dans le vert CRT du
+ * thème PixelArt, verrouillé jusqu'à cette même récompense.
+ *
+ * `svg` (pas `emoji`) est la donnée persistée: `profile.avatar` et
+ * `author.avatar` stockent désormais l'ID (ex: "neuron"), jamais le SVG
+ * lui-même — voir getAvatarSvg ci-dessous pour la résolution à l'affichage.
+ * `locked` porte une clé de déblocage optionnelle, résolue par l'appelant
+ * (voir isAvatarUnlocked ci-dessous) plutôt que ce module ne connaisse la
+ * progression du jeu. */
 export const AVATARS = [
-  { id: "smile", emoji: "🙂" },
-  { id: "brain", emoji: "🧠" },
-  { id: "spark", emoji: "✨" },
-  { id: "diamond", emoji: "🔷" },
-  { id: "nebula", emoji: "🌌" },
-  { id: "bolt", emoji: "⚡" },
-  { id: "moon", emoji: "🌙" },
-  { id: "butterfly", emoji: "🦋" },
-  { id: "spiral", emoji: "🌀" },
-  { id: "saturn", emoji: "🪐" },
-  { id: "wave", emoji: "🌊" },
-  { id: "puzzle", emoji: "🧩" },
-  { id: "fire", emoji: "🔥" },
-  { id: "satellite", emoji: "🛰️" },
-  { id: "owl", emoji: "🦉" },
-  { id: "target", emoji: "🎯" },
-  { id: "crystal", emoji: "🔮" },
-  { id: "retro", emoji: "👾", locked: "pixelart" },
+  {
+    id: "neuron",
+    label: "Neurone",
+    svg: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="24" fill="none" stroke="#0a0c10" stroke-width="14"/><circle cx="50" cy="50" r="24" fill="none" stroke="#6ee7ff" stroke-width="8"/></svg>',
+  },
+  {
+    id: "charge",
+    label: "Charge",
+    svg: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="15" fill="#3a8fa0"/><circle cx="26" cy="26" r="7" fill="#8fd9e8"/><circle cx="74" cy="26" r="7" fill="#8fd9e8"/><circle cx="26" cy="74" r="7" fill="#8fd9e8"/><circle cx="74" cy="74" r="7" fill="#8fd9e8"/></svg>',
+  },
+  {
+    id: "synapse",
+    label: "Synapse",
+    svg: '<svg viewBox="0 0 100 100"><line x1="30" y1="30" x2="70" y2="70" stroke="#7a6fd0" stroke-width="8"/><circle cx="30" cy="30" r="15" fill="#7a6fd0"/><circle cx="70" cy="70" r="15" fill="#9a90e0"/></svg>',
+  },
+  {
+    id: "mirror",
+    label: "Miroir",
+    svg: '<svg viewBox="0 0 100 100"><line x1="18" y1="82" x2="82" y2="18" stroke="#4a5468" stroke-width="16" stroke-linecap="round"/><line x1="18" y1="82" x2="82" y2="18" stroke="#9fb4d8" stroke-width="6" stroke-linecap="round"/></svg>',
+  },
+  {
+    id: "prism",
+    label: "Prisme",
+    svg: '<svg viewBox="0 0 100 100"><polygon points="50,50 92,50 50,8" fill="#ff5d6c"/><polygon points="50,50 50,8 8,50" fill="#f4d35e"/><polygon points="50,50 8,50 50,92" fill="#59c9e3"/><polygon points="50,50 50,92 92,50" fill="#59e39d"/></svg>',
+  },
+  {
+    id: "pyra",
+    label: "Pyra",
+    svg: '<svg viewBox="0 0 100 100"><polygon points="50,15 85,80 15,80" fill="none" stroke="#4a5468" stroke-width="6"/><circle cx="50" cy="15" r="7" fill="#ff5d6c"/><circle cx="85" cy="80" r="7" fill="#59e39d"/><circle cx="15" cy="80" r="7" fill="#5da9ff"/></svg>',
+  },
+  {
+    id: "filter",
+    label: "Filtre",
+    svg: '<svg viewBox="0 0 100 100"><path d="M15,25 85,25 60,50 60,80 40,80 40,50 Z" fill="#59c9e3" fill-opacity="0.3" stroke="#59c9e3" stroke-width="5"/></svg>',
+  },
+  {
+    id: "target",
+    label: "Cible",
+    svg: '<svg viewBox="0 0 100 100"><path d="M16,30 V16 H30 M70,16 H84 V30 M84,70 V84 H70 M30,84 H16 V70" fill="none" stroke="#e8b563" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="50" cy="50" r="6" fill="#e8b563"/></svg>',
+  },
+  {
+    id: "wall",
+    label: "Mur",
+    svg: '<svg viewBox="0 0 100 100"><rect x="14" y="14" width="72" height="72" rx="6" fill="none" stroke="#4a5468" stroke-width="5"/><path d="M14,42 L42,14 M14,66 L66,14 M14,90 L90,14 M38,90 L90,38 M62,90 L90,62" stroke="#4a5468" stroke-width="5"/></svg>',
+  },
+  {
+    id: "retro",
+    label: "Rétro",
+    locked: "pixelart",
+    svg: '<svg viewBox="0 0 100 100" shape-rendering="crispEdges"><g fill="#39ff14"><rect x="30" y="15" width="10" height="10"/><rect x="60" y="15" width="10" height="10"/><rect x="20" y="25" width="10" height="10"/><rect x="30" y="25" width="40" height="10"/><rect x="70" y="25" width="10" height="10"/><rect x="15" y="35" width="70" height="10"/><rect x="15" y="45" width="10" height="10"/><rect x="30" y="45" width="10" height="10"/><rect x="40" y="45" width="20" height="10"/><rect x="60" y="45" width="10" height="10"/><rect x="75" y="45" width="10" height="10"/><rect x="15" y="55" width="70" height="10"/><rect x="25" y="65" width="10" height="10"/><rect x="65" y="65" width="10" height="10"/></g></svg>',
+  },
 ];
 
 /** Rétrocompatibilité (profils déjà enregistrés avec un avatar par défaut) :
  * le premier avatar de la liste sert de repli si l'avatar sauvegardé n'existe
- * plus / n'est plus valide. */
-export const DEFAULT_AVATAR = AVATARS[0].emoji;
+ * plus / n'est plus valide — notamment les anciens profils qui stockaient un
+ * emoji brut (round 18 et avant), qui ne correspond plus à aucun ID ici. */
+export const DEFAULT_AVATAR = AVATARS[0].id;
+
+/** Résout un ID d'avatar (voir profile.avatar/author.avatar) en markup SVG à
+ * afficher — jamais l'inverse (aucun code n'a besoin de "deviner" un ID
+ * depuis un SVG). Retombe sur l'avatar par défaut si l'ID est inconnu (voir
+ * DEFAULT_AVATAR ci-dessus: anciens profils emoji, ID corrompu...). */
+export function getAvatarSvg(id) {
+  return (AVATARS.find((a) => a.id === id) || AVATARS[0]).svg;
+}
 
 /** true si `avatar` (une entrée de AVATARS) est déverrouillé. `unlocks` est
  * un sac de clés->booléen fourni par l'appelant (voir main.js/editor.js:
@@ -346,7 +392,7 @@ export function decodeShareCode(code) {
   return {
     level: {
       title: title.trim(),
-      author: author && typeof author.pseudo === "string" ? author : { pseudo: "Joueur", avatar: "🙂" },
+      author: author && typeof author.pseudo === "string" ? author : { pseudo: "Joueur", avatar: DEFAULT_AVATAR },
       rows,
       cols,
       cells,

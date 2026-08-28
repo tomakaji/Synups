@@ -1,0 +1,39 @@
+/* ---------- Options ---------- */
+
+.options-panel {
+  width: min(480px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  padding-bottom: 32px;
+}
+
+.options-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Ligne "Remember ?" (5e récompense, PixelArt) tant que non débloquée — voir
+   main.js: renderPixelArtOption. Même traitement grisé/désaturé que
+   .badge-teaser.locked, pour rester cohérent avec l'autre surface de
+   récompense verrouillée du jeu. */
+.options-section.locked {
+  opacity: 0.55;
+  filter: grayscale(1);
+}
+
+.options-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.options-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+

@@ -97,10 +97,17 @@ export function currentStoryIndex(completedSet, total) {
 // ---------- Réglages (son/musique/thème PixelArt) ----------
 
 const DEFAULT_SETTINGS = {
-  volume: 80, // 0-100, curseur commun sons+musique (voir main.js)
-  soundMuted: false,
+  volume: 80, // 0-100, curseur commun sons+musique (voir main.js) — jamais modifié par `muted` lui-même (voir applyVolumes: seul l'AFFICHAGE du curseur retombe à 0 le temps du mute, la valeur réelle reste intacte pour être réappliquée telle quelle au démute).
+  // Round 19 (retour utilisateur): "le bouton flottant et le bouton dans
+  // Options [...] appellent la même fonction et variable" — remplace les
+  // anciens soundMuted+globalMuted (round <19, deux booléens distincts pour
+  // deux boutons qui faisaient déjà presque la même chose) par CE SEUL
+  // booléen, piloté indifféremment par les deux boutons (voir main.js:
+  // setMuted). Coupe son ET musique (voir applyVolumes) ; musicMuted
+  // ci-dessous reste un réglage INDÉPENDANT (couper juste la musique, pas
+  // les effets sonores).
+  muted: false,
   musicMuted: false,
-  globalMuted: false, // toggle unique "couper le son" accessible partout — voir index.html/main.js
   // Thème visuel PixelArt: 5e/dernière récompense de Remember (voir
   // sommation.js: isPixelArtUnlocked). Le toggle n'est exposé dans Options
   // qu'une fois débloqué, mais la valeur peut techniquement persister à
@@ -117,18 +124,33 @@ export function saveSettings(settings) {
   writeJson(KEYS.settings, settings);
 }
 
-/** Efface TOUTE la sauvegarde (progression, réglages, points) — voir le
- * bouton "Réinitialiser le jeu" dans Options. Ne touche PAS aux niveaux
- * custom de l'éditeur (STORAGE_KEY dans editor.js): l'éditeur est un outil
- * de développement séparé du jeu tel que vécu par le joueur. */
+/** Efface la progression Histoire/Infini (voir le bouton "Réinitialiser le
+ * jeu" dans Options) — PLUS, depuis round 19 (retour utilisateur:
+ * "réinitialiser le profil joueur doit aussi réinitialiser le Remember + les
+ * bonus débloqués [...] la seule donnée conservée sera les niveaux dans
+ * Communauté [...], les réglages son et le pseudo"), le reste de la
+ * progression Remember (voir main.js: appelle en plus
+ * sommation.js:resetSommationProgress() et remet à zéro avatar/badge actif
+ * du profil, PAS son pseudo). Contrairement à avant ce round, ne vide plus
+ * KEYS.settings en bloc — volume/muted/musicMuted (réglages son) sont
+ * désormais explicitement PROTÉGÉS ; seul `pixelartEnabled` (un
+ * déverrouillage, pas un réglage son) est remis à false ici, puisque c'est
+ * le seul champ de KEYS.settings concerné par un "bonus débloqué". Ne touche
+ * toujours PAS aux niveaux custom de l'éditeur (STORAGE_KEY dans editor.js)
+ * ni aux données Communauté (community-store.js) : hors du périmètre d'un
+ * reset de progression/profil joueur. */
 export function eraseAllProgress() {
-  for (const key of Object.values(KEYS)) {
-    try {
-      localStorage.removeItem(key);
-    } catch {
-      // voir writeJson
-    }
+  try {
+    localStorage.removeItem(KEYS.points);
+  } catch {
+    // voir writeJson
   }
+  try {
+    localStorage.removeItem(KEYS.progress);
+  } catch {
+    // voir writeJson
+  }
+  saveSettings({ ...loadSettings(), pixelartEnabled: false });
 }
 
 // ---------- Profil joueur (section Communauté) ----------
