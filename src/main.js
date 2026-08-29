@@ -1,6 +1,9 @@
 import { LightUpGrid } from "./game/grid.js";
 import { levels } from "./game/levels.js";
 import { findSolution } from "./game/solver.js";
+// Round 20 (migration Capacitor/AdMob) — no-op silencieux hors app native
+// (voir game/ads.js), donc sûr à appeler ici même pendant `npm run dev`.
+import { initAds } from "./game/ads.js";
 import {
   playPlace,
   playRemove,
@@ -524,6 +527,13 @@ btnMusicToggle.addEventListener("click", () => {
 });
 
 applyVolumes();
+
+// Round 20 (migration Capacitor/AdMob): init une seule fois au chargement —
+// consentement RGPD + ATT iOS + préchargement de la première rewarded ad
+// (voir game/ads.js). Ne bloque jamais le reste du chargement de l'app (pas
+// de await ici), et ne fait rien tant qu'on n'est pas dans la coquille
+// native Capacitor.
+initAds();
 
 // Précharge les 7 pistes dès le chargement de la page (pas besoin d'un
 // geste utilisateur pour ÇA, seule la LECTURE l'exige — voir startMusic

@@ -805,6 +805,11 @@
         <div class="modal-card">
           <h3 class="modal-title">Plus assez de points</h3>
           <p class="modal-text">Regarde une pub pour récupérer 200 points.</p>
+          <!-- Round 20 (migration Capacitor/AdMob): feedback de chargement/échec
+               de la rewarded ad — voir sommation.js: adWatchBtn.onclick. Vide et
+               caché tant qu'il n'y a rien à signaler (pub prête, pas encore
+               tentée). -->
+          <p id="som-ad-status" class="som-ad-status hidden"></p>
           <div class="modal-actions">
             <button id="btn-som-ad-cancel" class="options-btn" data-som-ad-modal-close>Annuler</button>
             <button id="btn-som-ad-watch" class="options-btn options-btn--accent">Regarder la pub (+200)</button>

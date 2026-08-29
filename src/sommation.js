@@ -47,6 +47,12 @@ import { hexFor, colorFor } from "./game/colors.js";
 // plutôt que de faire remonter cette logique d'affichage à main.js.
 import { loadProfile } from "./game/storage.js";
 import { getAvatarSvg, DEFAULT_AVATAR } from "./game/community-store.js";
+// Rewarded ad (round 20, migration Capacitor/AdMob) — voir game/ads.js pour
+// le détail (no-op propre hors app native, ne résout QUE sur confirmation
+// du SDK que la récompense a été gagnée). adWatchBtn.onclick plus bas est le
+// SEUL endroit de l'app qui appelle showRewardedAd() pour l'instant (seule
+// pub demandée par le retour utilisateur à ce jour).
+import { showRewardedAd } from "./game/ads.js";
 // Sons: un son NEUF, court et étouffé, dédié à la génération (spammable via
 // le bouton "Générer" — voir spawnFromSelected) ; les autres actions
 // réutilisent des sons déjà existants du jeu principal, de façon symbolique
@@ -600,10 +606,12 @@ export function initSommation(pointsApi) {
   const spawnInfoEl = document.getElementById("som-spawn-info");
   const spawnBtn = document.getElementById("som-spawn-btn");
   // Modale "plus assez de points" — retour utilisateur: "on ouvre une
-  // modale qui propose de regarder une pub... afin de regagner des points"
-  // — même principe placeholder que hint-modal dans main.js.
+  // modale qui propose de regarder une pub... afin de regagner des points".
+  // Round 20: branchée sur une vraie rewarded ad (voir game/ads.js) au lieu
+  // du placeholder gratuit d'origine — voir adWatchBtn.onclick plus bas.
   const adModalEl = document.getElementById("som-ad-modal");
   const adWatchBtn = document.getElementById("btn-som-ad-watch");
+  const adStatusEl = document.getElementById("som-ad-status");
   // Modale de confirmation "recycler ce générateur" — retour utilisateur
   // round 9: "si on met un générateur dans l'objectif pour le recycler,
   // j'aimerais que tu préviennes avec une modale de confirmation... pour
@@ -884,7 +892,21 @@ export function initSommation(pointsApi) {
     render();
   }
 
+  function setAdStatus(text, isError) {
+    if (!adStatusEl) return;
+    adStatusEl.textContent = text ?? "";
+    adStatusEl.classList.toggle("hidden", !text);
+    adStatusEl.classList.toggle("som-ad-status--error", !!isError);
+  }
+
   function openAdModal() {
+    // Repart toujours propre (bouton actif, pas de message résiduel d'une
+    // tentative précédente) — voir adWatchBtn.onclick pour l'état "en cours".
+    setAdStatus(null);
+    if (adWatchBtn) {
+      adWatchBtn.disabled = false;
+      adWatchBtn.textContent = "Regarder la pub (+200)";
+    }
     adModalEl?.classList.remove("hidden");
   }
   function closeAdModal() {
@@ -1540,12 +1562,30 @@ export function initSommation(pointsApi) {
   }
   document.querySelectorAll("[data-som-ad-modal-close]").forEach((el) => (el.onclick = closeAdModal));
   if (adWatchBtn) {
-    adWatchBtn.onclick = () => {
-      // Gratuit pour l'instant, pas de vraie intégration publicitaire — même
-      // principe placeholder que hint-modal (voir main.js).
-      pointsApi.addPoints(AD_WATCH_REWARD);
-      closeAdModal();
-      render();
+    // Round 20 (migration Capacitor/AdMob): remplace l'ancien placeholder
+    // gratuit — voir game/ads.js: showRewardedAd() ne résout `earned: true`
+    // QUE sur confirmation du SDK, jamais de façon optimiste. Les points ne
+    // sont donc crédités QUE dans ce cas précis, jamais avant ni en cas
+    // d'échec/fermeture anticipée de la pub.
+    adWatchBtn.onclick = async () => {
+      adWatchBtn.disabled = true;
+      adWatchBtn.textContent = "Chargement…";
+      setAdStatus(null);
+      const { earned, reason } = await showRewardedAd();
+      if (earned) {
+        pointsApi.addPoints(AD_WATCH_REWARD);
+        closeAdModal();
+        render();
+        return;
+      }
+      adWatchBtn.disabled = false;
+      adWatchBtn.textContent = "Regarder la pub (+200)";
+      setAdStatus(
+        reason === "unavailable"
+          ? "Pas de pub disponible pour l'instant — réessaie dans un instant."
+          : "Pub fermée avant la fin — aucun point crédité.",
+        true
+      );
     };
   }
 

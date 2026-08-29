@@ -1,4 +1,24 @@
 /* ---------- Sommation (mode bonus, prototype de test) ---------- */
+
+/* Round 20 (migration Capacitor/AdMob): feedback texte sous le bouton
+   "Regarder la pub" de #som-ad-modal — voir sommation.js: adWatchBtn.onclick.
+   Neutre (--text-dim) pendant le chargement, teinté --error si la pub a
+   échoué/été fermée sans récompense — jamais affiché en cas de succès (la
+   modale se ferme directement, pas besoin de message). */
+.som-ad-status {
+  margin: -6px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.som-ad-status.hidden {
+  display: none;
+}
+
+.som-ad-status--error {
+  color: var(--error);
+}
+
 /* Même coquille mobile que #view-community/#view-editor: hauteur bornée au
    viewport + une seule zone qui défile (ici .som-board-wrap), pour que le
    plateau ne pousse jamais le header hors écran sur petit format. */

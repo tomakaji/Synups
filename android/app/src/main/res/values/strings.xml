@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Synups</string>
+    <string name="title_activity_main">Synups</string>
+    <string name="package_name">com.synups.game</string>
+    <string name="custom_url_scheme">com.synups.game</string>
+</resources>
