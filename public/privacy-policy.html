@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Politique de confidentialité — Synups</title>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel: #12151c;
+    --text: #e7ecf5;
+    --text-dim: #7b869c;
+    --accent: #6ee7ff;
+    --border: rgba(160, 178, 230, 0.22);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(circle at 50% 0%, #171c2a 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6;
+  }
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+  h1 {
+    color: var(--accent);
+    font-weight: 300;
+    letter-spacing: 0.02em;
+    font-size: 1.6rem;
+    margin-bottom: 4px;
+  }
+  .updated { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 32px; }
+  h2 {
+    color: var(--text);
+    font-size: 1.05rem;
+    margin-top: 36px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+  p, li { color: var(--text-dim); font-size: 0.92rem; }
+  a { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text); font-weight: 500; }
+  .badge-notice {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-bottom: 32px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Politique de confidentialité — Synups</h1>
+  <p class="updated">Dernière mise à jour : 1er septembre 2026</p>
+
+  <div class="badge-notice">
+    Ce document n'est pas un avis juridique. Il a été rédigé pour décrire
+    aussi fidèlement que possible le fonctionnement réel de l'application
+    à la date ci-dessus. Avant toute publication sur le Google Play Store
+    ou l'App Store, il est recommandé de le faire relire par un
+    professionnel du droit, notamment pour la conformité RGPD (Europe) et
+    CCPA (Californie).
+  </div>
+
+  <h2>1. Qui sommes-nous</h2>
+  <p>
+    Synups est un jeu de puzzle édité par un développeur indépendant.
+    Pour toute question relative à cette politique ou à vos données,
+    contactez : <a href="mailto:bayet.thomas@gmail.com">bayet.thomas@gmail.com</a>.
+  </p>
+
+  <h2>2. Données que nous collectons</h2>
+  <p>Synups collecte le minimum de données nécessaire à son fonctionnement. Aucune donnée n'est vendue à des tiers.</p>
+  <table>
+    <tr><th>Donnée</th><th>Finalité</th><th>Où elle est stockée</th></tr>
+    <tr>
+      <td>Progression de jeu (niveaux terminés, points, badges, avatar, pseudo choisi, réglages)</td>
+      <td>Sauvegarder votre partie</td>
+      <td>Uniquement sur votre appareil (stockage local), jamais transmise à nos serveurs</td>
+    </tr>
+    <tr>
+      <td>Identifiant anonyme + pseudo/avatar choisis, niveaux publiés dans le mode Communauté</td>
+      <td>Afficher et partager les niveaux créés par les joueurs</td>
+      <td>Base de données Firebase (Google) — connexion anonyme, aucune information permettant de vous identifier personnellement (pas d'e-mail, pas de nom réel)</td>
+    </tr>
+    <tr>
+      <td>Identifiants publicitaires de l'appareil, données d'interaction avec les publicités</td>
+      <td>Afficher des publicités (bandeau et publicités récompensées) via Google AdMob</td>
+      <td>Google AdMob — voir section 4</td>
+    </tr>
+    <tr>
+      <td>Compte de jeu Google Play (si vous vous connectez), progression synchronisée</td>
+      <td>Sauvegarder votre progression dans le cloud et la restaurer sur un autre appareil</td>
+      <td>Google Play Games Services — fonctionnalité optionnelle, activée uniquement si vous choisissez de vous connecter</td>
+    </tr>
+  </table>
+
+  <h2>3. Ce que nous ne faisons PAS</h2>
+  <ul>
+    <li>Nous ne demandons ni votre nom, ni votre e-mail, ni aucune information de contact.</li>
+    <li>Nous ne vendons aucune donnée à des tiers.</li>
+    <li>Nous n'accédons à aucune donnée de votre appareil en dehors de ce qui est décrit ci-dessus.</li>
+  </ul>
+
+  <h2>4. Services tiers utilisés</h2>
+  <p>Synups utilise les services suivants, chacun régi par sa propre politique de confidentialité :</p>
+  <ul>
+    <li><strong>Google AdMob</strong> — diffusion de publicités (bandeau et publicités récompensées). Peut collecter des identifiants publicitaires et des données d'usage à des fins de personnalisation et de mesure des publicités. Sur iOS, l'autorisation de suivi (App Tracking Transparency) vous est explicitement demandée avant toute collecte à des fins publicitaires personnalisées. Voir la <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">politique de confidentialité de Google</a>.</li>
+    <li><strong>Google Firebase (Firestore, Authentification anonyme)</strong> — héberge les niveaux publiés dans le mode Communauté. Voir la <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">politique de confidentialité de Firebase</a>.</li>
+    <li><strong>Google Play Games Services</strong> (Android, optionnel) — sauvegarde cloud de votre progression si vous choisissez de vous connecter avec votre compte Google Play. Voir la <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">politique de confidentialité de Google</a>.</li>
+  </ul>
+
+  <h2>5. Vos droits</h2>
+  <p>
+    Vous pouvez à tout moment réinitialiser votre progression locale depuis
+    l'écran Options du jeu. Pour demander la suppression d'un niveau publié
+    dans le mode Communauté ou de toute donnée associée à votre identifiant
+    anonyme, contactez-nous à l'adresse indiquée en section 1. Si vous êtes
+    résident de l'Union européenne, vous disposez des droits d'accès, de
+    rectification, d'effacement et de portabilité prévus par le RGPD.
+  </p>
+
+  <h2>6. Enfants</h2>
+  <p>
+    Synups n'est pas spécifiquement destiné aux enfants de moins de 13 ans
+    et ne collecte pas sciemment de données personnelles auprès d'eux.
+  </p>
+
+  <h2>7. Modifications de cette politique</h2>
+  <p>
+    Cette politique peut être mise à jour pour refléter l'évolution de
+    l'application (par exemple l'ajout de nouvelles fonctionnalités). La
+    date de dernière mise à jour est indiquée en haut de cette page.
+  </p>
+</main>
+</body>
+</html>
