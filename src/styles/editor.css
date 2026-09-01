@@ -389,22 +389,6 @@
   display: none;
 }
 
-#ed-import-input {
-  width: 100%;
-  background: #0e1119;
-  border: 1px solid #2a3040;
-  color: var(--text);
-  border-radius: 6px;
-  padding: 8px;
-  font-size: 0.72rem;
-  font-family: monospace;
-  resize: vertical;
-}
-
-#ed-import-panel.hidden {
-  display: none;
-}
-
 /* ---------- Barre d'onglets (dernier enfant du sheet .editor-bottom-panel) ---------- */
 
 /* Pas de position:fixed nécessaire ici (contrairement à .play-action-bar):

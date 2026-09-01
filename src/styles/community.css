@@ -64,6 +64,10 @@
   margin-left: auto;
 }
 
+/* Round 26 (retour utilisateur): "Créer une grille" doit prendre 75% de la
+   ligne — c'est maintenant le seul bouton de cette rangée ("Importer un
+   code" retiré, voir index.html), d'où une largeur explicite plutôt que le
+   flex:1 50/50 d'origine (qui l'aurait étiré à 100%). */
 .community-actions-row {
   width: min(560px, 100%);
   display: flex;
@@ -72,7 +76,7 @@
 }
 
 .community-actions-row .options-btn {
-  flex: 1;
+  width: 75%;
   padding: 12px 14px;
   font-size: 0.82rem;
 }
@@ -158,6 +162,54 @@
 .community-mechanic-icon .cell-icon {
   position: absolute;
   inset: 0;
+}
+
+/* Retour utilisateur: "un bouton-icon Play [...] qui prenne tout l'espace
+   en hauteur de community-card-byline et community-card-bottom" — colonne à
+   2 enfants: .community-card-info (byline + mécaniques éventuelles + bottom,
+   empilés comme avant) et .community-card-play (voir plus bas), qui s'étire
+   sur toute la hauteur cumulée de .community-card-info grâce à
+   align-items:stretch (comportement PAR DÉFAUT de flex, gardé explicite ici
+   pour la lisibilité — c'est lui qui fait tout le travail, pas une hauteur
+   fixée à la main qui se désynchroniserait du contenu réel). */
+.community-card-middle {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.community-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+}
+
+.community-card-play {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 10px;
+  background: var(--cell-empty);
+  border: 1px solid #2a3040;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.community-card-play:hover {
+  border-color: var(--accent);
+  background: rgba(110, 231, 255, 0.1);
+}
+
+.community-card-play .icon-svg {
+  width: 28px;
+  height: 28px;
 }
 
 .community-card-bottom {

@@ -1,7 +1,3 @@
-// Niveaux tutoriels (1-5) puis niveaux avancés (6-10, difficulté et taille
-// croissantes, une fois les règles de base supposées comprises), puis
-// niveaux à solution unique (11-15, difficulté croissante).
-//
 // Codes de case: "." vide, "0" case interdite (aucune lumière
 // adjacente autorisée), "1"-"4" case à charge (ce nombre de lumières
 // adjacentes exactement), "X" hors-grille (void — aussi utilisée comme
@@ -19,30 +15,33 @@
 // lumière, leurs couleurs se mélangent. Voir src/game/grid.js.
 //
 // Chaque niveau a été construit à partir d'une solution connue (voir
-// scripts/verify.mjs) pour garantir qu'il est gagnable. Les niveaux 6-10 ont
-// été produits par scripts/generate-levels.mjs (remplissage glouton +
-// indices dérivés de la solution trouvée). Les niveaux 11-15 et les coeurs
-// des niveaux 21-25 ont été produits par scripts/generate-unique-levels.mjs,
-// qui rejette toute grille n'ayant pas EXACTEMENT une solution (vérifié par
-// src/game/solver.js). Voir aussi `npm run check-unique`.
+// scripts/verify.mjs) pour garantir qu'il est gagnable.
 //
-// Niveaux 16-20: introduction de la mécanique couleur (case à charge +
-// laser + case-cible), petites grilles construites à la main, difficulté
-// croissante des interactions (une charge colorée isolée, puis le mélange
-// de deux couleurs sur une même lumière, puis la combinaison avec une case
-// interdite, puis deux charges indépendantes dans une même grille, puis une
-// bordure interdite autour du coeur "mélange").
-//
-// Niveaux 21-25: coeurs à solution UNIQUE générés (7x7 à 8x7, difficulté
-// croissante), sur lesquels 1 à 3 "cases à charge" existantes ont reçu une
-// couleur. Comme le coeur est déjà entièrement déterminé par les indices
-// numériques, la case colorée est nécessairement satisfaite dans LA
-// solution ; son laser touche alors une lumière déjà fixée par le reste de
-// la grille, et une case-cible en aval de cette lumière vérifie la bonne
-// couleur. Chaque insertion a été vérifiée avec le moteur réel (aucune
-// autre lumière ne doit "polluer" la case-cible visée) et chaque niveau a
-// été re-vérifié avec `countSolutions` pour confirmer qu'il reste à
-// solution unique après ajout des cases-cibles.
+// IMPORTANT — cet ordre est ce que main.js:queueNewMechanicSchemas() utilise
+// pour décider QUAND montrer chaque modale "schéma" pédagogique (au premier
+// niveau qui contient réellement le token de la mécanique, voir
+// community-store.js: detectMechanics) : tenir cette liste à jour à chaque
+// réordonnancement/insertion de niveau, sinon un tuto peut se déclencher sur
+// un niveau qui n'utilise pas encore vraiment la mécanique annoncée (bug
+// vécu — retour utilisateur: "le tuto couleur arrive bien avant les niveaux
+// utilisant la couleur" — la liste ci-dessous avait dérivé de l'ordre réel
+// des niveaux au fil des ajouts). Ordre RÉEL actuel, mécanique par
+// mécanique (premier niveau, 1-indexé, où elle apparaît réellement) :
+//   1-4   "First Step".."Neurones": règle de base seule (case numérotée +
+//         lumière), aucune mécanique additionnelle.
+//   5-6   "Synapses"/"Synapses 2": case interdite ("0").
+//   7-8   "Akari"/"Akari 2": grilles base plus grandes, aucune mécanique
+//         additionnelle nouvelle.
+//   9+    "Colors": couleur (charge colorée + case-cible) — RESTE présente
+//         dans quasiment tous les niveaux suivants, ce n'est pas un bloc
+//         isolé.
+//   13+   "Miroirs": miroir ("/"/"\\"), combiné à la couleur dès son
+//         introduction.
+//   19+   "Pyra": neurone pyramidal ("Y").
+//   23+   "prisme": prisme ("P"/"Pr"/"Pg"/"Pb"/"Pw").
+//   26+   "Neurone miroir intro": neurone miroir [expérimental] ("M").
+// Les derniers niveaux ("Prisme + Miroir", "Hard") combinent volontairement
+// plusieurs mécaniques déjà enseignées à ce stade.
 
 export const levels = [
   {

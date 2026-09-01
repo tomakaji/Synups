@@ -20,8 +20,16 @@
    désormais portés par le .badge-frame LUI-MÊME (voir badges.css), qui
    inclut aussi le chevron ">" (voir main.js: buildBadgeFrame({chevron:
    true})) — un seul élément visuel cliquable, plus deux imbriqués. */
+/* Round suivant (retour utilisateur): "le bouton profil doit s'arrêter
+   avant le bouton du son global qui flotte afin de ne pas s'y superposer"
+   — .global-mute-btn est position:fixed en haut à droite (40px + 14px
+   d'offset, voir floating-controls.css) ; sur un écran étroit (~420-480px),
+   la bannière (width:min(420px,100%), donc quasi pleine largeur) pouvait
+   s'étendre jusque sous ce bouton fixe. Le 3e terme de min() réserve 64px
+   (40px de bouton + 14px d'offset + 10px de marge) sur la largeur de
+   viewport, quelle que soit la taille d'écran. */
 .title-profile-banner {
-  width: min(420px, 100%);
+  width: min(420px, 100%, calc(100vw - 64px));
   display: flex;
   margin: 0 0 22px;
   padding: 0;
@@ -44,6 +52,8 @@
   flex: 1;
   min-width: 0;
   display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .title-profile-identity .badge-frame {
@@ -63,6 +73,47 @@
   flex: 1;
   min-width: 0;
   font-weight: 600;
+}
+
+/* Round suivant (retour utilisateur): "les points et étoiles doivent être
+   présents [...] à l'intérieur de la bannière du joueur [...] en ligne (pas
+   en colonne)" — voir main.js: renderTitleProfileBanner, qui insère
+   buildTitleProfileStats() DIRECTEMENT dans le .badge-frame (entre le
+   pseudo et le chevron), pas à côté comme avant : les pastilles font donc
+   désormais partie intégrante du "bouton profil" pilule plutôt que de
+   flotter hors de lui. Même composant réutilisé tel quel dans "Mon profil"
+   (round 26: voir main.js: refreshProfileBadgePreview, qui l'insère de la
+   MÊME façon dans #profile-badge-preview .badge-frame) — la mise en page
+   reste donc identique dans les deux contextes. */
+.title-profile-stats {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.title-profile-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  white-space: nowrap;
+  background: var(--panel);
+  border: 1px solid #2a3040;
+}
+
+.title-profile-stat--star {
+  color: #ffd76e;
+  border-color: rgba(255, 215, 110, 0.4);
+}
+
+.title-profile-stat--points {
+  color: var(--accent);
+  border-color: #2a3040;
 }
 
 .game-logo {

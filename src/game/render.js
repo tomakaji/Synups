@@ -4,6 +4,11 @@
 // et par l'éditeur de niveaux (editor.js) pour un aperçu/test identique.
 import { CellType, PRISM_COLOR_SEQUENCE } from "./grid.js";
 import { colorFor, hexFor, illuminatedColor, lightColor } from "./colors.js";
+// Mode daltonien: calque d'affichage pur, voir colorblind.js — ne redéfinit
+// aucune couleur, se contente d'ajouter un repère textuel (R/G/B/RG/...)
+// par-dessus les icônes qui portent déjà une couleur ci-dessous, quand le
+// réglage est actif (colorLabelSvg() est un no-op sinon).
+import { colorLabelSvg } from "./colorblind.js";
 // Thème PixelArt (5e récompense de Remember, voir sommation.js): chaque
 // icône "lisse" ci-dessous a un équivalent en grille 32x32 dans
 // pixelIcons.js — un branchement isPixelTheme() en tête de chaque fonction
@@ -32,6 +37,13 @@ import {
 // mesurer la case telle qu'elle est réellement rendue.
 const CELL_SIZE = 56;
 const GAP = 6;
+
+// Rayon extérieur (en fraction de la case) de l'anneau coloré dessiné par
+// neuronIcon: cercle de rayon 22 avec un trait de largeur 8 sur un viewBox
+// 0-100, donc son bord extérieur est à (22 + 8/2) / 100 = 0.26 — voir
+// renderLasers(): le dernier segment d'un laser qui atteint une lumière
+// s'arrête à cette distance du centre plutôt qu'au centre exact.
+const LAMP_RING_RADIUS_RATIO = 0.26;
 
 const CHARGE_SLOTS = [
   [-20, -20],
@@ -63,7 +75,12 @@ const PRISM_LETTER_COLORS = {
  * par le mouvement plutôt que par une opacité de fond différente (toutes
  * les cases éclairées ont désormais la même opacité, voir colors.js).
  */
-function neuronIcon(lit) {
+// Exportée (comme chargeIcon/mirrorIcon/etc. plus bas): réutilisée par
+// main.js pour l'icône du schéma pédagogique "Lumière" (retour utilisateur:
+// "il faut aussi une explication pour le neurone sans couleur") — même
+// raison que les autres icônes exportées, voir FEATURE_ICON_HTML dans
+// main.js: toujours le rendu RÉEL du jeu, jamais un glyphe redessiné à part.
+export function neuronIcon(lit) {
   if (isPixelTheme()) {
     const hex = hexFor(lit) || "#fbfcff";
     // Même halo "sonar" que le design lisse (même classe CSS, même div) —
@@ -82,6 +99,7 @@ function neuronIcon(lit) {
   <svg viewBox="0 0 100 100" class="cell-icon-svg">
     <circle cx="50" cy="50" r="22" fill="none" stroke="#0a0c10" stroke-width="14"/>
     <circle cx="50" cy="50" r="22" fill="none" stroke="${hex}" stroke-width="8"/>
+    ${colorLabelSvg(lit, 78, 26, 22)}
   </svg>`;
 }
 
@@ -173,7 +191,11 @@ export function chargeIcon(cell) {
     }
   }
 
-  return `<svg viewBox="0 0 100 100" class="cell-icon-svg">${core}${slots}${overflow}</svg>`;
+  // Retour utilisateur: "toujours en haut à droite (même pour les [charges]
+  // colorées) [...] on adapte la taille de la police aussi (22px)" — même
+  // position/taille que neurones/miroirs/Pyra (voir ci-dessus/ci-dessous).
+  const label = chan ? colorLabelSvg(chan, 78, 26, 22) : "";
+  return `<svg viewBox="0 0 100 100" class="cell-icon-svg">${core}${slots}${overflow}${label}</svg>`;
 }
 
 export function synapseIcon(state) {
@@ -220,10 +242,19 @@ function targetIcon(cell) {
   const hex = hexFor(cell.target) || "#888";
   const matched = !!cell._colorMatch;
   const corners = "M16,30 V16 H30 M70,16 H84 V30 M84,70 V84 H70 M30,84 H16 V70";
+  // Retour utilisateur: "pour la couleur blanche (cibles) on met rien" — une
+  // cible qui demande du blanc (les 3 canaux) n'affiche AUCUNE lettre en
+  // mode daltonien (là où R/G/B/RG/... reste affiché pour les autres
+  // couleurs de cible) : "RGB" texte ajoute plus de bruit que d'info sur une
+  // icône déjà chargée (coins de viseur + halo), contrairement à un simple
+  // repère de 1-2 lettres.
+  const isWhite = !!(cell.target && cell.target.r && cell.target.g && cell.target.b);
+  const targetLabel = isWhite ? null : cell.target;
   if (!matched) {
     return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
       <path d="${corners}" fill="none" stroke="#05060a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>
       <path d="${corners}" fill="none" stroke="${hex}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+      ${colorLabelSvg(targetLabel, 50, 56, 22)}
     </svg>`;
   }
   return `<svg viewBox="0 0 100 100" class="cell-icon-svg cell-target-breathe">
@@ -231,6 +262,7 @@ function targetIcon(cell) {
     <path d="${corners}" fill="none" stroke="${hex}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
     <circle cx="50" cy="50" r="9" fill="#05060a"/>
     <circle cx="50" cy="50" r="6" fill="${hex}"/>
+    ${colorLabelSvg(targetLabel, 50, 36, 22)}
   </svg>`;
 }
 
@@ -243,9 +275,11 @@ export function mirrorIcon(cell) {
   const stroke = active ? hexFor(cell._mirrorColor) || "#9fb4d8" : "#4a5468";
   const glow = active ? colorFor(cell._mirrorColor, 0.35) || "rgba(159,180,216,0.35)" : "rgba(74,84,104,0.18)";
   const [x1, y1, x2, y2] = cell.orientation === "/" ? [18, 82, 82, 18] : [18, 18, 82, 82];
+  const label = active ? colorLabelSvg(cell._mirrorColor, 78, 26, 22) : "";
   return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
     <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${glow}" stroke-width="14" stroke-linecap="round"/>
     <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="4" stroke-linecap="round"/>
+    ${label}
   </svg>`;
 }
 
@@ -278,6 +312,11 @@ export function pyraIcon(cell) {
     cell._state === "error"
       ? `<polygon points="66,50 58.2,58.2 50,64 41.8,58.2 34,50 41.8,41.8 50,36 58.2,41.8" fill="#1a1c22" stroke="#5a6470" stroke-width="1.4"/>`
       : "";
+  // Mode daltonien (retour utilisateur): repère dynamique en haut à droite,
+  // même position/taille que les neurones et miroirs — reflète la couleur
+  // ACTUELLE du Pyra (instable, dépend du nombre de lumières adjacentes,
+  // voir grid.js: _activeColor), donc absent tant que rien n'est actif.
+  const label = active ? colorLabelSvg(channelColor(active), 78, 26, 22) : "";
   const triangle = "50,15 85,80 15,80";
   return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
     <polygon points="${triangle}" fill="none" stroke="#05060a" stroke-width="9" stroke-linejoin="round"/>
@@ -295,6 +334,7 @@ export function pyraIcon(cell) {
       <animate attributeName="r" values="5;7;5" dur="1.8s" begin="1.2s" repeatCount="indefinite"/>
       <animate attributeName="opacity" values="0.4;0.95;0.4" dur="1.8s" begin="1.2s" repeatCount="indefinite"/>
     </circle>
+    ${label}
     ${overload}
   </svg>`;
 }
@@ -399,6 +439,149 @@ export function createBoardRenderer(boardEl) {
   let cellSize = CELL_SIZE; // voir measureMetrics(): remplacé par la taille RÉELLE rendue
   let gapSize = GAP;
 
+  // ---------- Zoom/pan tactile (retour utilisateur: "ça serait bien de
+  // pouvoir zoomer/dézoomer sur une grille [...] tactile sur téléphone") ---
+  // Pincement à deux doigts pour zoomer, glisser à un doigt pour déplacer
+  // UNE FOIS zoomé (jamais à zoom normal, pour ne pas confondre un
+  // glissement avec un simple tap de pose de lumière). Double-tap
+  // réinitialise. Posé ici (createBoardRenderer) plutôt que dupliqué en
+  // jeu/éditeur: les deux passent par cette même fabrique sur leur propre
+  // #board/#editor-board (voir main.js/editor.js).
+  const MIN_ZOOM = 1;
+  const MAX_ZOOM = 2.5;
+  let zoom = 1;
+  let panX = 0;
+  let panY = 0;
+  const activeTouchPointers = new Map(); // pointerId -> {x, y}
+  let pinchStartDist = 0;
+  let pinchStartZoom = 1;
+  let panStart = null; // {x, y, panX, panY} du geste 1 doigt en cours
+  let didPanOrZoom = false; // évite qu'un pincement/glissement ne déclenche un clic de pose à la fin
+  let lastTapTime = 0;
+  let lastTapPos = null;
+
+  function setZoomState(nextZoom, nextPanX, nextPanY) {
+    zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+    // Limite le pan pour ne jamais perdre complètement la grille hors champ:
+    // la moitié de la taille agrandie du plateau, mesurée sur sa boîte de
+    // layout NON transformée (offsetWidth/Height, insensibles au transform
+    // CSS lui-même contrairement à getBoundingClientRect).
+    const naturalW = boardEl.offsetWidth || 1;
+    const naturalH = boardEl.offsetHeight || 1;
+    const maxPanX = (naturalW * zoom) / 2;
+    const maxPanY = (naturalH * zoom) / 2;
+    panX = Math.min(maxPanX, Math.max(-maxPanX, nextPanX));
+    panY = Math.min(maxPanY, Math.max(-maxPanY, nextPanY));
+    boardEl.style.transformOrigin = "center center";
+    boardEl.style.transform = zoom === 1 && panX === 0 && panY === 0 ? "" : `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    // Au repos (zoom normal), on laisse le navigateur gérer le tactile
+    // normalement (ex: scroll vertical natif de .editor-board-wrap) — voir
+    // aussi le pointerdown à 2 doigts plus bas, qui le bascule à "none" dès
+    // le début d'un pincement même en partant de zoom 1.
+    boardEl.style.touchAction = zoom > 1 ? "none" : "";
+  }
+
+  /** Réinitialise zoom/pan — appelé explicitement par l'appelant (voir
+   * l'API retournée plus bas) quand un VRAI changement de niveau a lieu,
+   * jamais automatiquement depuis build() (qui est aussi appelé à chaque
+   * repeinture en cours d'édition — voir editor.js: rebuildEditGrid — where
+   * réinitialiser le zoom à chaque case peinte serait très gênant). */
+  function resetZoom(animated = false) {
+    if (animated && (zoom !== 1 || panX !== 0 || panY !== 0)) {
+      boardEl.style.transition = "transform 0.25s ease";
+      setTimeout(() => {
+        boardEl.style.transition = "";
+      }, 260);
+    }
+    setZoomState(1, 0, 0);
+  }
+
+  function touchPointDist(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y) || 1;
+  }
+  function touchPointMid(a, b) {
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+
+  boardEl.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "touch") return; // souris/stylet: comportement inchangé
+    activeTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    didPanOrZoom = false;
+    if (activeTouchPointers.size === 2) {
+      const [a, b] = Array.from(activeTouchPointers.values());
+      pinchStartDist = touchPointDist(a, b);
+      pinchStartZoom = zoom;
+      panStart = null; // un pincement à 2 doigts prend le dessus sur un pan à 1 doigt en cours
+      boardEl.style.touchAction = "none";
+    } else if (activeTouchPointers.size === 1 && zoom > 1) {
+      const p = activeTouchPointers.get(e.pointerId);
+      panStart = { x: p.x, y: p.y, panX, panY };
+    }
+  });
+
+  boardEl.addEventListener("pointermove", (e) => {
+    if (!activeTouchPointers.has(e.pointerId)) return;
+    activeTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activeTouchPointers.size === 2) {
+      const [a, b] = Array.from(activeTouchPointers.values());
+      const dist = touchPointDist(a, b);
+      setZoomState(pinchStartZoom * (dist / pinchStartDist), panX, panY);
+      didPanOrZoom = true;
+      e.preventDefault();
+    } else if (activeTouchPointers.size === 1 && panStart && zoom > 1) {
+      const p = activeTouchPointers.get(e.pointerId);
+      const dx = p.x - panStart.x;
+      const dy = p.y - panStart.y;
+      if (didPanOrZoom || Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+        didPanOrZoom = true;
+        setZoomState(zoom, panStart.panX + dx, panStart.panY + dy);
+        e.preventDefault();
+      }
+    }
+  });
+
+  function endTouchPointer(e) {
+    activeTouchPointers.delete(e.pointerId);
+    if (activeTouchPointers.size < 2) pinchStartDist = 0;
+    if (activeTouchPointers.size === 0) {
+      panStart = null;
+      if (zoom <= 1) boardEl.style.touchAction = "";
+      if (!didPanOrZoom) {
+        // Double-tap (deux taps rapprochés, sans déplacement notable):
+        // réinitialise le zoom, geste habituel sur mobile.
+        const now = Date.now();
+        const pos = { x: e.clientX, y: e.clientY };
+        if (lastTapPos && now - lastTapTime < 320 && touchPointDist(lastTapPos, pos) < 30) {
+          resetZoom(true);
+          lastTapTime = 0;
+          lastTapPos = null;
+          return;
+        }
+        lastTapTime = now;
+        lastTapPos = pos;
+      }
+    }
+  }
+  boardEl.addEventListener("pointerup", endTouchPointer);
+  boardEl.addEventListener("pointercancel", endTouchPointer);
+
+  // Un clic de pose de lumière ne doit jamais se déclencher à la fin d'un
+  // pincement/glissement — écoute en phase de capture pour intercepter le
+  // "click" que le navigateur émet après pointerup avant qu'il n'atteigne
+  // le handler posé sur chaque case (voir build() plus bas).
+  boardEl.addEventListener(
+    "click",
+    (e) => {
+      if (didPanOrZoom) {
+        e.preventDefault();
+        e.stopPropagation();
+        didPanOrZoom = false;
+      }
+    },
+    true
+  );
+
   /** Mesure la taille de case et l'espacement effectivement rendus (au lieu
    * de supposer CELL_SIZE/GAP fixes) — nécessaire depuis que #board peut
    * réduire --cell-size en CSS pour tenir dans la largeur de l'écran (voir
@@ -407,12 +590,17 @@ export function createBoardRenderer(boardEl) {
    * désaligneraient dès que l'écran est plus étroit que ~56px/case. Prend
    * l'avantage d'être mesuré sur le DOM réel plutôt que recalculé à la main
    * (fiable quel que soit le calc()/min() utilisé côté CSS). Sans effet sur
-   * l'éditeur (#editor-board garde --cell-size fixe, jamais réduit). */
+   * l'éditeur (#editor-board garde --cell-size fixe, jamais réduit).
+   * `/ zoom`: getBoundingClientRect() renvoie la taille ÉCRAN (donc déjà
+   * multipliée par le zoom tactile ci-dessus si actif) — on la ramène à la
+   * taille de layout non transformée, sans quoi les lasers (positionnés en
+   * pixels ENFANTS de #board, donc RE-multipliés par le même transform)
+   * se retrouveraient décalés d'un facteur zoom² une fois zoomés. */
   function measureMetrics() {
     const sample = boardEl.querySelector(".cell");
     if (!sample) return;
     const rect = sample.getBoundingClientRect();
-    if (rect.width > 0) cellSize = rect.width;
+    if (rect.width > 0) cellSize = rect.width / zoom;
     const gapValue = parseFloat(getComputedStyle(boardEl).columnGap);
     if (!Number.isNaN(gapValue)) gapSize = gapValue;
   }
@@ -499,9 +687,10 @@ export function createBoardRenderer(boardEl) {
         const hex = hexFor(laser.colors[i]);
         const [r1, c1] = laser.points[i];
         const [r2, c2] = laser.points[i + 1];
-        const p1 = cellCenter(r1, c1);
-        const p2 = cellCenter(r2, c2);
+        let p1 = cellCenter(r1, c1);
+        let p2 = cellCenter(r2, c2);
         const horizontal = r1 === r2;
+        const isFirstSegment = i === 0;
         const isLastSegment = i === segmentCount - 1;
         const segmentBlocked = blocked && isLastSegment;
         // `points` va toujours de la charge (départ) vers sa cible (voir
@@ -509,6 +698,47 @@ export function createBoardRenderer(boardEl) {
         // droite" à l'écran.
         const forwardH = c2 > c1;
         const forwardV = r2 > r1;
+
+        // Retour utilisateur: "les lasers doivent, lorsqu'elles éclairent
+        // une lampe, s'arrêter sur le cerceau du design de la lampe plutôt
+        // qu'en son centre afin de montrer qu'elle la colore" — un laser qui
+        // atteint réellement une lumière (connected, dernier segment, pas
+        // grésillant sur un duplicata) recule son point d'arrivée du rayon
+        // extérieur de l'anneau coloré de neuronIcon (cercle r=22, trait
+        // 8 -> bord extérieur ~26 sur un viewBox 0-100), pour que le trait
+        // touche visuellement le cerceau au lieu de plonger jusqu'au pixel
+        // central, sous l'icône. Les segments intermédiaires (rebonds sur un
+        // miroir) restent inchangés: leur point d'arrivée EST le pivot du
+        // miroir, il doit rester exact.
+        if (laser.connected && isLastSegment && !segmentBlocked) {
+          const ringRadiusPx = cellSize * LAMP_RING_RADIUS_RATIO;
+          if (horizontal) {
+            p2 = { x: p2.x + (forwardH ? -ringRadiusPx : ringRadiusPx), y: p2.y };
+          } else {
+            p2 = { x: p2.x, y: p2.y + (forwardV ? -ringRadiusPx : ringRadiusPx) };
+          }
+        }
+
+        // Retour utilisateur: "les lasers partent aussi de la couche
+        // extérieure" — même traitement, symétrique, sur le PREMIER segment
+        // (départ depuis la charge/Pyra qui tire ce rayon, voir grid.js:
+        // `points` commence toujours sur la case qui tire, jamais sur une
+        // lumière): avance le point de départ du même rayon `ringRadiusPx`
+        // pour qu'il parte visuellement du bord extérieur de l'icône plutôt
+        // que de son pixel central. Toujours actif (contrairement à
+        // l'arrivée ci-dessus): la charge/Pyra qui tire est là qu'elle
+        // touche une lumière ou non. Même rayon que neuronIcon même si
+        // l'icône de départ (chargeIcon/pyraIcon) diffère légèrement en
+        // taille réelle — approximation volontaire, jamais assez visible à
+        // l'échelle d'une case pour justifier une constante par forme.
+        if (isFirstSegment) {
+          const ringRadiusPx = cellSize * LAMP_RING_RADIUS_RATIO;
+          if (horizontal) {
+            p1 = { x: p1.x + (forwardH ? ringRadiusPx : -ringRadiusPx), y: p1.y };
+          } else {
+            p1 = { x: p1.x, y: p1.y + (forwardV ? ringRadiusPx : -ringRadiusPx) };
+          }
+        }
 
         const wrap = document.createElement("div");
         wrap.className = laser.connected ? "laser" : "laser laser--unconnected";
@@ -867,6 +1097,11 @@ export function createBoardRenderer(boardEl) {
     render,
     playMirrorSuccess,
     playMirrorFailure,
+    /** Remet le zoom/pan tactile à 1x centré — à appeler explicitement à
+     * chaque VRAI changement de niveau (voir main.js: loadLevel, editor.js:
+     * loadLevelIntoEditor/newBtn), jamais depuis build() lui-même (voir son
+     * commentaire plus haut). */
+    resetZoom,
     /** Élément DOM d'une case (r, c) — utilisé par main.js pour poser une
      * mise en valeur temporaire (indice) sans dupliquer ici l'accès à
      * `cellEls`, qui reste privé au module. */

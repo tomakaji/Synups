@@ -56,6 +56,32 @@
           <span id="title-profile-identity" class="title-profile-identity"></span>
         </button>
 
+        <!-- Défi Quotidien (retour utilisateur: "un petit bouton event qui
+             apparait en flottant sur un côté dans le menu") — voir title.css
+             pour le positionnement flottant, main.js: renderDailyChallengeButton
+             pour l'état (prêt/en génération/déjà fait aujourd'hui) et
+             dailyChallenge.js pour toute la logique (génération, date,
+             étoiles). Toujours dans le DOM (jamais masqué): contrairement au
+             badge PixelArt, ce n'est pas un déblocage, juste un état qui
+             change de rendu. -->
+        <!-- Retour utilisateur: "je pense que tu charges par défaut avec des
+             valeurs par défaut, et qu'ensuite tu actualises avec les infos
+             que tu récupères [...] ce serait mieux de dire que par défaut il
+             est fait" — exactement ça: sans ce `hidden` initial, le bouton
+             était visible (donc animé, voir .daily-challenge-fab: animation
+             d'entrée) dès le premier rendu HTML, AVANT que main.js n'ait pu
+             exécuter renderDailyChallengeButton() et le recacher si le défi
+             est déjà fait — d'où le flash. Par défaut "caché" (donc "fait"),
+             JS ne le révèle (et ne joue l'animation) QUE s'il découvre que
+             ce n'est pas le cas — jamais l'inverse. -->
+        <button id="btn-daily-challenge" class="daily-challenge-fab hidden" type="button" title="Défi Quotidien">
+          <svg viewBox="0 0 24 24" class="daily-challenge-fab-star" fill="currentColor" stroke="none">
+            <path d="M12 2.5l2.9 6.2 6.6.6-5 4.5 1.5 6.7L12 17l-6 3.5 1.5-6.7-5-4.5 6.6-.6z"></path>
+          </svg>
+          <span class="daily-challenge-fab-label">Défi quotidien</span>
+          <span id="daily-challenge-fab-badge" class="daily-challenge-fab-badge hidden"></span>
+        </button>
+
         <h1 class="game-logo">Synups</h1>
         <p class="game-tagline">Reconnecte le réseau</p>
 
@@ -158,6 +184,12 @@
             <span id="nav-community" class="nav-group hidden">
               <span id="community-level-title" class="community-level-title"></span>
               <span id="community-level-author" class="community-level-author"></span>
+            </span>
+            <!-- Défi Quotidien (retour utilisateur) — voir main.js: setMode(),
+                 loadDailyChallengeLevel(). Pas de bouton "sélection de
+                 niveau"/"suivant" ici: une seule grille par jour. -->
+            <span id="nav-daily" class="nav-group hidden">
+              <span class="nav-daily-label">★ Défi Quotidien</span>
             </span>
           </div>
           <!-- Toutes les AUTRES actions du bandeau, groupées à droite (retour
@@ -293,6 +325,33 @@
             </div>
           </div>
 
+          <!-- Google Play Games Services (retour utilisateur: "pour la
+               sauvegarde de la progression [...] utiliser [...] GooglePlay à
+               travers l'auth qu'ils fournissent") — voir
+               playGamesServices.js. Android uniquement: section masquée
+               ailleurs (voir main.js: renderPlayGamesSection). -->
+          <div id="options-playgames-section" class="options-section hidden">
+            <span class="options-label">Compte Google Play</span>
+            <button id="btn-playgames-signin" class="options-btn">Se connecter</button>
+            <div id="playgames-sync-actions" class="options-inline-actions hidden">
+              <button id="btn-playgames-save" class="options-btn">Sauvegarder</button>
+              <button id="btn-playgames-restore" class="options-btn">Restaurer</button>
+            </div>
+            <p id="options-playgames-hint" class="options-hint">Connecte-toi pour sauvegarder ta progression dans le cloud.</p>
+          </div>
+
+          <!-- Mode daltonien (retour utilisateur: "intégrer un mode Daltonien
+               tout en gardant la logique RGB des lumières") — voir
+               colorblind.js: purement un calque d'affichage (repère
+               textuel R/G/B/... sur les cases colorées), colors.js/grid.js
+               restent inchangés. Toujours disponible (pas de déblocage),
+               contrairement à la section PixelArt juste en dessous. -->
+          <div class="options-section">
+            <span class="options-label">Accessibilité</span>
+            <button id="btn-colorblind-toggle" class="options-btn">Désactivé</button>
+            <p class="options-hint">Ajoute un repère texte (R/G/B...) sur les couleurs, en plus de la teinte.</p>
+          </div>
+
           <!-- 5e/dernière récompense de Remember (voir sommation.js:
                isPixelArtUnlocked, main.js: renderPixelArtOption) — retour
                utilisateur: "présent dès le début en grisé sous le nom de
@@ -412,9 +471,12 @@
           </select>
         </div>
 
+        <!-- Retour utilisateur (round 26): "importer un code peut être
+             effacé, on ne garde pour l'instant que la fonctionnalité de
+             copier le code" — bouton "Importer un code" retiré, "Créer une
+             grille" reste seul et prend 75% de la ligne (voir community.css). -->
         <div class="community-actions-row">
           <button id="btn-community-create" class="options-btn options-btn--accent">Créer une grille</button>
-          <button id="btn-community-import" class="options-btn">Importer un code</button>
         </div>
 
         <!-- Seule cette zone défile (retour utilisateur: "le scroll doit se
@@ -445,18 +507,28 @@
              l'avatar n'est plus dupliqué ailleurs à côté du pseudo. -->
         <div class="profile-panel">
           <div class="profile-identity">
+            <!-- Retour utilisateur (round 26): "les comptes (points +
+                 étoiles) sont dans la prévisu, pas en dessous, comme dans
+                 'menu'" — buildTitleProfileStats() est désormais inséré
+                 DANS le badge-frame lui-même par refreshProfileBadgePreview
+                 (main.js), exactement comme pour la bannière du menu titre;
+                 il n'y a donc plus de conteneur séparé ici. -->
             <div id="profile-badge-preview" class="badge-frame-preview"></div>
-            <div id="profile-avatar-picker" class="profile-avatar-picker"></div>
-            <!-- Round 22 (retour utilisateur): 4 avatars s'achètent avec des
-                 points en cliquant dessus (100/200/400/1000) — feedback
-                 "pas assez de points" affiché ici, même principe que
-                 #hint-ad-status/#som-ad-status (texte discret, jamais une
-                 vraie alerte navigateur). Vide et caché tant qu'il n'y a
-                 rien à signaler. -->
-            <p id="profile-avatar-purchase-status" class="profile-avatar-purchase-status hidden"></p>
 
+            <!-- Retour utilisateur: "on va placer le champ du nom au dessus
+                 du choix des avatars" — déplacé avant #profile-avatar-picker
+                 (round 19: pseudo cliquable, passe en édition avec un champ
+                 + bouton coche, voir main.js). Round 26: bouton-icon "edit"
+                 ajouté à droite du pseudo, purement visuel — le clic reste
+                 posé sur tout l'ensemble #profile-pseudo-text (voir main.js),
+                 jamais sur l'icône seule. -->
             <div class="profile-pseudo-wrap">
-              <span id="profile-pseudo-text" class="profile-pseudo-text" role="button" tabindex="0" title="Modifier le pseudo"></span>
+              <span id="profile-pseudo-text" class="profile-pseudo-text" role="button" tabindex="0" title="Modifier le pseudo">
+                <span id="profile-pseudo-label"></span>
+                <span class="profile-pseudo-edit-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>
+                </span>
+              </span>
               <span id="profile-pseudo-edit" class="profile-pseudo-edit hidden">
                 <input id="profile-pseudo-input" class="profile-pseudo-input" type="text" maxlength="20" placeholder="Ton pseudo" />
                 <button id="btn-profile-pseudo-confirm" class="icon-btn icon-btn--accent" type="button" aria-label="Valider le pseudo" title="Valider">
@@ -464,23 +536,42 @@
                 </button>
               </span>
             </div>
+
+            <!-- Renommage (retour utilisateur): les anciens "avatars"
+                 s'appellent désormais "Badges" côté joueur (jamais renommés
+                 dans le code — voir main.js: showCosmeticUnlockModal —, pour
+                 ne pas toucher à AVATARS/getAvatarSvg/etc. dans
+                 community-store.js sans valeur ajoutée). -->
+            <div class="profile-avatar-section">
+              <span class="options-label">Badges</span>
+              <div id="profile-avatar-picker" class="profile-avatar-picker"></div>
+              <!-- Round 22 (retour utilisateur): 4 avatars s'achètent avec des
+                   points en cliquant dessus (100/200/400/1000) — feedback
+                   "pas assez de points" affiché ici, même principe que
+                   #hint-ad-status/#som-ad-status (texte discret, jamais une
+                   vraie alerte navigateur). Vide et caché tant qu'il n'y a
+                   rien à signaler. -->
+              <p id="profile-avatar-purchase-status" class="profile-avatar-purchase-status hidden"></p>
+            </div>
           </div>
         </div>
 
-        <!-- Badges Remember: petits carrés "teaser" cliquables (voir
-             main.js: renderCommunityProfile) — un clic sélectionne
-             immédiatement le badge public actif, sans validation séparée.
-             Le rendu "appliqué" (plus élaboré) vit dans .badge-frame,
-             utilisé par la prévisualisation ci-dessus + les cartes
-             communautaires + l'en-tête de jeu. -->
+        <!-- Bannières (ex-"Badges Remember", retour utilisateur: renommage)
+             — petits carrés "teaser" cliquables (voir main.js:
+             renderCommunityProfile) — un clic sélectionne immédiatement la
+             bannière publique active, sans validation séparée. Le rendu
+             "appliqué" (plus élaboré) vit dans .badge-frame, utilisé par la
+             prévisualisation ci-dessus + les cartes communautaires +
+             l'en-tête de jeu. -->
         <div class="options-section">
           <div class="profile-badges-header">
-            <span class="options-label">Badges Remember</span>
+            <span class="options-label">Bannières</span>
             <!-- Round 17 (retour utilisateur): bouton admin temporaire pour
-                 tester l'affichage des badges sans finir Remember — réutilise
-                 debugUnlockPixelArt (voir sommation.js), déjà câblé à un
-                 bouton équivalent dans Options (même esprit, même fonction,
-                 effet de bord "PixelArt aussi débloqué" accepté là-bas). -->
+                 tester l'affichage des bannières sans finir Remember —
+                 réutilise debugUnlockPixelArt (voir sommation.js), déjà
+                 câblé à un bouton équivalent dans Options (même esprit,
+                 même fonction, effet de bord "PixelArt aussi débloqué"
+                 accepté là-bas). -->
             <button id="btn-profile-badges-debug-unlock" class="som-debug-btn" type="button">Déverrouiller (admin)</button>
           </div>
           <div id="profile-sommation-badges" class="profile-badges-teasers"></div>
@@ -701,7 +792,7 @@
               </div>
 
               <div id="ed-prism-options" class="tool-options hidden">
-                <label class="editor-field">Première couleur (à gauche, dès la 1ère lumière adjacente)
+                <label class="editor-field">Première couleur (à gauche, dès la 1ère impulsion adjacente)
                   <select id="ed-prism-first-color">
                     <option value="r">rouge</option>
                     <option value="g">vert</option>
@@ -731,11 +822,14 @@
                 <button id="ed-delete" class="icon-btn" aria-label="Supprimer" title="Supprimer">
                   <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
                 </button>
+                <!-- Round 26 (retour utilisateur): "importer un code peut
+                     être effacé, tout comme exporter un code, on ne garde
+                     pour l'instant que la fonctionnalité de copier le code
+                     d'un level pour l'intégrer directement dans le code pour
+                     les devs" — Exporter (copie) reste, Importer (collage)
+                     retiré ci-dessous avec son panneau. -->
                 <button id="ed-export" class="icon-btn" aria-label="Exporter le code" title="Exporter le code">
                   <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
-                </button>
-                <button id="ed-import" class="icon-btn" aria-label="Importer" title="Colle le code d'un niveau (généré par Exporter) pour le charger dans l'éditeur">
-                  <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                 </button>
                 <button id="ed-publish" class="icon-btn icon-btn--accent" aria-label="Publier" title="Publie ce niveau dans la Communauté (nécessite qu'il ait une solution)">
                   <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
@@ -743,23 +837,6 @@
               </div>
 
               <textarea id="ed-export-output" class="hidden" readonly rows="6"></textarea>
-
-              <!-- Round 18 (retour utilisateur): le texte d'invite qui
-                   s'affichait à l'ouverture ("Colle le code d'un niveau
-                   ci-dessous...") est retiré — redondant avec ce label,
-                   seul texte informatif restant ici. ed-import-status ne
-                   sert plus qu'à un VRAI retour (erreur de collage), jamais
-                   à répéter le mode d'emploi. -->
-              <div id="ed-import-panel" class="editor-section hidden">
-                <label class="editor-field">Coller l'objet JS d'un niveau (ex: le résultat d'Exporter)
-                  <textarea id="ed-import-input" rows="6" placeholder='{ name: "...", rows: 5, cols: 5, cells: [...] }'></textarea>
-                </label>
-                <p id="ed-import-status" class="editor-status"></p>
-                <div class="editor-row">
-                  <button id="ed-import-confirm" class="editor-btn">Charger ce niveau</button>
-                  <button id="ed-import-cancel" class="editor-btn">Annuler</button>
-                </div>
-              </div>
               </section>
             </div>
 
@@ -908,7 +985,7 @@
         <div class="modal-backdrop" data-reset-modal-close></div>
         <div class="modal-card">
           <h3 class="modal-title">Réinitialiser le jeu ?</h3>
-          <p class="modal-text">Toute la progression (Histoire, Infini, Remember) ainsi que les récompenses débloquées (badges, avatars, thème Rétro) seront définitivement effacées. Tes niveaux et favoris Communauté, tes réglages son et ton pseudo seront conservés.</p>
+          <p class="modal-text">Toute la progression (Histoire, Infini, Remember, Défi Quotidien) ainsi que les récompenses débloquées (bannières, badges, thème Rétro) seront définitivement effacées. Tes niveaux et favoris Communauté, tes réglages son et ton pseudo seront conservés.</p>
           <div class="modal-actions">
             <button id="btn-reset-cancel" class="options-btn" data-reset-modal-close>Annuler</button>
             <button id="btn-reset-confirm" class="options-btn options-btn--danger">Réinitialiser</button>
@@ -941,29 +1018,16 @@
         </div>
       </div>
 
-      <!-- Modale "Importer un code" (Communauté -> ajoute à votre espace
-           local, voir community-store.js: decodeShareCode/importSharedLevel). -->
-      <div id="community-import-modal" class="modal hidden">
-        <div class="modal-backdrop" data-community-import-close></div>
-        <div class="modal-card">
-          <h3 class="modal-title">Importer un code</h3>
-          <p class="modal-text">Colle ci-dessous le code de partage reçu d'un autre joueur.</p>
-          <textarea id="community-import-input" class="community-code-textarea" rows="4" placeholder="SYN1-…"></textarea>
-          <p id="community-import-status" class="editor-status"></p>
-          <div class="modal-actions">
-            <button class="options-btn" data-community-import-close>Annuler</button>
-            <button id="btn-community-import-confirm" class="options-btn options-btn--accent">Importer</button>
-          </div>
-        </div>
-      </div>
-
       <!-- Modale "Partager cette grille" (Communauté, vos propres grilles):
-           affiche le code généré par community-store.js: encodeShareCode. -->
+           affiche le code généré par community-store.js: encodeShareCode.
+           Round 26 (retour utilisateur): la fonctionnalité d'import associée
+           a été retirée (voir plus haut) — le texte ne promet donc plus un
+           import depuis la Communauté, juste un code à conserver/partager. -->
       <div id="community-share-modal" class="modal hidden">
         <div class="modal-backdrop" data-community-share-close></div>
         <div class="modal-card">
           <h3 class="modal-title">Partager cette grille</h3>
-          <p class="modal-text">Envoie ce code à un autre joueur (Discord, message…) — il pourra l'importer depuis la Communauté.</p>
+          <p class="modal-text">Code de cette grille — garde-le ou envoie-le à un autre joueur.</p>
           <textarea id="community-share-output" class="community-code-textarea" rows="4" readonly></textarea>
           <div class="modal-actions">
             <button class="options-btn" data-community-share-close>Fermer</button>

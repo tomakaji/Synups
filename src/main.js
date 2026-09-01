@@ -3,12 +3,29 @@ import { levels } from "./game/levels.js";
 import { findSolution } from "./game/solver.js";
 // Round 20 (migration Capacitor/AdMob) — no-op silencieux hors app native
 // (voir game/ads.js), donc sûr à appeler ici même pendant `npm run dev`.
-import { initAds, showRewardedAd, showInterstitialAd } from "./game/ads.js";
+import { initAds, showRewardedAd, showInterstitialAd, showBannerAd, hideBannerAd, onBannerHeightChange } from "./game/ads.js";
 // Round 24 (retour utilisateur: "retour haptique sur les boutons de
 // navigation en général, et dans le jeu et le mode remember") — no-op
 // silencieux hors app native (même garde que ads.js), donc sûr à appeler ici
 // même pendant `npm run dev`.
 import { hapticLight, hapticWarning, hapticSuccess } from "./game/haptics.js";
+import { trackEvent } from "./game/analytics.js";
+import {
+  isAvailable as isPlayGamesAvailable,
+  isSignedIn as isPlayGamesSignedIn,
+  refreshStatus as refreshPlayGamesStatus,
+  signIn as signInToPlayGames,
+  saveProgressToCloud,
+  restoreProgressFromCloud,
+} from "./game/playGamesServices.js";
+import {
+  isTodayReady as isDailyChallengeReady,
+  isTodayCompleted as isDailyChallengeCompleted,
+  getTodayLevel as getDailyChallengeLevel,
+  ensureTodayChallenge,
+  completeTodayChallenge,
+  getStarBadges,
+} from "./game/dailyChallenge.js";
 import {
   playPlace,
   playRemove,
@@ -41,6 +58,7 @@ import {
   prismIcon,
   pyraIcon,
   mirrorNeuronIcon,
+  neuronIcon,
 } from "./game/render.js";
 import { initEditor } from "./editor.js";
 import {
@@ -66,6 +84,8 @@ import {
   updateProfile,
   loadSeenMechanics,
   saveSeenMechanics,
+  loadStars,
+  spendStars,
 } from "./game/storage.js";
 import {
   listLevels,
@@ -75,8 +95,6 @@ import {
   markPlayed,
   unpublishLevel,
   encodeShareCode,
-  decodeShareCode,
-  importSharedLevel,
   detectMechanics,
   AVATARS,
   isAvatarUnlocked,
@@ -160,7 +178,10 @@ let boardLocked = false;
 
 async function advanceAfterWin() {
   boardLocked = true;
-  if (mode === "story") await wait(STORY_WIN_HOLD_MS);
+  // Défi Quotidien: même pause que Histoire (voir STORY_WIN_HOLD_MS
+  // ci-dessus) — laisser le temps de voir la grande grille résolue au repos
+  // avant de repartir vers le menu, plutôt qu'un retour instantané.
+  if (mode === "story" || mode === "daily") await wait(STORY_WIN_HOLD_MS);
   boardContainerEl.classList.add("board-fade");
   await wait(BOARD_FADE_MS);
   const holdStart = performance.now();
@@ -173,6 +194,23 @@ async function advanceAfterWin() {
     // plutôt que de laisser le joueur sur un plateau résolu sans action
     // évidente à faire ensuite.
     if (currentCommunityLevel) markPlayed(currentCommunityLevel.id);
+  } else if (mode === "daily") {
+    // completeTodayChallenge() se protège elle-même contre un double-crédit
+    // (voir dailyChallenge.js) — sans risque même si advanceAfterWin était
+    // rappelée deux fois pour la même victoire. On ne montre la popup de
+    // récompense (retour utilisateur: "à la victoire on utilise la pop up
+    // de récompense pour montrer qu'on a gagné une étoile") QUE la première
+    // fois, jamais sur un second appel accidentel qui ne créditerait rien.
+    const alreadyDone = isDailyChallengeCompleted();
+    const totalStars = completeTodayChallenge();
+    renderDailyChallengeButton();
+    if (!alreadyDone) {
+      showCosmeticUnlockModal({
+        kind: "star",
+        title: "+1 étoile",
+        subtitle: `Tu as maintenant ${totalStars} étoile${totalStars > 1 ? "s" : ""} — reviens demain pour un nouveau défi.`,
+      });
+    }
   } else {
     markStoryLevelCompleted(currentLevelIndex);
     loadLevel(currentLevelIndex + 1);
@@ -189,6 +227,9 @@ async function advanceAfterWin() {
     if (fresh?.likedByMe) goBack();
     else openCommunityRateModal(currentCommunityLevel);
   }
+  // Défi Quotidien: pas de "niveau suivant" (une seule grille/jour, voir
+  // ci-dessus) — retour direct au menu titre une fois l'étoile créditée.
+  if (mode === "daily") goBack();
 }
 
 // Musique par calques [voir music.js]: `mechanicCounts` est appelé une fois
@@ -253,7 +294,7 @@ function markStoryLevelCompleted(index) {
     showCosmeticUnlockModal({
       kind: "avatar",
       avatarId: unlockedAvatar.id,
-      title: `Avatar « ${unlockedAvatar.label} »`,
+      title: `Badge « ${unlockedAvatar.label} »`,
       subtitle: `Débloqué en terminant ${storyProgress.size} niveaux de l'Histoire !`,
     });
   }
@@ -339,6 +380,10 @@ function syncMoveUi() {
 function startBoard() {
   moveHistory = [];
   syncMoveUi();
+  // Retour utilisateur: zoom tactile — un VRAI changement de niveau
+  // réinitialise le zoom/pan (voir render.js: resetZoom, jamais appelé
+  // automatiquement par build() lui-même).
+  renderer.resetZoom();
   renderer.build(grid, { onCellClick: handleCellClick, sounds });
   // Musique par calques: le déblocage reflète la progression du niveau qui
   // commence, pas un cumul avec le précédent — la lecture elle-même
@@ -346,7 +391,22 @@ function startBoard() {
   resetMusicLayers();
 }
 
-function loadLevel(index) {
+/** `silent` (retour utilisateur: "les tutos [...] se déclenchent pas du
+ * tout sur les bons niveaux, ex: le tuto couleur arrive bien avant les
+ * niveaux utilisant la couleur") — BUG CORRIGÉ: tout en bas de ce fichier,
+ * `loadLevel(...)` est appelée dès le lancement de l'appli pour
+ * précharger en mémoire le niveau Histoire courant PENDANT QUE L'ÉCRAN
+ * TITRE EST ENCORE AFFICHÉ (voir le commentaire à cet appel — le joueur n'a
+ * pas encore cliqué "Histoire", #view-play reste masqué). Sans `silent`,
+ * cet appel déclenchait quand même queueNewMechanicSchemas() : la modale
+ * "schéma" s'affichait par-dessus le menu TITRE dès l'ouverture de l'appli,
+ * et marquait immédiatement la mécanique comme "vue" (voir seenMechanics)
+ * — bien avant que le joueur atteigne réellement ce niveau en jeu, donc
+ * elle ne réapparaissait plus jamais au bon moment. `silent` saute
+ * uniquement cette étape ; `enterStoryDirect`/`showView` rappellent
+ * loadLevel() (non silencieux, cette fois) au clic réel sur "Histoire", qui
+ * est le seul moment où la modale doit pouvoir s'ouvrir. */
+function loadLevel(index, { silent = false } = {}) {
   currentLevelIndex = ((index % levels.length) + levels.length) % levels.length;
   currentLevel = levels[currentLevelIndex];
   grid = new LightUpGrid(currentLevel);
@@ -354,7 +414,7 @@ function loadLevel(index) {
   startBoard();
   // Round 23: voir queueNewMechanicSchemas() plus bas — uniquement le mode
   // Histoire (seul mode qui appelle loadLevel(), voir plus haut).
-  queueNewMechanicSchemas(currentLevel.cells);
+  if (!silent) queueNewMechanicSchemas(currentLevel.cells);
 }
 
 function handleCellClick(r, c) {
@@ -401,6 +461,12 @@ function handleCellClick(r, c) {
   if (grid.isWon()) {
     playWin();
     hapticSuccess();
+    trackEvent("level_complete", { mode, moves: grid.getPlacedLightCount?.() ?? null });
+    // Sauvegarde cloud best-effort après chaque niveau réussi (voir
+    // playGamesServices.js: no-op silencieux si pas connecté/pas Android —
+    // jamais besoin de vérifier isPlayGamesSignedIn() ici, saveProgressToCloud
+    // le fait déjà en interne).
+    saveProgressToCloud();
     advanceAfterWin();
   }
 }
@@ -568,14 +634,37 @@ const cosmeticUnlockRevealEl = document.getElementById("cosmetic-unlock-reveal")
 const cosmeticUnlockTitleEl = document.getElementById("cosmetic-unlock-title");
 const cosmeticUnlockTextEl = document.getElementById("cosmetic-unlock-text");
 
-/** @param {{kind: "avatar"|"badge", avatarId?: string, badgeTier?: number, title: string, subtitle: string}} opts */
+// Retour utilisateur (renommage): "avatar" (code, community-store.js:
+// AVATARS) s'appelle désormais "Badge" côté joueur, et l'ancien "badge"
+// (tier/cadre, sommation.js/dailyChallenge.js) s'appelle désormais
+// "Bannière" — jamais renommé dans le CODE (trop de surface, aucune valeur
+// pour un simple changement de vocabulaire visible), seulement dans les
+// libellés affichés ci-dessous et ailleurs dans ce fichier.
+/** @param {{kind: "avatar"|"badge"|"star", avatarId?: string, badgeTier?: number, title: string, subtitle: string}} opts */
 function showCosmeticUnlockModal({ kind, avatarId, badgeTier, title, subtitle }) {
-  cosmeticUnlockKickerEl.textContent = kind === "badge" ? "Nouveau badge débloqué" : "Nouvel avatar débloqué";
+  cosmeticUnlockKickerEl.textContent =
+    kind === "badge"
+      ? "Nouvelle bannière débloquée"
+      : kind === "star"
+      ? "Défi quotidien réussi"
+      : "Nouveau badge débloqué";
   cosmeticUnlockRevealEl.innerHTML = "";
   if (kind === "avatar") {
     const bubble = document.createElement("span");
     bubble.className = "cosmetic-unlock-avatar";
     bubble.innerHTML = getAvatarSvg(avatarId);
+    cosmeticUnlockRevealEl.appendChild(bubble);
+  } else if (kind === "star") {
+    // Défi Quotidien (retour utilisateur): "à la victoire on utilise la pop
+    // up de récompense pour montrer qu'on a gagné une étoile" — réutilise
+    // EXACTEMENT ce même mécanisme .modal/.cosmetic-unlock-* plutôt qu'une
+    // modale dédiée, juste une 3e variante de bulle de révélation (même
+    // structure que .cosmetic-unlock-avatar, voir hint-modal.css) avec
+    // l'icône étoile du bouton flottant (voir index.html: #btn-daily-challenge).
+    const bubble = document.createElement("span");
+    bubble.className = "cosmetic-unlock-avatar cosmetic-unlock-star";
+    bubble.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2.5l2.9 6.2 6.6.6-5 4.5 1.5 6.7L12 17l-6 3.5 1.5-6.7-5-4.5 6.6-.6z"></path></svg>';
     cosmeticUnlockRevealEl.appendChild(bubble);
   } else {
     // Même langage visuel que les carrés teaser de sélection Remember (voir
@@ -613,6 +702,7 @@ btnHintWatchAd.onclick = async () => {
   if (earned) {
     hintStock += HINT_AD_HINTS_REWARD;
     renderHintUI();
+    trackEvent("rewarded_ad_completed", { placement: "hint" });
     closeHintModal();
     return;
   }
@@ -705,6 +795,19 @@ applyVolumes();
 // de await ici), et ne fait rien tant qu'on n'est pas dans la coquille
 // native Capacitor.
 initAds();
+trackEvent("app_open");
+
+// Round 25 (retour utilisateur: "lorsqu'on joue une grille (histoire ou
+// infinity) ou au mode bonus, on veut afficher un bandeau publicitaire tout
+// en bas de l'écran en même temps") — réserve EXACTEMENT la hauteur réelle
+// du bandeau (voir game/ads.js: onBannerHeightChange) sous le plateau/
+// Remember pendant qu'il est affiché, jamais un espace deviné qui laisserait
+// un vide ou chevaucherait le jeu. 0 = bandeau caché/pas chargé/échoué,
+// retombe alors sur aucun espace réservé. Voir showView() plus bas pour
+// quand le bandeau est montré/caché.
+onBannerHeightChange((px) => {
+  document.documentElement.style.setProperty("--ad-banner-height", `${px}px`);
+});
 
 // Round 20 (Firestore): démarre l'écoute temps réel du fil communautaire +
 // l'authentification anonyme (voir game/community-store.js). Comme initAds()
@@ -837,6 +940,117 @@ if (btnPixelartDebugUnlock) {
   };
 }
 
+// ---------- Mode daltonien ----------
+// Toujours disponible (pas de déblocage, contrairement à PixelArt
+// ci-dessus) — voir colorblind.js: purement un calque d'affichage, aucune
+// des couleurs/règles réelles (colors.js/grid.js) n'est modifiée.
+const btnColorblindToggle = document.getElementById("btn-colorblind-toggle");
+
+function renderColorblindOption() {
+  btnColorblindToggle.textContent = settings.colorblindEnabled ? "Activé" : "Désactivé";
+  btnColorblindToggle.classList.toggle("options-btn--accent", settings.colorblindEnabled);
+}
+renderColorblindOption();
+
+btnColorblindToggle.onclick = () => {
+  settings.colorblindEnabled = !settings.colorblindEnabled;
+  saveSettings(settings);
+  trackEvent("colorblind_mode_toggled", { enabled: settings.colorblindEnabled });
+  renderColorblindOption();
+  // Même raisonnement que applyPixelArtTheme ci-dessus: le plateau peut déjà
+  // être construit en mémoire même si Options est l'écran affiché, donc un
+  // re-render explicite est nécessaire pour voir l'effet immédiatement.
+  if (renderer.grid) renderer.render();
+};
+
+// ---------- Compte Google Play Games ----------
+// Retour utilisateur: "pour la sauvegarde de la progression [...] utiliser
+// [...] GooglePlay à travers l'auth qu'ils fournissent" — voir
+// playGamesServices.js pour le détail (module isolé, Android uniquement, ne
+// throw jamais). Section entière masquée sur web/dev/iOS (voir
+// renderPlayGamesSection ci-dessous), donc jamais de bouton mort à l'écran
+// sur une plateforme où la fonctionnalité n'existe pas.
+const playgamesSectionEl = document.getElementById("options-playgames-section");
+const btnPlaygamesSignin = document.getElementById("btn-playgames-signin");
+const playgamesSyncActionsEl = document.getElementById("playgames-sync-actions");
+const btnPlaygamesSave = document.getElementById("btn-playgames-save");
+const btnPlaygamesRestore = document.getElementById("btn-playgames-restore");
+const playgamesHintEl = document.getElementById("options-playgames-hint");
+
+/** Ré-exécutée à chaque affichage d'Options (voir showView), même principe
+ * que renderPixelArtOption()/renderColorblindOption() — l'état de connexion
+ * peut changer entre deux passages (connexion réussie, session expirée). */
+function renderPlayGamesSection() {
+  if (!isPlayGamesAvailable()) {
+    playgamesSectionEl.classList.add("hidden");
+    return;
+  }
+  playgamesSectionEl.classList.remove("hidden");
+  const signedIn = isPlayGamesSignedIn();
+  btnPlaygamesSignin.classList.toggle("hidden", signedIn);
+  playgamesSyncActionsEl.classList.toggle("hidden", !signedIn);
+  playgamesHintEl.textContent = signedIn
+    ? "Connecté — ta progression peut être sauvegardée/restaurée à tout moment."
+    : "Connecte-toi pour sauvegarder ta progression dans le cloud.";
+}
+
+btnPlaygamesSignin.onclick = async () => {
+  btnPlaygamesSignin.disabled = true;
+  btnPlaygamesSignin.textContent = "Connexion…";
+  const { isAuthenticated } = await signInToPlayGames();
+  btnPlaygamesSignin.disabled = false;
+  btnPlaygamesSignin.textContent = "Se connecter";
+  renderPlayGamesSection();
+  // Première sauvegarde automatique juste après la connexion (best-effort,
+  // silencieuse — voir saveProgressToCloud) : évite qu'un joueur qui vient
+  // de se connecter reste sans sauvegarde cloud tant qu'il n'a pas cliqué
+  // explicitement "Sauvegarder".
+  if (isAuthenticated) saveProgressToCloud();
+};
+
+btnPlaygamesSave.onclick = async () => {
+  btnPlaygamesSave.disabled = true;
+  const original = btnPlaygamesSave.textContent;
+  btnPlaygamesSave.textContent = "Sauvegarde…";
+  const { ok } = await saveProgressToCloud();
+  btnPlaygamesSave.disabled = false;
+  btnPlaygamesSave.textContent = original;
+  playgamesHintEl.textContent = ok
+    ? "Progression sauvegardée."
+    : "Échec de la sauvegarde — réessaie plus tard.";
+};
+
+// Restaurer ÉCRASE la progression locale (voir playGamesServices.js:
+// restoreProgressFromCloud) — confirmation native `confirm()` plutôt qu'une
+// modale dédiée (voir #reset-confirm-modal pour le pattern existant): action
+// rare, `confirm()` suffit et reste cohérent avec une WebView Android.
+btnPlaygamesRestore.onclick = async () => {
+  const sure = window.confirm(
+    "Restaurer va remplacer ta progression actuelle sur cet appareil par celle sauvegardée dans le cloud. Continuer ?"
+  );
+  if (!sure) return;
+  btnPlaygamesRestore.disabled = true;
+  const original = btnPlaygamesRestore.textContent;
+  btnPlaygamesRestore.textContent = "Restauration…";
+  const { ok } = await restoreProgressFromCloud();
+  btnPlaygamesRestore.disabled = false;
+  btnPlaygamesRestore.textContent = original;
+  if (ok) {
+    // Toute la progression locale vient de changer sous les pieds de l'app
+    // (points/story/profil/Remember) — un rechargement complet est plus sûr
+    // qu'un rafraîchissement partiel de chaque écran concerné (même choix
+    // que btn-reset-confirm ci-dessus: window.location.reload()).
+    window.location.reload();
+  } else {
+    playgamesHintEl.textContent = "Échec de la restauration — réessaie plus tard.";
+  }
+};
+
+// Vérifie la session au démarrage (silencieux, jamais de popup — voir
+// playGamesServices.js: refreshStatus) puis met à jour la section si le
+// joueur est déjà sur Options au moment où ça résout (cas rare, mais safe).
+refreshPlayGamesStatus().then(renderPlayGamesSection);
+
 // ---------- Mode Infini ----------
 // Voir docs/infinite-mode-design.md. Un niveau généré est un objet niveau
 // STANDARD (comme n'importe quelle entrée de levels.js) : une fois obtenu,
@@ -845,6 +1059,7 @@ if (btnPixelartDebugUnlock) {
 
 const navStaticEl = document.getElementById("nav-static");
 const navInfiniteEl = document.getElementById("nav-infinite");
+const navDailyEl = document.getElementById("nav-daily");
 const infiniteLevelLabelEl = document.getElementById("infinite-level-label");
 const infiniteBadgeEl = document.getElementById("infinite-badge");
 const btnInfiniteSettings = document.getElementById("btn-infinite-settings");
@@ -901,6 +1116,15 @@ document.querySelectorAll(".infinite-star-btn").forEach((btn) => {
  * HTML retourné par la fonction, prêt à être injecté dans un `.cell-icon`
  * (même structure DOM que sur le plateau). */
 const FEATURE_ICON_HTML = {
+  // Règle de base (retour utilisateur: "il faut aussi une explication pour
+  // le neurone sans couleur") — une impulsion "neutre" (les 3 canaux
+  // allumés: c'est la couleur par défaut d'une impulsion posée sans neurone
+  // coloré à proximité, voir grid.js), même rendu qu'en jeu (voir render.js:
+  // neuronIcon, désormais exportée). N'apparaît PAS dans FEATURES
+  // (generator.js): ce n'est pas une mécanique optionnelle du mode Infini,
+  // donc pas de tuile dans buildFeatureChecklist() pour cette clé — utilisée
+  // UNIQUEMENT par MECHANIC_SCHEMAS.base ci-dessous.
+  base: neuronIcon({ r: true, g: true, b: true }),
   forbidden: synapseIcon("intact"),
   // "Couleur (charges + cibles)": une charge colorée satisfaite (glow +
   // orbite) est le rendu le plus reconnaissable de la mécanique.
@@ -976,17 +1200,41 @@ buildFeatureChecklist();
 // detectMechanics, même vocabulaire que les icônes de cartes Communauté et
 // FEATURE_ICON_HTML ci-dessus, réutilisé tel quel pour le schéma: même
 // rendu que partout ailleurs dans le jeu, pas une illustration à part).
-// Volontairement PAS d'entrée pour la règle de base (case numérotée +
-// lumière) : c'est la mécanique fondatrice, apprise dès le niveau 1 par le
-// jeu lui-même — ces modales couvrent seulement ce qui s'AJOUTE par-dessus.
+//
+// "base" (retour utilisateur: "il faut aussi une explication pour le
+// neurone sans couleur") — contrairement aux autres entrées, elle n'est
+// jamais retournée par detectMechanics (case numérotée + lumière, présente
+// dans TOUS les niveaux, pas une mécanique optionnelle détectable au cas par
+// cas) : voir queueNewMechanicSchemas ci-dessous, qui l'ajoute
+// systématiquement à la liste de candidats plutôt que de la dériver du
+// contenu de la grille — seul `seenMechanics` (voir plus bas) garantit
+// qu'elle ne s'affiche qu'une fois, comme les autres.
+//
+// Terminologie (retour utilisateur, round 27 — remplace la convention
+// "lumière"/"neurone" du round précédent, voir git log pour l'historique):
+// "La lumière c'est une impulsion. Les éléments à charge sont des neurones.
+// Il y a donc des neurones colorés, et aussi des neurones miroirs." —
+// ce que le joueur POSE (voir grid.js/toggleLight) s'appelle désormais une
+// "impulsion", jamais une "lumière". Une case à charge numérotée (colorée
+// ou non) est un "neurone" — "neurone coloré" pour la variante qui tire un
+// rayon, "neurone miroir" pour l'obstacle FIXE qui duplique une impulsion
+// (MIRROR_NEURON, un neurone lui aussi dans cette terminologie, bien que
+// distinct des neurones à charge). Comme pour le round précédent, ce
+// renommage reste UNIQUEMENT côté texte/UI : les noms internes (CellType,
+// grid.js, generator.js, `charge`/`light` dans le code) ne sont pas
+// retouchés, seul ce que voit le joueur change.
 const MECHANIC_SCHEMAS = {
+  base: {
+    title: "Impulsion",
+    text: "Clique sur une case vide pour y poser une impulsion. Elle éclaire toute sa ligne et sa colonne jusqu'au premier obstacle, et deux impulsions ne doivent jamais s'éclairer l'une l'autre. Un neurone doit être entouré d'exactement le nombre d'impulsions indiqué.",
+  },
   forbidden: {
     title: "Case interdite",
-    text: "Une case interdite ne peut jamais avoir de lumière juste à côté (en haut, en bas, à gauche ou à droite).",
+    text: "Une case interdite ne peut jamais avoir d'impulsion juste à côté (en haut, en bas, à gauche ou à droite).",
   },
   color: {
     title: "Couleurs",
-    text: "Une charge colorée tire un rayon de sa couleur vers la première lumière rencontrée. Une case cible attend un mélange précis de rouge/vert/bleu pour s'allumer correctement.",
+    text: "Un neurone coloré tire un rayon de sa couleur vers la première impulsion rencontrée. Une case cible attend un mélange précis de rouge/vert/bleu pour s'allumer correctement.",
   },
   mirror: {
     title: "Miroir",
@@ -994,15 +1242,15 @@ const MECHANIC_SCHEMAS = {
   },
   prism: {
     title: "Prisme",
-    text: "Un prisme teinte automatiquement une lumière dans chacune de ses 4 directions, dès qu'il en voit une sur sa ligne ou sa colonne.",
+    text: "Un prisme teinte automatiquement une impulsion dans chacune de ses 4 directions, dès qu'il en voit une sur sa ligne ou sa colonne.",
   },
   pyra: {
     title: "Pyra",
-    text: "Pyra s'active dès qu'il a entre 1 et 3 lumières autour de lui (pas besoin d'un compte exact), et tire un rayon dont la couleur dépend de ce nombre.",
+    text: "Pyra s'active dès qu'il a entre 1 et 3 impulsions autour de lui (pas besoin d'un compte exact), et tire un rayon dont la couleur dépend de ce nombre.",
   },
   mirrorNeuron: {
     title: "Neurone miroir",
-    text: "Un neurone miroir duplique en symétrie toute lumière qui l'éclaire directement.",
+    text: "Un neurone miroir duplique en symétrie toute impulsion qui l'éclaire directement.",
   },
 };
 
@@ -1040,7 +1288,10 @@ function showNextMechanicSchema() {
  * modale — même si le joueur quitte l'écran sans la fermer, elle ne doit
  * jamais réapparaître pour la même mécanique). */
 function queueNewMechanicSchemas(cells) {
-  const found = detectMechanics(cells);
+  // "base" n'est jamais renvoyée par detectMechanics (voir MECHANIC_SCHEMAS
+  // ci-dessus) — ajoutée systématiquement en tête de liste, `seenMechanics`
+  // (juste en dessous) se charge seule de ne la montrer qu'une fois.
+  const found = ["base", ...detectMechanics(cells)];
   const fresh = found.filter((key) => MECHANIC_SCHEMAS[key] && !seenMechanics.has(key));
   if (fresh.length === 0) return;
   for (const key of fresh) seenMechanics.add(key);
@@ -1253,13 +1504,7 @@ const communitySortEl = document.getElementById("community-sort");
 const communityFeedEl = document.getElementById("community-feed");
 const communityEmptyEl = document.getElementById("community-empty");
 const btnCommunityCreate = document.getElementById("btn-community-create");
-const btnCommunityImport = document.getElementById("btn-community-import");
 const btnCommunityProfile = document.getElementById("btn-community-profile");
-
-const communityImportModal = document.getElementById("community-import-modal");
-const communityImportInputEl = document.getElementById("community-import-input");
-const communityImportStatusEl = document.getElementById("community-import-status");
-const btnCommunityImportConfirm = document.getElementById("btn-community-import-confirm");
 
 const communityShareModal = document.getElementById("community-share-modal");
 const communityShareOutputEl = document.getElementById("community-share-output");
@@ -1274,6 +1519,11 @@ const communityLevelAuthorEl = document.getElementById("community-level-author")
 const btnCommunityLike = document.getElementById("btn-community-like");
 
 const profilePseudoTextEl = document.getElementById("profile-pseudo-text");
+// Round 26 (retour utilisateur): #profile-pseudo-text contient maintenant
+// aussi une icône "edit" décorative (voir index.html) — le texte du pseudo
+// doit donc cibler ce label interne, jamais écraser tout le conteneur via
+// .textContent (ce qui supprimerait l'icône au passage).
+const profilePseudoLabelEl = document.getElementById("profile-pseudo-label");
 const profilePseudoEditEl = document.getElementById("profile-pseudo-edit");
 const profilePseudoInput = document.getElementById("profile-pseudo-input");
 const btnProfilePseudoConfirm = document.getElementById("btn-profile-pseudo-confirm");
@@ -1310,6 +1560,10 @@ function avatarUnlocks() {
   return {
     pixelart: isPixelArtUnlocked(),
     storyCompleted: storyProgress.size,
+    // "purchase" (points) et "star" (Défi Quotidien) partagent le MÊME Set
+    // `owned` (voir community-store.js: isAvatarUnlocked, cas "star") — la
+    // monnaie dépensée à l'achat n'a pas besoin d'être distinguée une fois
+    // l'avatar possédé.
     owned: new Set(loadProfile()?.ownedAvatars ?? []),
   };
 }
@@ -1465,19 +1719,38 @@ function buildCommunityCard(level, { showUnpublish = false, onChange } = {}) {
     bottom.appendChild(removeBtn);
   }
 
+  // Retour utilisateur: "les boutons 'Jouer' doivent être plus gros [...]
+  // un bouton-icon Play c'est plus universel [...] il faut qu'il prenne
+  // tout l'espace en hauteur de community-card-byline et
+  // community-card-bottom" — icône seule (même triangle que "Tester" dans
+  // l'éditeur, voir ed-test), plus un vrai bouton texte perdu parmi
+  // like/partager/retirer. Sort du flux vertical top/byline/mechanics/bottom
+  // (voir plus bas: regroupé avec ces 3 dans .community-card-middle, colonne
+  // dédiée qui s'étire sur toute leur hauteur cumulée via align-items:stretch,
+  // voir community.css).
   const playBtn = document.createElement("button");
   playBtn.type = "button";
-  playBtn.className = "community-card-btn";
-  playBtn.textContent = "Jouer";
+  playBtn.className = "community-card-play";
+  playBtn.setAttribute("aria-label", "Jouer");
+  playBtn.title = "Jouer";
+  playBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" class="icon-svg" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>';
   playBtn.addEventListener("click", () => {
     loadCommunityLevel(level);
     pushView("play", { mode: "community" });
   });
-  bottom.appendChild(playBtn);
 
-  card.append(top, byline);
-  if (mechanicsRow.childElementCount > 0) card.appendChild(mechanicsRow);
-  card.appendChild(bottom);
+  const info = document.createElement("div");
+  info.className = "community-card-info";
+  info.appendChild(byline);
+  if (mechanicsRow.childElementCount > 0) info.appendChild(mechanicsRow);
+  info.appendChild(bottom);
+
+  const middle = document.createElement("div");
+  middle.className = "community-card-middle";
+  middle.append(info, playBtn);
+
+  card.append(top, middle);
   return card;
 }
 
@@ -1512,25 +1785,6 @@ communitySortEl.addEventListener("change", () => {
   communitySort = communitySortEl.value;
   renderCommunityFeed();
 });
-
-btnCommunityImport.onclick = () => {
-  communityImportInputEl.value = "";
-  communityImportStatusEl.textContent = "";
-  communityImportModal.classList.remove("hidden");
-};
-document.querySelectorAll("[data-community-import-close]").forEach((el) => {
-  el.onclick = () => communityImportModal.classList.add("hidden");
-});
-btnCommunityImportConfirm.onclick = () => {
-  const { level, error } = decodeShareCode(communityImportInputEl.value);
-  if (error) {
-    communityImportStatusEl.textContent = error;
-    return;
-  }
-  importSharedLevel(level);
-  communityImportModal.classList.add("hidden");
-  renderCommunityFeed();
-};
 
 /** Affiche le code de partage d'UNE de vos grilles (voir community-store.js:
  * encodeShareCode) — jamais pour une grille seed/d'un autre joueur (voir
@@ -1589,6 +1843,16 @@ function loadCommunityLevel(level) {
   startBoard();
 }
 
+/** Charge la grille du Défi Quotidien — même chemin que loadCommunityLevel
+ * ci-dessus (grid/renderer/handleCellClick strictement identiques), voir
+ * dailyChallenge.js pour la génération/le stockage de `level`. */
+function loadDailyChallengeLevel(level) {
+  currentLevelIndex = -1;
+  currentLevel = level;
+  grid = new LightUpGrid(currentLevel);
+  startBoard();
+}
+
 /** Relit toujours l'état depuis community-store.js (jamais mis en cache
  * localement) — un like posé depuis "Mon profil" juste avant, par exemple,
  * doit se refléter ici sans action supplémentaire. */
@@ -1635,20 +1899,28 @@ function refreshProfileAvatarPicker() {
   const unlocks = avatarUnlocks();
   for (const avatar of AVATARS) {
     const unlocked = isAvatarUnlocked(avatar, unlocks);
-    const purchasable = !unlocked && avatar.unlock?.type === "purchase";
+    const purchasable = !unlocked && (avatar.unlock?.type === "purchase" || avatar.unlock?.type === "star");
     const btn = document.createElement("button");
     btn.type = "button";
+    // Retour utilisateur: "les étoiles ont le code couleur jaune et les
+    // points bleu [...] pour déverrouiller des éléments en utilisant des
+    // points, on utilise la couleur bleue" — classe dédiée (voir
+    // profile.css: .purchasable--star) pour que la bordure en pointillés
+    // change de teinte selon la monnaie, pas seulement la pastille de prix.
+    const purchasableClass = purchasable
+      ? " purchasable" + (avatar.unlock.type === "star" ? " purchasable--star" : "")
+      : "";
     btn.className =
       "profile-avatar-btn" +
       (avatar.id === selectedProfileAvatar ? " active" : "") +
-      (unlocked ? "" : purchasable ? " purchasable" : " locked");
+      (unlocked ? "" : purchasable ? purchasableClass : " locked");
     btn.innerHTML = avatar.svg;
     btn.disabled = !unlocked && !purchasable;
     btn.title = unlocked ? avatar.label : `${avatar.label} — ${avatarUnlockLabel(avatar)}`;
     if (purchasable) {
       const price = document.createElement("span");
-      price.className = "profile-avatar-price";
-      price.textContent = String(avatar.unlock.cost);
+      price.className = "profile-avatar-price" + (avatar.unlock.type === "star" ? " profile-avatar-price--star" : "");
+      price.textContent = avatar.unlock.type === "star" ? `★${avatar.unlock.cost}` : String(avatar.unlock.cost);
       btn.appendChild(price);
     }
     if (unlocked) {
@@ -1661,8 +1933,18 @@ function refreshProfileAvatarPicker() {
     } else if (purchasable) {
       btn.addEventListener("click", () => {
         setProfileAvatarPurchaseStatus(null);
-        if (!spendSharedPoints(avatar.unlock.cost)) {
-          setProfileAvatarPurchaseStatus(`Pas assez de points (${avatar.unlock.cost} nécessaires).`, true);
+        // Défi Quotidien (voir community-store.js: unlock.type "star") — même
+        // flux que "purchase" ci-dessous, juste une monnaie différente
+        // (spendStars au lieu de spendSharedPoints, voir storage.js).
+        const isStarUnlock = avatar.unlock.type === "star";
+        const spent = isStarUnlock ? spendStars(avatar.unlock.cost) : spendSharedPoints(avatar.unlock.cost);
+        if (!spent) {
+          setProfileAvatarPurchaseStatus(
+            isStarUnlock
+              ? `Pas assez d'étoiles (${avatar.unlock.cost} nécessaires).`
+              : `Pas assez de points (${avatar.unlock.cost} nécessaires).`,
+            true
+          );
           return;
         }
         const owned = loadProfile()?.ownedAvatars ?? [];
@@ -1673,8 +1955,10 @@ function refreshProfileAvatarPicker() {
         showCosmeticUnlockModal({
           kind: "avatar",
           avatarId: avatar.id,
-          title: `Avatar « ${avatar.label} »`,
-          subtitle: `Débloqué pour ${avatar.unlock.cost} points !`,
+          title: `Badge « ${avatar.label} »`,
+          subtitle: isStarUnlock
+            ? `Débloqué pour ${avatar.unlock.cost} étoiles !`
+            : `Débloqué pour ${avatar.unlock.cost} points !`,
         });
       });
     }
@@ -1695,17 +1979,45 @@ function refreshProfileAvatarPicker() {
  * doit être aussi affiché avec le badge" — utilise désormais buildBadgeFrame
  * (même composant que la byline des cartes Communauté et la prévisualisation
  * "Mon profil") au lieu d'un simple avatar+texte bruts. */
+/** Pastilles étoiles/points affichées dans la bannière du menu titre (retour
+ * utilisateur: "le compte d'étoiles et de points du joueur doit être présent
+ * dans le menu (à l'intérieur de la bannière du joueur)") — lit directement
+ * `infinitePoints` (déjà tenu à jour en mémoire, voir renderPointsEverywhere)
+ * plutôt que de re-solliciter le storage, et `loadStars()` (voir storage.js)
+ * pour les étoiles du Défi Quotidien: pas de variable en mémoire dédiée pour
+ * ces dernières, donc relue à chaque appel comme le reste de cette bannière
+ * (jamais figée sur un total périmé après une victoire). */
+function buildTitleProfileStats() {
+  const wrap = document.createElement("span");
+  wrap.className = "title-profile-stats";
+  const starsEl = document.createElement("span");
+  starsEl.className = "title-profile-stat title-profile-stat--star";
+  starsEl.textContent = `★ ${loadStars()}`;
+  const pointsEl = document.createElement("span");
+  pointsEl.className = "title-profile-stat title-profile-stat--points";
+  pointsEl.textContent = `${infinitePoints} pt`;
+  wrap.append(starsEl, pointsEl);
+  return wrap;
+}
+
 function renderTitleProfileBanner() {
   const profile = loadProfile();
   titleProfileIdentityEl.innerHTML = "";
-  titleProfileIdentityEl.appendChild(
-    buildBadgeFrame(
-      profile?.avatar ?? AVATARS[0].id,
-      profile?.pseudo?.trim() || "Configurer mon profil",
-      profile?.activeBadge,
-      { chevron: true }
-    )
+  const frame = buildBadgeFrame(
+    profile?.avatar ?? AVATARS[0].id,
+    profile?.pseudo?.trim() || "Configurer mon profil",
+    profile?.activeBadge,
+    { chevron: true }
   );
+  // Retour utilisateur: "à l'intérieur de la bannière du joueur" — inséré
+  // DANS le .badge-frame lui-même (juste avant le chevron ">"), pas à côté:
+  // buildBadgeFrame() est partagée avec d'autres contextes (cartes
+  // Communauté, prévisu "Mon profil") qui ne doivent jamais afficher les
+  // stats, donc l'insertion se fait ici plutôt que via un paramètre de
+  // buildBadgeFrame — reste local à CETTE bannière.
+  const chevronEl = frame.querySelector(".badge-frame-chevron");
+  frame.insertBefore(buildTitleProfileStats(), chevronEl);
+  titleProfileIdentityEl.appendChild(frame);
 }
 
 titleProfileBanner.onclick = () => pushView("community-profile");
@@ -1720,7 +2032,16 @@ function refreshProfileBadgePreview() {
   if (!profileBadgePreviewEl) return;
   profileBadgePreviewEl.innerHTML = "";
   const pseudo = profilePseudoInput.value.trim() || "Joueur";
-  profileBadgePreviewEl.appendChild(buildBadgeFrame(selectedProfileAvatar, pseudo, selectedActiveBadge, { framed: true }));
+  const frame = buildBadgeFrame(selectedProfileAvatar, pseudo, selectedActiveBadge, { framed: true });
+  // Retour utilisateur (round 26): "les comptes (points + étoiles) sont
+  // dans la prévisu, pas en dessous, comme dans 'menu'" — inséré DANS le
+  // badge-frame lui-même (dernier enfant, pas de chevron ici pour le
+  // pousser après comme dans renderTitleProfileBanner), même composant que
+  // la bannière du menu titre (voir buildTitleProfileStats), rafraîchi ici
+  // pour rester à jour après un achat d'avatar (qui dépense points OU
+  // étoiles).
+  frame.appendChild(buildTitleProfileStats());
+  profileBadgePreviewEl.appendChild(frame);
 }
 
 /** Petits carrés "teaser" de sélection (retour utilisateur round 19: "moins
@@ -1733,7 +2054,13 @@ function refreshProfileBadgePreview() {
 function refreshProfileBadges() {
   if (!profileSommationBadgesEl) return;
   profileSommationBadgesEl.innerHTML = "";
-  for (const badge of getSommationBadges()) {
+  // Deux lots de badges indépendants affichés dans la MÊME grille (retour
+  // utilisateur: les étoiles "permettront de débloquer [...] des badges") —
+  // voir dailyChallenge.js: STAR_BADGE_DEFS, tiers 6-7 DISJOINTS des tiers
+  // 1-5 de getSommationBadges() (voir badges.css) donc aucun risque de
+  // collision dans activeBadge (juste un numéro de tier, peu importe la
+  // source — voir buildBadgeFrame).
+  for (const badge of [...getSommationBadges(), ...getStarBadges()]) {
     const tile = document.createElement(badge.earned ? "button" : "div");
     if (badge.earned) tile.type = "button";
     tile.className =
@@ -1760,7 +2087,7 @@ function refreshProfileBadges() {
         refreshProfileBadgePreview();
       });
     } else {
-      tile.title = "Badge verrouillé";
+      tile.title = "Bannière verrouillée";
     }
 
     profileSommationBadgesEl.appendChild(tile);
@@ -1778,7 +2105,7 @@ function refreshProfileBadges() {
 function renderCommunityProfile() {
   const profile = loadProfile();
   profilePseudoInput.value = profile?.pseudo ?? "";
-  profilePseudoTextEl.textContent = profile?.pseudo?.trim() || "Configurer mon pseudo";
+  profilePseudoLabelEl.textContent = profile?.pseudo?.trim() || "Configurer mon pseudo";
   exitPseudoEditMode();
 
   const savedAvatarUnlocked =
@@ -1836,7 +2163,7 @@ function commitPseudo() {
     return;
   }
   updateProfile({ pseudo });
-  profilePseudoTextEl.textContent = pseudo;
+  profilePseudoLabelEl.textContent = pseudo;
   exitPseudoEditMode();
   refreshProfileBadgePreview();
 }
@@ -1887,6 +2214,7 @@ function setMode(next) {
     navStaticEl.classList.remove("hidden");
     navInfiniteEl.classList.add("hidden");
     navCommunityEl.classList.add("hidden");
+    navDailyEl.classList.add("hidden");
     btnLevelGrid.classList.remove("hidden");
     btnInfiniteSettings.classList.add("hidden");
     btnInfiniteNext.classList.add("hidden");
@@ -1898,6 +2226,7 @@ function setMode(next) {
     navStaticEl.classList.add("hidden");
     navInfiniteEl.classList.add("hidden");
     navCommunityEl.classList.remove("hidden");
+    navDailyEl.classList.add("hidden");
     btnLevelGrid.classList.add("hidden");
     btnInfiniteSettings.classList.add("hidden");
     btnInfiniteNext.classList.add("hidden");
@@ -1905,10 +2234,26 @@ function setMode(next) {
     playView.classList.remove("hidden");
     return;
   }
+  if (next === "daily") {
+    // Défi Quotidien: une seule grille par jour — ni sélection de niveau
+    // (btnLevelGrid), ni "nouveau niveau" (btnInfiniteNext), ni "aimer"
+    // (réservé aux grilles Communauté).
+    navStaticEl.classList.add("hidden");
+    navInfiniteEl.classList.add("hidden");
+    navCommunityEl.classList.add("hidden");
+    navDailyEl.classList.remove("hidden");
+    btnLevelGrid.classList.add("hidden");
+    btnInfiniteSettings.classList.add("hidden");
+    btnInfiniteNext.classList.add("hidden");
+    btnCommunityLike.classList.add("hidden");
+    playView.classList.remove("hidden");
+    return;
+  }
   // next === "infinite"
   navStaticEl.classList.add("hidden");
   navInfiniteEl.classList.remove("hidden");
   navCommunityEl.classList.add("hidden");
+  navDailyEl.classList.add("hidden");
   btnLevelGrid.classList.add("hidden");
   btnInfiniteSettings.classList.remove("hidden");
   btnInfiniteNext.classList.remove("hidden");
@@ -1938,16 +2283,21 @@ const sommationApi = initSommation({
   // Round 22 (retour utilisateur): "il faudra freeze le jeu lors du
   // déblocage d'un objet cosmétique [...] pareillement pour les badges" —
   // voir showCosmeticUnlockModal() plus bas.
-  onBadgeEarned: (tier, name) =>
+  onBadgeEarned: (tier, name) => {
+    // Sauvegarde cloud best-effort (voir le même appel dans le win handler
+    // ci-dessus) — un badge Remember est un événement de progression au même
+    // titre qu'un niveau terminé.
+    saveProgressToCloud();
     showCosmeticUnlockModal({
       kind: "badge",
       badgeTier: tier,
-      title: name ? `Badge « ${name} »` : "Nouveau badge",
+      title: name ? `Bannière « ${name} »` : "Nouvelle bannière",
       subtitle:
         tier >= PIXELART_BADGE_UNLOCK_TIER
-          ? "Nouveau badge débloqué, et le thème PixelArt avec !"
-          : "Nouveau badge débloqué !",
-    }),
+          ? "Nouvelle bannière débloquée, et le thème PixelArt avec !"
+          : "Nouvelle bannière débloquée !",
+    });
+  },
 });
 
 // ---------- Navigation (pile d'écrans + bouton Retour générique) ----------
@@ -1997,6 +2347,17 @@ function renderActiveScreen() {
  * grille de sélection vide, faute d'avoir jamais appelé renderLevelGrid()
  * sur ce chemin (seul pushView() le faisait auparavant). */
 function showView(name, opts) {
+  // Round 25 (retour utilisateur): bandeau publicitaire affiché EN CONTINU
+  // pendant qu'on joue une grille (Histoire/Infini/Communauté, "play" quel
+  // que soit le sous-mode — voir setMode) OU en Remember ("sommation") —
+  // caché sur tout autre écran (menu, sélection, options, éditeur, fil
+  // Communauté, profil...). Un seul appel ici plutôt que dans chaque
+  // raccourci d'entrée en jeu (enterStoryDirect, enterInfiniteDirect,
+  // enterRememberDirect, loadCommunityLevel...): showView() est LE point de
+  // passage commun à toute navigation (voir pushView/goBack), donc aucun
+  // chemin ne peut l'oublier.
+  if (name === "play" || name === "sommation") showBannerAd();
+  else hideBannerAd();
   // Si `opts.mode` n'est pas fourni (ex: goBack() qui rappelle showView
   // sans opts), on garde le mode DÉJÀ actif plutôt que de retomber sur
   // "story" par défaut — sinon "Retour" depuis les réglages Infini
@@ -2008,7 +2369,10 @@ function showView(name, opts) {
   if (name === "community-profile") renderCommunityProfile();
   if (name === "editor") editorApi.onShow();
   if (name === "sommation") sommationApi.onShow();
-  if (name === "options") renderPixelArtOption();
+  if (name === "options") {
+    renderPixelArtOption();
+    renderPlayGamesSection();
+  }
   // Rafraîchit la carte "Remember" du menu titre (points vs "Terminé") à
   // chaque retour — le déverrouillage de PixelArt peut survenir entre deux
   // passages sans forcément s'accompagner d'un changement de points (voir
@@ -2017,8 +2381,16 @@ function showView(name, opts) {
   if (name === "title") {
     renderPointsEverywhere();
     renderTitleProfileBanner();
+    // Défi Quotidien: revalide la date à CHAQUE retour au menu (retour
+    // utilisateur: "on vérifie que la grille est à jour selon la date") —
+    // couvre le cas où l'app est restée ouverte à cheval sur minuit.
+    renderDailyChallengeButton();
   }
   renderActiveScreen();
+  // alignDailyChallengeFab() mesure le DOM réel (getBoundingClientRect) —
+  // ne peut donner un résultat correct qu'UNE FOIS #view-title démasqué,
+  // donc après renderActiveScreen() ci-dessus, jamais avant.
+  if (name === "title") alignDailyChallengeFab();
 }
 
 /** Empile et affiche un nouvel écran — c'est la navigation "normale" (un
@@ -2092,6 +2464,80 @@ function enterRememberDirect() {
   showView("sommation");
 }
 
+// ---------- Défi Quotidien (bouton flottant du menu titre) ----------
+const btnDailyChallenge = document.getElementById("btn-daily-challenge");
+const dailyChallengeFabBadgeEl = document.getElementById("daily-challenge-fab-badge");
+const gameLogoEl = document.querySelector(".game-logo");
+
+/** Aligne verticalement le bouton flottant sur le logo du menu titre (retour
+ * utilisateur: "doit être au niveau du titre sur l'axe vertical") — mesuré
+ * sur le DOM réel (getBoundingClientRect), même principe que
+ * render.js:measureMetrics(): la hauteur de la bannière profil au-dessus du
+ * logo varie selon le badge actif/la longueur du pseudo, impossible à fixer
+ * une bonne fois pour toutes en CSS pur. Appelée depuis showView() (juste
+ * après que #view-title soit démasqué — AVANT ça, getBoundingClientRect()
+ * renverrait une boîte vide) et sur resize (voir plus bas). Ne fait rien si
+ * l'écran titre n'est pas affiché, pour ne jamais figer `top` sur une mesure
+ * prise pendant que le logo était caché (display:none). */
+function alignDailyChallengeFab() {
+  if (!btnDailyChallenge || !gameLogoEl) return;
+  if (document.getElementById(SCREEN_IDS.title).classList.contains("hidden")) return;
+  const logoRect = gameLogoEl.getBoundingClientRect();
+  const top = logoRect.top + logoRect.height / 2 - btnDailyChallenge.offsetHeight / 2;
+  btnDailyChallenge.style.top = `${Math.max(8, Math.round(top))}px`;
+}
+
+/** Reflète l'état courant sur le bouton flottant — appelée au chargement,
+ * après chaque victoire (voir advanceAfterWin), et à chaque retour au menu
+ * titre (voir showView: name === "title"). Revalide toujours contre la date
+ * courante via isDailyChallengeReady/isDailyChallengeCompleted (voir
+ * dailyChallenge.js), jamais un état mis en cache ici. */
+function renderDailyChallengeButton({ generating = false } = {}) {
+  if (!btnDailyChallenge) return;
+  // Retour utilisateur: "doit disparaître si le défi a été réalisé" — plus
+  // seulement un tooltip "déjà fait" sur un bouton qui restait affiché (voir
+  // git history). display:none (classe .hidden, voir floating-controls.css)
+  // plutôt qu'une simple désactivation: c'est aussi ce qui permet à
+  // l'animation d'entrée du bouton de se REJOUER le jour suivant, quand il
+  // redevient visible (voir .daily-challenge-fab: animation d'entrée
+  // déclenchée par le passage display:none -> visible).
+  const completed = isDailyChallengeCompleted();
+  btnDailyChallenge.classList.toggle("hidden", completed);
+  if (completed) return; // rien d'autre à mettre à jour sur un bouton caché
+  btnDailyChallenge.classList.toggle("generating", generating);
+  const showBadge = !generating && isDailyChallengeReady();
+  dailyChallengeFabBadgeEl.classList.toggle("hidden", !showBadge);
+  dailyChallengeFabBadgeEl.textContent = showBadge ? "!" : "";
+  btnDailyChallenge.title = "Défi Quotidien — grille du jour, +1 étoile";
+}
+
+btnDailyChallenge.onclick = async () => {
+  if (isDailyChallengeCompleted()) {
+    // Rien à rejouer aujourd'hui (retour utilisateur: 1 grille/jour) — le
+    // titre du bouton (voir ci-dessus) explique déjà pourquoi, pas besoin
+    // d'une modale pour un simple clic curieux sur un bouton "fait".
+    return;
+  }
+  let level = getDailyChallengeLevel();
+  if (!level) {
+    renderDailyChallengeButton({ generating: true });
+    level = await ensureTodayChallenge();
+    renderDailyChallengeButton();
+    if (!level) return; // cas limite (voir generateLevel): rien à jouer, réessayer plus tard
+  }
+  viewStack = ["title", "play"];
+  loadDailyChallengeLevel(level);
+  showView("play", { mode: "daily" });
+};
+
+// Amorce la génération dès l'ouverture de l'app (retour utilisateur: "on
+// vérifie que la grille est à jour selon la date") — en arrière-plan,
+// jamais bloquant, pour que le bouton soit déjà prêt le temps que le joueur
+// arrive au menu titre. Sans effet si une grille valide pour aujourd'hui
+// existe déjà (voir ensureTodayChallenge: no-op dans ce cas).
+ensureTodayChallenge().then(() => renderDailyChallengeButton());
+renderDailyChallengeButton();
+
 document.getElementById("menu-story").onclick = enterStoryDirect;
 document.getElementById("menu-infinite").onclick = enterInfiniteDirect;
 document.getElementById("menu-community").onclick = () => pushView("community");
@@ -2101,6 +2547,10 @@ document.getElementById("menu-options").onclick = () => pushView("options");
 renderActiveScreen();
 renderTitleStoryProgress();
 renderTitleProfileBanner();
+// Premier alignement (voir alignDailyChallengeFab ci-dessus): l'app démarre
+// TOUJOURS sur l'écran titre (viewStack initial, voir plus haut), donc
+// #view-title est déjà démasqué à ce stade sans passer par showView().
+alignDailyChallengeFab();
 
 // Raccourci Ctrl+Z / Cmd+Z pour annuler, en jeu comme en Infini (pas en
 // éditeur: on laisse le Ctrl+Z natif du navigateur fonctionner dans les
@@ -2126,7 +2576,14 @@ window.addEventListener("keydown", (e) => {
 let resizeDebounceId = null;
 window.addEventListener("resize", () => {
   clearTimeout(resizeDebounceId);
-  resizeDebounceId = setTimeout(() => renderer.render(), 120);
+  resizeDebounceId = setTimeout(() => {
+    renderer.render();
+    // Même raisonnement que ci-dessus, appliqué au bouton Défi Quotidien
+    // (voir alignDailyChallengeFab): un changement de largeur peut faire
+    // passer le logo à la ligne différemment (mobile étroit) et décaler sa
+    // position verticale — sans effet si l'écran titre n'est pas affiché.
+    alignDailyChallengeFab();
+  }, 120);
 });
 
 // Charge le niveau Histoire courant en mémoire dès le départ (pas encore
@@ -2136,4 +2593,8 @@ window.addEventListener("resize", () => {
 // ce même niveau au clic (redondant mais inoffensif) plutôt que de dupliquer
 // ici la logique de mise en visibilité de setMode.
 setMode("story");
-loadLevel(currentStoryIndex(storyProgress, levels.length));
+// silent:true — voir loadLevel(): ce préchargement tourne pendant que
+// l'écran titre est encore affiché, la modale "schéma" ne doit pas
+// pouvoir s'ouvrir ici (voir showView/enterStoryDirect pour le vrai point
+// de déclenchement, au clic réel sur "Histoire").
+loadLevel(currentStoryIndex(storyProgress, levels.length), { silent: true });

@@ -27,6 +27,7 @@ import {
   getAvatarSvg,
 } from "./game/community-store.js";
 import { loadProfile } from "./game/storage.js";
+import { trackEvent } from "./game/analytics.js";
 
 const STORAGE_KEY = "lightup_custom_levels";
 const MAX_SIZE = 16;
@@ -91,65 +92,6 @@ function levelToCode(level) {
   return `  {\n    name: "${name}",\n    rows: ${level.rows},\n    cols: ${level.cols},\n    cells: [\n${rowsCode}\n    ],\n  },`;
 }
 
-/**
- * Inverse de levelToCode(): évalue le code collé (objet JS littéral, tel que
- * généré par Exporter — pas du JSON strict, d'où l'usage de `Function`
- * plutôt que `JSON.parse`) et le valide. Retourne `{ level }` en cas de
- * succès (avec `note` optionnelle si le collage contenait un tableau de
- * plusieurs niveaux — seul le premier est importé) ou `{ error }` sinon.
- * N'écrit rien dans l'éditeur: c'est à l'appelant de décider quoi faire du
- * résultat (voir le bouton "Charger ce niveau").
- */
-function parseLevelFromCode(rawText) {
-  const text = rawText.trim().replace(/,\s*$/, "");
-  if (!text) return { error: "Rien à importer : colle d'abord le code d'un niveau." };
-
-  let parsed;
-  try {
-    // eslint-disable-next-line no-new-func
-    parsed = new Function(`"use strict"; return (\n${text}\n);`)();
-  } catch (e) {
-    return { error: `Code JS invalide : ${e.message}` };
-  }
-
-  let note = "";
-  if (Array.isArray(parsed)) {
-    if (parsed.length === 0) return { error: "Le tableau collé ne contient aucun niveau." };
-    if (parsed.length > 1) note = ` (${parsed.length} niveaux collés, seul le premier a été importé)`;
-    parsed = parsed[0];
-  }
-
-  if (!parsed || typeof parsed !== "object") {
-    return { error: "Le code collé ne décrit pas un objet de niveau." };
-  }
-  const { name, rows, cols, cells } = parsed;
-  if (typeof name !== "string") return { error: 'Champ "name" manquant ou invalide (doit être une chaîne).' };
-  if (!Number.isInteger(rows) || rows < 1) return { error: 'Champ "rows" manquant ou invalide (entier positif attendu).' };
-  if (!Number.isInteger(cols) || cols < 1) return { error: 'Champ "cols" manquant ou invalide (entier positif attendu).' };
-  if (!Array.isArray(cells) || cells.length !== rows) {
-    return { error: `Champ "cells" invalide : attendu un tableau de ${rows} ligne${rows === 1 ? "" : "s"}, trouvé ${Array.isArray(cells) ? cells.length : "rien"}.` };
-  }
-
-  const tokenRows = cells.map((row) => tokenizeRow(row));
-  for (let r = 0; r < tokenRows.length; r++) {
-    if (tokenRows[r].length !== cols) {
-      return { error: `Ligne ${r + 1} : ${tokenRows[r].length} case${tokenRows[r].length === 1 ? "" : "s"} au lieu de ${cols} attendues.` };
-    }
-  }
-
-  // Valide que chaque token est un code de case reconnu, en construisant
-  // une vraie grille jouable (LightUpGrid lève une erreur explicite sur un
-  // token inconnu — on récupère ce message tel quel plutôt que de
-  // dupliquer la liste des codes valides ici).
-  try {
-    new LightUpGrid({ name, rows, cols, cells: tokenRows.map((tokens) => tokens.join(" ")) });
-  } catch (e) {
-    return { error: `Case invalide dans la grille : ${e.message}` };
-  }
-
-  return { level: { name, rows, cols, cells: tokenRows }, note };
-}
-
 export function initEditor({ levels }) {
   const boardEl = document.getElementById("editor-board");
   // Conteneur dont dépend le layout plein écran mobile (voir style.css:
@@ -202,14 +144,8 @@ export function initEditor({ levels }) {
   const publishTitleInput = document.getElementById("editor-publish-title");
   const publishStatusEl = document.getElementById("editor-publish-status");
   const publishConfirmBtn = document.getElementById("btn-editor-publish-confirm");
-  const importBtn = document.getElementById("ed-import");
-  const importPanel = document.getElementById("ed-import-panel");
-  const importInput = document.getElementById("ed-import-input");
-  const importConfirmBtn = document.getElementById("ed-import-confirm");
-  const importCancelBtn = document.getElementById("ed-import-cancel");
   const levelListSel = document.getElementById("ed-level-list");
   const exportOutput = document.getElementById("ed-export-output");
-  const importStatusEl = document.getElementById("ed-import-status");
 
   const renderer = createBoardRenderer(boardEl);
 
@@ -567,7 +503,9 @@ export function initEditor({ levels }) {
     testLights = new Set();
     setTestMode(false);
     exportOutput.classList.add("hidden");
-    importPanel.classList.add("hidden");
+    // Retour utilisateur: zoom tactile — un vrai changement de niveau dans
+    // l'éditeur réinitialise le zoom/pan (voir render.js: resetZoom).
+    renderer.resetZoom();
     // Round 19 (retour utilisateur): le nom n'est plus obligatoire en
     // général (voir saveBtn) — un niveau chargé sans nom n'est donc plus
     // signalé en erreur par défaut ; l'état d'erreur ne sert plus qu'à
@@ -648,7 +586,6 @@ export function initEditor({ levels }) {
     });
     exportOutput.value = code;
     exportOutput.classList.remove("hidden");
-    importPanel.classList.add("hidden");
     exportOutput.focus();
     exportOutput.select();
     navigator.clipboard?.writeText(code).catch(() => {});
@@ -734,39 +671,8 @@ export function initEditor({ levels }) {
       author: { pseudo, avatar: profile.avatar ?? DEFAULT_AVATAR, badge: profile.activeBadge ?? null },
       difficulty: check.difficulty,
     });
+    trackEvent("community_level_published", { difficulty: check.difficulty ?? null });
     closePublishModal();
-  });
-
-  // Importer: colle le code d'un niveau (typiquement le résultat
-  // d'Exporter, ou une entrée copiée depuis levels.js) et le charge dans
-  // l'éditeur comme point de départ — pas encore sauvegardé : currentCustomIndex
-  // reste à -1 tant que le joueur n'a pas cliqué "Sauvegarder" lui-même,
-  // pour ne jamais écraser silencieusement un niveau existant du même nom.
-  importBtn.addEventListener("click", () => {
-    importPanel.classList.remove("hidden");
-    exportOutput.classList.add("hidden");
-    importInput.value = "";
-    importInput.focus();
-    importStatusEl.textContent = "";
-  });
-
-  importCancelBtn.addEventListener("click", () => {
-    importPanel.classList.add("hidden");
-    importInput.value = "";
-    importStatusEl.textContent = "";
-  });
-
-  importConfirmBtn.addEventListener("click", () => {
-    const { level, note, error } = parseLevelFromCode(importInput.value);
-    if (error) {
-      importStatusEl.textContent = `Import impossible : ${error}`;
-      return;
-    }
-    loadLevelIntoEditor(level, -1);
-    importPanel.classList.add("hidden");
-    importInput.value = "";
-    importStatusEl.textContent = "";
-    if (note) importStatusEl.textContent = note.trim();
   });
 
   levelListSel.addEventListener("change", () => {
