@@ -61,6 +61,7 @@ import { showRewardedAd } from "./game/ads.js";
 // ne fait que sélectionner) — seulement sur la RÉSOLUTION d'un geste
 // (dépôt), voir handleDrop/doDropOnLock/doDropOnObjective plus bas.
 import { hapticLight, hapticWarning, hapticSuccess } from "./game/haptics.js";
+import { trackEvent } from "./game/analytics.js";
 // Sons: un son NEUF, court et étouffé, dédié à la génération (spammable via
 // le bouton "Générer" — voir spawnFromSelected) ; les autres actions
 // réutilisent des sons déjà existants du jeu principal, de façon symbolique
@@ -333,6 +334,27 @@ function saveMeta(meta) {
   } catch {
     // voir storage.js: stockage indisponible, on reste correct en mémoire
   }
+}
+
+/** Exportée pour playGamesServices.js (sauvegarde cloud Google Play Games) —
+ * seul point d'accès en LECTURE à META_KEY depuis l'extérieur de ce module,
+ * pour ne jamais dupliquer la clé localStorage ailleurs (voir en-tête de
+ * fichier: "hors storage.js/KEYS"). Retourne l'objet meta TEL QUEL
+ * (objectivesCompleted/badgesEarned), pas une copie défensive: appelant
+ * lecture-seule (JSON.stringify côté playGamesServices.js). */
+export function exportSommationMeta() {
+  return loadMeta();
+}
+
+/** Symétrique en ÉCRITURE — appelée uniquement lors d'une restauration
+ * depuis le cloud (voir playGamesServices.js: restoreProgressFromCloud).
+ * Valide grossièrement la forme avant d'écraser le local (jamais de throw
+ * sur une donnée cloud malformée), même garde-fou que loadMeta(). */
+export function importSommationMeta(data) {
+  if (!data || typeof data !== "object") return;
+  const badgesEarned = Number.isInteger(data.badgesEarned) ? data.badgesEarned : 0;
+  const objectivesCompleted = Number.isInteger(data.objectivesCompleted) ? data.objectivesCompleted : 0;
+  saveMeta({ badgesEarned, objectivesCompleted });
 }
 
 // ---------- Partie en cours (plateau, verrous, objectif affiché) ----------
@@ -1062,6 +1084,7 @@ export function initSommation(pointsApi) {
         // ci-dessus. `meta.badgesEarned` (pas `objectivesCompleted`) est le
         // tier 1-based, cohérent avec getSommationBadges()/BADGE_DEFS.
         pointsApi.onBadgeEarned?.(meta.badgesEarned, BADGE_DEFS[meta.badgesEarned - 1]?.name);
+        trackEvent("remember_badge_earned", { tier: meta.badgesEarned });
       }
       saveMeta(meta);
       objectiveIndex = (objectiveIndex + 1) % OBJECTIVE_SCRIPT.length;
@@ -1632,6 +1655,7 @@ export function initSommation(pointsApi) {
       const { earned, reason } = await showRewardedAd();
       if (earned) {
         pointsApi.addPoints(AD_WATCH_REWARD);
+        trackEvent("rewarded_ad_completed", { placement: "remember_points" });
         closeAdModal();
         render();
         return;

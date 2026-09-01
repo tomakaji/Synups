@@ -15,6 +15,7 @@
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
+            android:screenOrientation="portrait"
             android:exported="true">
 
             <intent-filter>
@@ -46,6 +47,15 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3940256099942544~3347511713" />
+
+        <!-- Google Play Games Services (voir strings.xml: games_app_id pour
+             le détail du placeholder à remplacer, et playGamesServices.js
+             pour le module JS). Requis par PlayGamesSdk.initialize() —
+             sans ce meta-data, le SDK ne plante pas mais signIn()/saveGame()
+             échouent silencieusement (voir playGamesServices.js). -->
+        <meta-data
+            android:name="com.google.android.gms.games.APP_ID"
+            android:value="@string/games_app_id" />
     </application>
 
     <!-- Permissions -->

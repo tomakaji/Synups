@@ -7,3 +7,6 @@ project(':capacitor-community-admob').projectDir = new File('../node_modules/@ca
 
 include ':capacitor-haptics'
 project(':capacitor-haptics').projectDir = new File('../node_modules/@capacitor/haptics/android')
+
+include ':capacitor-google-game-services'
+project(':capacitor-google-game-services').projectDir = new File('../node_modules/capacitor-google-game-services/android')

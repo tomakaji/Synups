@@ -4,4 +4,17 @@
     <string name="title_activity_main">Synups</string>
     <string name="package_name">com.synups.game</string>
     <string name="custom_url_scheme">com.synups.game</string>
+    <!-- Round Google Play Games Services (retour utilisateur: "sauvegarde
+         de la progression [...] à travers l'auth [...] offerte par
+         GooglePlay") — PLACEHOLDER, l'app ne peut pas fonctionner avec cet
+         ID: aucun ID de test public n'existe pour Play Games (contrairement
+         à AdMob, voir ads.js: APP_ID). À remplacer par le VRAI "Application
+         ID" une fois le jeu créé dans la Play Console (Play Games Services
+         > Configuration > Vos jeux Play > Identifiants > ID de
+         l'application), voir aussi playGamesServices.js pour le reste de la
+         config (OAuth client ID web + SHA-1 de signature à déclarer côté
+         Play Console). Tant que ce placeholder reste en place, signIn()
+         échoue silencieusement (voir playGamesServices.js: jamais de throw),
+         le reste du jeu fonctionne normalement. -->
+    <string name="games_app_id" translatable="false">000000000000</string>
 </resources>
