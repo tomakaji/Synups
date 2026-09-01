@@ -95,8 +95,45 @@
   gap: 14px;
 }
 
+/* Round 23 (retour utilisateur: "les modals 'regarder une pub' n'affichent
+   pas de bouton 'annuler' mais une croix en haut à droite [...] +
+   possibilité de fermer en cliquant simplement en dehors") — le clic en
+   dehors fonctionne déjà via .modal-backdrop (data-*-modal-close, voir
+   index.html), cette croix est le seul ajout. Utilisée pour l'instant sur
+   #hint-modal et #som-ad-modal uniquement — les autres modales (ex.
+   confirmation "réinitialiser") gardent leurs deux boutons Annuler/Confirmer
+   explicites, un vrai choix binaire plutôt qu'une simple offre à décliner. */
+.modal-close-x {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.modal-close-x:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.modal-close-x .icon-svg {
+  width: 16px;
+  height: 16px;
+}
+
 .modal-title {
   margin: 0;
+  padding-right: 24px;
   font-size: 1.05rem;
   color: var(--text);
 }
@@ -118,6 +155,130 @@
   text-align: center;
   align-items: center;
   padding: 12px 14px;
+}
+
+/* Round 21 (migration Capacitor/AdMob): feedback texte sous le bouton
+   "Regarder la pub" de #hint-modal — voir main.js: btnHintWatchAd.onclick.
+   Même principe que .som-ad-status (sommation.css): neutre pendant le
+   chargement, teinté --error si la pub a échoué/été fermée sans récompense,
+   jamais affiché en cas de succès (la modale se ferme directement). */
+.hint-ad-status {
+  margin: -6px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.hint-ad-status.hidden {
+  display: none;
+}
+
+.hint-ad-status--error {
+  color: var(--error);
+}
+
+/* ---------- Modale "cosmétique débloqué" (round 22) ----------
+   Voir index.html: #cosmetic-unlock-modal, main.js: showCosmeticUnlockModal.
+   Même mécanisme .modal/.modal-card que les modales ci-dessus (fond
+   semi-transparent sombre déjà fourni par .modal-backdrop) — seule la
+   mise en page interne (centrée) et l'animation de révélation sont
+   spécifiques ici. */
+.cosmetic-unlock-card {
+  align-items: center;
+  text-align: center;
+}
+
+.cosmetic-unlock-kicker {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.cosmetic-unlock-title,
+.cosmetic-unlock-text {
+  text-align: center;
+}
+
+.cosmetic-unlock-reveal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 0 4px;
+  animation: cosmetic-unlock-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.cosmetic-unlock-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(110, 231, 255, 0.18), transparent 70%);
+  box-shadow:
+    0 0 0 2px rgba(110, 231, 255, 0.4),
+    0 0 40px -6px rgba(110, 231, 255, 0.6);
+}
+
+.cosmetic-unlock-avatar svg {
+  width: 64px;
+  height: 64px;
+}
+
+.cosmetic-unlock-badge {
+  width: 110px;
+  height: 110px;
+  border-radius: 16px;
+}
+
+@keyframes cosmetic-unlock-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ---------- Modale "schéma" pédagogique (mode Histoire, round 23) ----------
+   Voir index.html: #mechanic-schema-modal, main.js: showNextMechanicSchema.
+   Même mécanisme .modal/.modal-card que les modales ci-dessus. */
+.mechanic-schema-card {
+  align-items: center;
+  text-align: center;
+}
+
+.mechanic-schema-kicker {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* `.cell.cell--empty` (voir board.css) donne déjà le fond/bordure/rayon
+   IDENTIQUES à une case du plateau — cette classe agrandit juste la taille
+   pour la mise en avant dans la modale (l'icône elle-même vient de
+   FEATURE_ICON_HTML, voir main.js, donc rigoureusement la même qu'ailleurs
+   dans le jeu). Ni cliquable ni interactive: pas de cursor/hover. */
+.mechanic-schema-icon {
+  width: 84px;
+  height: 84px;
+  cursor: default;
+}
+
+.mechanic-schema-title,
+.mechanic-schema-text {
+  text-align: center;
 }
 
 /* Texte de partage (codes SYN1-…) dans les modales Publier/Importer/

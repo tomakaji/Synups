@@ -88,6 +88,56 @@
   border-radius: 7px;
 }
 
+/* Round 22 (retour utilisateur): "ces quatre derniers avatars se débloquent
+   en les achetant avec des points en cliquant dessus" — se distingue de
+   .locked ci-dessus: PAS un cadenas (rien n'empêche le clic), reste
+   pleinement opaque/cliquable, juste un contour en pointillés + le prix en
+   pastille (voir refreshProfileAvatarPicker: unlock.type === "purchase" ET
+   pas encore possédé). Le clic tente l'achat plutôt que de sélectionner
+   l'avatar directement — voir main.js. */
+.profile-avatar-btn.purchasable {
+  position: relative;
+  cursor: pointer;
+  border-style: dashed;
+  border-color: rgba(232, 181, 99, 0.55);
+}
+
+.profile-avatar-btn.purchasable:hover {
+  border-color: #e8b563;
+  background: rgba(232, 181, 99, 0.1);
+}
+
+.profile-avatar-price {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  min-width: 20px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: #e8b563;
+  color: #241a08;
+  font-size: 0.52rem;
+  font-weight: 800;
+  line-height: 1.4;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+.profile-avatar-purchase-status {
+  margin: -8px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.profile-avatar-purchase-status.hidden {
+  display: none;
+}
+
+.profile-avatar-purchase-status--error {
+  color: var(--error);
+}
+
 /* Round 19 (retour utilisateur): "le pseudo devient un texte simple
    cliquable [...] passe en mode édition [...] bouton coche pour valider" —
    deux états mutuellement exclusifs (voir main.js: enterPseudoEditMode /

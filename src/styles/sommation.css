@@ -104,14 +104,22 @@
    dessus de la barre de progression, il faut teaser le joueur en affichant
    la prochaine récompense à débloquer". Masqué (voir sommation.js: render())
    au-delà du 5e palier, une fois qu'il n'y a plus rien de nouveau à annoncer
-   — la barre continue de tourner mais on ne promet pas un contenu inexistant. */
+   — la barre continue de tourner mais on ne promet pas un contenu inexistant.
+   Round 23 (retour utilisateur: "on n'affiche que la prévisu de la
+   récompense, on ne l'écrit pas (prévisu du badge carrée comme dans
+   'profil')") — plus une phrase, un simple conteneur centré pour la tuile
+   .badge-teaser posée par sommation.js: render() (même composant que "Mon
+   profil", taille fixe ici puisqu'il n'y a qu'une seule tuile, pas une
+   grille — voir badges.css: .badge-teaser porte déjà son propre
+   aspect-ratio 1, seule la largeur doit être fixée). */
 .som-next-reward-teaser {
-  display: block;
-  margin-bottom: 4px;
-  font-size: 0.66rem;
-  letter-spacing: 0.02em;
-  color: var(--text-dim);
-  text-align: center;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+.som-next-reward-teaser .badge-teaser {
+  width: 56px;
 }
 
 .som-next-reward-teaser.hidden {

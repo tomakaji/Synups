@@ -62,68 +62,86 @@ const KEYS = {
  *
  * Round 19 (retour utilisateur): "on supprime tous les avatars sauf ceux
  * qui sont en lien avec le jeu [...] pas juste des sortes d'émoticones" —
- * remplace les emojis génériques par 9 icônes SVG dérivées du langage
+ * remplace les emojis génériques par des icônes SVG dérivées du langage
  * visuel du plateau (mêmes formes/couleurs que game/render.js, mais
  * redessinées en statique: un avatar n'a pas d'état de cellule vivant à
  * refléter) + "retro", un sprite façon envahisseur 8-bit dans le vert CRT du
- * thème PixelArt, verrouillé jusqu'à cette même récompense.
+ * thème PixelArt.
+ *
+ * Round 22 (retour utilisateur): l'avatar "Filtre" (mécanique jamais
+ * implémentée, voir generator.js: FEATURES) est retiré — plus que 9 avatars.
+ * ORDRE = ordre de déblocage (retour utilisateur: "ordre d'affichage dans le
+ * profil à changer") :
+ *   1. neuron  — par défaut, débloqué dès le premier profil.
+ *   2-4. charge/synapse/mirror — mode Histoire, tous les 10 niveaux
+ *        (10/20/30 sur 32 niveaux au total, voir levels.js).
+ *   5-8. wall/target/pyra/prism — achetables avec les points partagés
+ *        (Infini/Remember), prix croissant 100/200/400/1000 — "Mur avant
+ *        Cible [...] Pyra avant le prisme [...] le prisme en avant-dernier"
+ *        (dernier = retro, ci-dessous, déblocage à part).
+ *   9. retro — 5e/dernière récompense de Remember (inchangé, voir
+ *        sommation.js: isPixelArtUnlocked).
  *
  * `svg` (pas `emoji`) est la donnée persistée: `profile.avatar` et
  * `author.avatar` stockent désormais l'ID (ex: "neuron"), jamais le SVG
  * lui-même — voir getAvatarSvg ci-dessous pour la résolution à l'affichage.
- * `locked` porte une clé de déblocage optionnelle, résolue par l'appelant
- * (voir isAvatarUnlocked ci-dessous) plutôt que ce module ne connaisse la
- * progression du jeu. */
+ * `unlock` décrit COMMENT il se débloque (résolu par l'appelant, voir
+ * isAvatarUnlocked/avatarUnlockLabel ci-dessous) — ce module ne sait rien de
+ * la progression du jeu lui-même, uniquement de la liste et de son type de
+ * déblocage. */
 export const AVATARS = [
   {
     id: "neuron",
     label: "Neurone",
+    unlock: { type: "default" },
     svg: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="24" fill="none" stroke="#0a0c10" stroke-width="14"/><circle cx="50" cy="50" r="24" fill="none" stroke="#6ee7ff" stroke-width="8"/></svg>',
   },
   {
     id: "charge",
     label: "Charge",
+    unlock: { type: "story", level: 10 },
     svg: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="15" fill="#3a8fa0"/><circle cx="26" cy="26" r="7" fill="#8fd9e8"/><circle cx="74" cy="26" r="7" fill="#8fd9e8"/><circle cx="26" cy="74" r="7" fill="#8fd9e8"/><circle cx="74" cy="74" r="7" fill="#8fd9e8"/></svg>',
   },
   {
     id: "synapse",
     label: "Synapse",
+    unlock: { type: "story", level: 20 },
     svg: '<svg viewBox="0 0 100 100"><line x1="30" y1="30" x2="70" y2="70" stroke="#7a6fd0" stroke-width="8"/><circle cx="30" cy="30" r="15" fill="#7a6fd0"/><circle cx="70" cy="70" r="15" fill="#9a90e0"/></svg>',
   },
   {
     id: "mirror",
     label: "Miroir",
+    unlock: { type: "story", level: 30 },
     svg: '<svg viewBox="0 0 100 100"><line x1="18" y1="82" x2="82" y2="18" stroke="#4a5468" stroke-width="16" stroke-linecap="round"/><line x1="18" y1="82" x2="82" y2="18" stroke="#9fb4d8" stroke-width="6" stroke-linecap="round"/></svg>',
-  },
-  {
-    id: "prism",
-    label: "Prisme",
-    svg: '<svg viewBox="0 0 100 100"><polygon points="50,50 92,50 50,8" fill="#ff5d6c"/><polygon points="50,50 50,8 8,50" fill="#f4d35e"/><polygon points="50,50 8,50 50,92" fill="#59c9e3"/><polygon points="50,50 50,92 92,50" fill="#59e39d"/></svg>',
-  },
-  {
-    id: "pyra",
-    label: "Pyra",
-    svg: '<svg viewBox="0 0 100 100"><polygon points="50,15 85,80 15,80" fill="none" stroke="#4a5468" stroke-width="6"/><circle cx="50" cy="15" r="7" fill="#ff5d6c"/><circle cx="85" cy="80" r="7" fill="#59e39d"/><circle cx="15" cy="80" r="7" fill="#5da9ff"/></svg>',
-  },
-  {
-    id: "filter",
-    label: "Filtre",
-    svg: '<svg viewBox="0 0 100 100"><path d="M15,25 85,25 60,50 60,80 40,80 40,50 Z" fill="#59c9e3" fill-opacity="0.3" stroke="#59c9e3" stroke-width="5"/></svg>',
-  },
-  {
-    id: "target",
-    label: "Cible",
-    svg: '<svg viewBox="0 0 100 100"><path d="M16,30 V16 H30 M70,16 H84 V30 M84,70 V84 H70 M30,84 H16 V70" fill="none" stroke="#e8b563" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="50" cy="50" r="6" fill="#e8b563"/></svg>',
   },
   {
     id: "wall",
     label: "Mur",
+    unlock: { type: "purchase", cost: 100 },
     svg: '<svg viewBox="0 0 100 100"><rect x="14" y="14" width="72" height="72" rx="6" fill="none" stroke="#4a5468" stroke-width="5"/><path d="M14,42 L42,14 M14,66 L66,14 M14,90 L90,14 M38,90 L90,38 M62,90 L90,62" stroke="#4a5468" stroke-width="5"/></svg>',
+  },
+  {
+    id: "target",
+    label: "Cible",
+    unlock: { type: "purchase", cost: 200 },
+    svg: '<svg viewBox="0 0 100 100"><path d="M16,30 V16 H30 M70,16 H84 V30 M84,70 V84 H70 M30,84 H16 V70" fill="none" stroke="#e8b563" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="50" cy="50" r="6" fill="#e8b563"/></svg>',
+  },
+  {
+    id: "pyra",
+    label: "Pyra",
+    unlock: { type: "purchase", cost: 400 },
+    svg: '<svg viewBox="0 0 100 100"><polygon points="50,15 85,80 15,80" fill="none" stroke="#4a5468" stroke-width="6"/><circle cx="50" cy="15" r="7" fill="#ff5d6c"/><circle cx="85" cy="80" r="7" fill="#59e39d"/><circle cx="15" cy="80" r="7" fill="#5da9ff"/></svg>',
+  },
+  {
+    id: "prism",
+    label: "Prisme",
+    unlock: { type: "purchase", cost: 1000 },
+    svg: '<svg viewBox="0 0 100 100"><polygon points="50,50 92,50 50,8" fill="#ff5d6c"/><polygon points="50,50 50,8 8,50" fill="#f4d35e"/><polygon points="50,50 8,50 50,92" fill="#59c9e3"/><polygon points="50,50 50,92 92,50" fill="#59e39d"/></svg>',
   },
   {
     id: "retro",
     label: "Rétro",
-    locked: "pixelart",
+    unlock: { type: "pixelart" },
     svg: '<svg viewBox="0 0 100 100" shape-rendering="crispEdges"><g fill="#39ff14"><rect x="30" y="15" width="10" height="10"/><rect x="60" y="15" width="10" height="10"/><rect x="20" y="25" width="10" height="10"/><rect x="30" y="25" width="40" height="10"/><rect x="70" y="25" width="10" height="10"/><rect x="15" y="35" width="70" height="10"/><rect x="15" y="45" width="10" height="10"/><rect x="30" y="45" width="10" height="10"/><rect x="40" y="45" width="20" height="10"/><rect x="60" y="45" width="10" height="10"/><rect x="75" y="45" width="10" height="10"/><rect x="15" y="55" width="70" height="10"/><rect x="25" y="65" width="10" height="10"/><rect x="65" y="65" width="10" height="10"/></g></svg>',
   },
 ];
@@ -131,7 +149,8 @@ export const AVATARS = [
 /** Rétrocompatibilité (profils déjà enregistrés avec un avatar par défaut) :
  * le premier avatar de la liste sert de repli si l'avatar sauvegardé n'existe
  * plus / n'est plus valide — notamment les anciens profils qui stockaient un
- * emoji brut (round 18 et avant), qui ne correspond plus à aucun ID ici. */
+ * emoji brut (round 18 et avant), ou l'ancien avatar "Filtre" (retiré round
+ * 22), qui ne correspondent plus à aucun ID ici. */
 export const DEFAULT_AVATAR = AVATARS[0].id;
 
 /** Résout un ID d'avatar (voir profile.avatar/author.avatar) en markup SVG à
@@ -142,12 +161,42 @@ export function getAvatarSvg(id) {
   return (AVATARS.find((a) => a.id === id) || AVATARS[0]).svg;
 }
 
-/** true si `avatar` (une entrée de AVATARS) est déverrouillé. `unlocks` est
- * un sac de clés->booléen fourni par l'appelant (voir main.js/editor.js:
- * { pixelart: isPixelArtUnlocked() }) — ce module ne sait rien de la
- * progression du jeu lui-même, uniquement de la liste et de ses clés. */
-export function isAvatarUnlocked(avatar, unlocks = {}) {
-  return !avatar.locked || !!unlocks[avatar.locked];
+/** true si `avatar` (une entrée de AVATARS) est déverrouillé. `state` est
+ * fourni par l'appelant (voir main.js: avatarUnlocks()) et ne dépend QUE du
+ * type de déblocage de l'avatar — ce module ne sait rien de la progression
+ * du jeu lui-même :
+ *   - "default": toujours vrai.
+ *   - "story": `state.storyCompleted` (niveaux Histoire complétés) >= `level`.
+ *   - "purchase": `state.owned` (Set d'ids achetés, voir profile.ownedAvatars)
+ *     contient cet avatar.
+ *   - "pixelart": `state.pixelart` (voir sommation.js: isPixelArtUnlocked). */
+export function isAvatarUnlocked(avatar, state = {}) {
+  switch (avatar.unlock?.type) {
+    case "story":
+      return (state.storyCompleted ?? 0) >= avatar.unlock.level;
+    case "purchase":
+      return !!state.owned?.has(avatar.id);
+    case "pixelart":
+      return !!state.pixelart;
+    default:
+      return true;
+  }
+}
+
+/** Texte d'indice affiché sur un avatar verrouillé (voir main.js:
+ * refreshProfileAvatarPicker) — décrit COMMENT le débloquer, jamais un
+ * simple "verrouillé" muet. */
+export function avatarUnlockLabel(avatar) {
+  switch (avatar.unlock?.type) {
+    case "story":
+      return `Débloqué au niveau ${avatar.unlock.level} de l'Histoire`;
+    case "purchase":
+      return `S'achète ${avatar.unlock.cost} points`;
+    case "pixelart":
+      return "Débloqué à la 5e récompense de Remember";
+    default:
+      return "Verrouillé";
+  }
 }
 
 function readJson(key, fallback) {
@@ -335,7 +384,6 @@ export function detectMechanics(cells) {
       else if (token === "/" || token === "\\") found.add("mirror");
       else if (token === "Y") found.add("pyra");
       else if (token === "M") found.add("mirrorNeuron");
-      else if (/^F/.test(token)) found.add("filter");
       else if (/^P/.test(token)) found.add("prism");
       else if (/^\d/.test(token) && token.length > 1) found.add("color"); // charge colorée, ex "2r"
       else if (/^[rgbycmw]$/.test(token)) found.add("color"); // case-cible couleur

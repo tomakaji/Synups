@@ -15,6 +15,7 @@ const KEYS = {
   points: "lightup-infinite-points", // clé pré-existante (main.js) — conservée telle quelle pour ne pas perdre le total déjà gagné par les joueurs actuels
   progress: "lightup-story-progress",
   settings: "lightup-settings",
+  seenMechanics: "lightup-seen-mechanics",
 };
 
 function readJson(key, fallback) {
@@ -72,6 +73,23 @@ export function loadStoryProgress() {
 
 export function saveStoryProgress(completedSet) {
   writeJson(KEYS.progress, { completed: Array.from(completedSet) });
+}
+
+// ---------- Mécaniques déjà expliquées (mode Histoire) ----------
+// Round 23 (retour utilisateur: "on pourrait essayer d'intégrer des
+// 'schéma' qui expliquent les mécaniques de façon très simplifiée à chaque
+// nouveau composant ajouté") — un Set d'IDs de mécaniques (voir
+// community-store.js: detectMechanics, même vocabulaire que les icônes de
+// cartes Communauté) déjà montrées au joueur AU MOINS une fois, pour
+// n'afficher la modale explicative qu'à la toute première rencontre — même
+// forme de stockage que loadStoryProgress/saveStoryProgress ci-dessus.
+export function loadSeenMechanics() {
+  const data = readJson(KEYS.seenMechanics, { seen: [] });
+  return new Set(Array.isArray(data.seen) ? data.seen : []);
+}
+
+export function saveSeenMechanics(seenSet) {
+  writeJson(KEYS.seenMechanics, { seen: Array.from(seenSet) });
 }
 
 /** Nombre de niveaux accessibles (1 à `total`) : les niveaux complétés, EN
@@ -147,6 +165,15 @@ export function eraseAllProgress() {
   }
   try {
     localStorage.removeItem(KEYS.progress);
+  } catch {
+    // voir writeJson
+  }
+  // Round 23: les modales pédagogiques (voir loadSeenMechanics ci-dessus)
+  // redeviennent pertinentes à la même occasion que la progression Histoire
+  // elle-même — sans ce retrait, un joueur qui recommence les reverrait
+  // jamais, alors qu'il "redécouvre" chaque mécanique depuis le niveau 1.
+  try {
+    localStorage.removeItem(KEYS.seenMechanics);
   } catch {
     // voir writeJson
   }

@@ -42,11 +42,12 @@
 // active (plus de tap-déblocage, voir doDropOnLock).
 import { hexFor, colorFor } from "./game/colors.js";
 // Bouton "Mon profil" de l'écran "terminé" (voir onShow ci-dessous, round
-// 19) — réutilise directement loadProfile/getAvatarSvg, exactement comme la
-// bannière équivalente du menu titre (voir main.js: renderTitleProfileBanner),
-// plutôt que de faire remonter cette logique d'affichage à main.js.
+// 19) — réutilise loadProfile + pointsApi.buildBadgeFrame (round 22, voir
+// JSDoc d'initSommation), exactement comme la bannière équivalente du menu
+// titre (voir main.js: renderTitleProfileBanner), plutôt que de faire
+// remonter cette logique d'affichage à main.js.
 import { loadProfile } from "./game/storage.js";
-import { getAvatarSvg, DEFAULT_AVATAR } from "./game/community-store.js";
+import { DEFAULT_AVATAR } from "./game/community-store.js";
 // Rewarded ad (round 20, migration Capacitor/AdMob) — voir game/ads.js pour
 // le détail (no-op propre hors app native, ne résout QUE sur confirmation
 // du SDK que la récompense a été gagnée). adWatchBtn.onclick plus bas est le
@@ -274,15 +275,21 @@ export function getSommationBadges() {
  * à débloquer". `badgesEarned` récompenses déjà décrochées -> la prochaine
  * est BADGE_DEFS[badgesEarned] (index 0-based) tant qu'il en reste, sinon
  * plus rien de nouveau ne sera annoncé (barre toujours active au-delà, voir
- * plus haut, mais honnête: on ne tease pas un contenu qui n'existe pas). Le
- * tout dernier palier (Rétro) tombe pile au même moment que le thème
- * PixelArt (BADGE_DEFS.length === PIXELART_BADGE_TIER, voir plus haut) —
- * les deux sont donc teasés ensemble plutôt que l'un après l'autre. */
-function nextRewardLabel(badgesEarned) {
+ * plus haut, mais honnête: on ne tease pas un contenu qui n'existe pas).
+ *
+ * Round 23 (retour utilisateur: "on n'affiche que la prévisu de la
+ * récompense, on ne l'écrit pas (prévisu du badge carrée comme dans
+ * 'profil')") — retourne désormais le TIER (1-based) plutôt qu'une phrase
+ * toute faite: l'appelant (render() plus bas) construit la même tuile
+ * carrée `.badge-teaser` que "Mon profil" (voir main.js:
+ * refreshProfileBadges), le nom du badge restant lisible DANS la tuile
+ * (`.badge-teaser-name`) sans phrase supplémentaire à côté. Le tout dernier
+ * palier (Rétro) tombe pile au même moment que le thème PixelArt
+ * (BADGE_DEFS.length === PIXELART_BADGE_TIER, voir plus haut) — signalé en
+ * infobulle (title) plutôt qu'écrit, pour ne pas réintroduire de texte. */
+function nextRewardTier(badgesEarned) {
   if (badgesEarned >= BADGE_DEFS.length) return null;
-  const label = `bannière « ${BADGE_DEFS[badgesEarned].name} »`;
-  if (badgesEarned + 1 === PIXELART_BADGE_TIER) return `${label} (et le thème PixelArt)`;
-  return label;
+  return badgesEarned + 1;
 }
 
 /** 5e et dernière récompense du jeu — retour utilisateur: "la 5eme et
@@ -595,6 +602,12 @@ const UNLOCK_COLORS = ["r", "g", "b", "w"];
  * naviguer vers "Mon profil" depuis l'écran "terminé" — même pattern
  * d'injection que getPoints/spendPoints/addPoints, pour ne jamais faire
  * dépendre ce module du routeur de main.js directement.
+ * `pointsApi.onBadgeEarned` (round 22, retour utilisateur: "il faudra freeze
+ * le jeu lors du déblocage d'un objet cosmétique [...] pareillement pour les
+ * badges"): callback `(tier, name) => void` appelé juste après qu'un nouveau
+ * badge soit décroché (voir doDropOnObjective ci-dessous) — main.js s'en sert
+ * pour déclencher la modale de révélation, ce module ne sait rien de cette
+ * modale (même pattern d'injection que goToProfile).
  */
 export function initSommation(pointsApi) {
   const gridEl = document.getElementById("sommation-grid");
@@ -631,8 +644,7 @@ export function initSommation(pointsApi) {
   // Lien "Mon profil" de l'écran "terminé" (round 19, retour utilisateur) —
   // voir onShow() plus bas pour le remplissage avatar/pseudo.
   const doneProfileLinkEl = document.getElementById("som-done-profile-link");
-  const doneProfileAvatarEl = document.getElementById("som-done-profile-avatar");
-  const doneProfilePseudoEl = document.getElementById("som-done-profile-pseudo");
+  const doneProfileIdentityEl = document.getElementById("som-done-profile-identity");
   if (doneProfileLinkEl) doneProfileLinkEl.onclick = () => pointsApi.goToProfile?.();
 
   // Partie en cours: restaurée depuis le disque si une sauvegarde valide
@@ -1035,6 +1047,11 @@ export function initSommation(pointsApi) {
       // OBJECTIVES_PER_BADGE ci-dessus).
       if (meta.objectivesCompleted % OBJECTIVES_PER_BADGE === 0) {
         meta.badgesEarned += 1;
+        // Round 22: notifie main.js pour la modale de révélation "cosmétique
+        // débloqué" — voir pointsApi.onBadgeEarned dans le JSDoc d'initSommation
+        // ci-dessus. `meta.badgesEarned` (pas `objectivesCompleted`) est le
+        // tier 1-based, cohérent avec getSommationBadges()/BADGE_DEFS.
+        pointsApi.onBadgeEarned?.(meta.badgesEarned, BADGE_DEFS[meta.badgesEarned - 1]?.name);
       }
       saveMeta(meta);
       objectiveIndex = (objectiveIndex + 1) % OBJECTIVE_SCRIPT.length;
@@ -1522,9 +1539,29 @@ export function initSommation(pointsApi) {
     }
 
     if (nextRewardTeaserEl) {
-      const label = nextRewardLabel(meta.badgesEarned);
-      nextRewardTeaserEl.textContent = label ? `Prochaine récompense : ${label}` : "";
-      nextRewardTeaserEl.classList.toggle("hidden", !label);
+      const tier = nextRewardTier(meta.badgesEarned);
+      nextRewardTeaserEl.innerHTML = "";
+      nextRewardTeaserEl.classList.toggle("hidden", !tier);
+      if (tier) {
+        // Même tuile carrée que "Mon profil" (voir main.js:
+        // refreshProfileBadges) — un badge PAS ENCORE décroché, donc jamais
+        // cliquable (div, pas button) ni marqué "earned": la déco/le nom
+        // restent visibles (c'est le TEASER), seul le style "locked"
+        // (grisé) est volontairement omis pour ne pas dévaloriser l'aperçu.
+        const def = BADGE_DEFS[tier - 1];
+        const tile = document.createElement("div");
+        tile.className = `badge-teaser badge-teaser--tier-${tier} earned`;
+        tile.title = tier === PIXELART_BADGE_TIER ? `${def.name} (et le thème PixelArt)` : def.name;
+        const deco = document.createElement("span");
+        deco.className = "badge-teaser-deco";
+        deco.setAttribute("aria-hidden", "true");
+        tile.appendChild(deco);
+        const nameEl = document.createElement("span");
+        nameEl.className = "badge-teaser-name";
+        nameEl.textContent = def.name;
+        tile.appendChild(nameEl);
+        nextRewardTeaserEl.appendChild(tile);
+      }
     }
 
     if (selectedGen && board[selectedGen.r]?.[selectedGen.c]?.type === "gen") {
@@ -1621,9 +1658,22 @@ export function initSommation(pointsApi) {
       actionsEl?.classList.toggle("hidden", done);
       if (done) {
         const profile = loadProfile();
-        if (doneProfileAvatarEl) doneProfileAvatarEl.innerHTML = getAvatarSvg(profile?.avatar ?? DEFAULT_AVATAR);
-        if (doneProfilePseudoEl) {
-          doneProfilePseudoEl.textContent = profile?.pseudo?.trim() || "Configurer mon profil";
+        // Round 22 (retour utilisateur): "l'avatar+pseudo dans le menu (en
+        // haut) doit être aussi affiché avec le badge" — même bannière que
+        // le titre (voir main.js: renderTitleProfileBanner), donc même
+        // composant buildBadgeFrame plutôt qu'un avatar+texte bruts. Fourni
+        // via pointsApi (comme goToProfile/onBadgeEarned ci-dessus) pour ne
+        // pas faire dépendre ce module de main.js directement.
+        if (doneProfileIdentityEl && pointsApi.buildBadgeFrame) {
+          doneProfileIdentityEl.innerHTML = "";
+          doneProfileIdentityEl.appendChild(
+            pointsApi.buildBadgeFrame(
+              profile?.avatar ?? DEFAULT_AVATAR,
+              profile?.pseudo?.trim() || "Configurer mon profil",
+              profile?.activeBadge,
+              { chevron: true }
+            )
+          );
         }
         return;
       }

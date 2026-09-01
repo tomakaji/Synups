@@ -10,56 +10,59 @@
    utilisateur) — premier enfant de .screen--title, donc au sommet du bloc
    centré verticalement, juste au-dessus du logo. Un margin-bottom dédié
    (plutôt que le gap de 8px de .screen--title, trop serré ici) la détache
-   nettement du logo en dessous. Langage visuel proche de .menu-card (même
-   fond/bordure/rayon) mais en une seule ligne compacte, cohérent avec
-   .badge-frame pour l'identité avatar+pseudo. */
+   nettement du logo en dessous.
+   Round 23 (retour utilisateur: "le badge/avatar/nom dans le menu [...] au
+   niveau visuel ça fait bizarre [...] le badge lui-même [doit être] le
+   bouton [...] pour éviter une redondance visuelle") — ce <button> N'A PLUS
+   aucune apparence propre (pas de fond/bordure/pilule ici): il ne fait que
+   réinitialiser les styles natifs de <button> et donner sa largeur au
+   conteneur. Le fond/bordure/rayon/pilule qu'on voyait avant sont
+   désormais portés par le .badge-frame LUI-MÊME (voir badges.css), qui
+   inclut aussi le chevron ">" (voir main.js: buildBadgeFrame({chevron:
+   true})) — un seul élément visuel cliquable, plus deux imbriqués. */
 .title-profile-banner {
   width: min(420px, 100%);
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  margin-bottom: 22px;
-  border-radius: 999px;
-  background: var(--panel);
-  border: 1px solid #1c2130;
+  margin: 0 0 22px;
+  padding: 0;
+  background: none;
+  border: none;
   color: inherit;
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.2s, background 0.2s;
 }
 
-.title-profile-banner:hover {
-  border-color: var(--accent);
-}
-
-.title-profile-avatar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  font-size: 1.1rem;
-  flex-shrink: 0;
-}
-
-.title-profile-pseudo {
+/* Round 22 (retour utilisateur): "l'avatar+pseudo dans le menu (en haut)
+   doit être aussi affiché avec le badge" — remplace les 2 spans
+   avatar/pseudo bruts d'avant par le composant .badge-frame (voir
+   badges.css), rempli via main.js: buildBadgeFrame(). Les règles
+   ci-dessous adaptent seulement la mise en page (largeur dispo dans la
+   bannière, troncature du pseudo) — l'apparence du badge lui-même
+   (avatar/couleurs/décor par tier, fond/bordure "pilule" round 23) reste
+   entièrement définie par badges.css, jamais dupliquée ici. */
+.title-profile-identity {
   flex: 1;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
+  display: flex;
 }
 
-.title-profile-chevron {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  color: var(--text-dim);
+.title-profile-identity .badge-frame {
+  display: flex;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+}
+
+.title-profile-identity .badge-frame-avatar {
+  width: 28px;
+  height: 28px;
+  font-size: 0.95rem;
+}
+
+.title-profile-identity .badge-frame-pseudo {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
 }
 
 .game-logo {

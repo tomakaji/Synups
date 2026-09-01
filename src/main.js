@@ -3,7 +3,7 @@ import { levels } from "./game/levels.js";
 import { findSolution } from "./game/solver.js";
 // Round 20 (migration Capacitor/AdMob) — no-op silencieux hors app native
 // (voir game/ads.js), donc sûr à appeler ici même pendant `npm run dev`.
-import { initAds } from "./game/ads.js";
+import { initAds, showRewardedAd, showInterstitialAd } from "./game/ads.js";
 import {
   playPlace,
   playRemove,
@@ -59,6 +59,8 @@ import {
   eraseAllProgress,
   loadProfile,
   updateProfile,
+  loadSeenMechanics,
+  saveSeenMechanics,
 } from "./game/storage.js";
 import {
   listLevels,
@@ -70,10 +72,14 @@ import {
   encodeShareCode,
   decodeShareCode,
   importSharedLevel,
+  detectMechanics,
   AVATARS,
   isAvatarUnlocked,
+  avatarUnlockLabel,
   getAvatarSvg,
   DEFAULT_AVATAR,
+  initCommunityCloud,
+  onLevelsChanged,
 } from "./game/community-store.js";
 
 let currentLevelIndex = 0;
@@ -106,6 +112,16 @@ const renderer = createBoardRenderer(boardEl);
 // playWin).
 const BOARD_FADE_MS = 450;
 const BOARD_HOLD_MS = 900;
+// Round 23 (retour utilisateur: "lorsqu'on termine une grille, on passe
+// trop vite à la suivante [...] ça serait bien de marquer un temps avant de
+// faire disparaître la grille actuelle afin que le joueur puisse intégrer
+// l'information qu'il a réussi") — pause AVANT même le fondu de sortie
+// (voir advanceAfterWin ci-dessous), le temps de voir la grille résolue au
+// repos. Scopée au mode Histoire uniquement (c'est le seul cité par le
+// retour utilisateur) — l'Infini enchaîne les grilles trop vite pour ce
+// genre de pause sans nuire au rythme voulu, et Communauté redemande de
+// toute façon une note juste après (voir openCommunityRateModal).
+const STORY_WIN_HOLD_MS = 1100;
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -120,6 +136,7 @@ let boardLocked = false;
 
 async function advanceAfterWin() {
   boardLocked = true;
+  if (mode === "story") await wait(STORY_WIN_HOLD_MS);
   boardContainerEl.classList.add("board-fade");
   await wait(BOARD_FADE_MS);
   const holdStart = performance.now();
@@ -183,12 +200,39 @@ const sounds = {
 // débloqué si tous les niveaux 0..i-1 sont dans `completed`.
 let storyProgress = loadStoryProgress();
 
+// Round 23 (retour utilisateur: "lors du mode histoire, dans la
+// progression, ça n'est pas assez clair pour le joueur de comprendre les
+// mécaniques [...] on pourrait essayer d'intégrer des 'schéma' qui
+// expliquent les mécaniques de façon très simplifiée à chaque nouveau
+// composant ajouté") — voir showMechanicSchemaModal() plus bas, appelée
+// depuis loadLevel(). Un Set persisté (voir storage.js:
+// loadSeenMechanics/saveSeenMechanics), même principe que storyProgress:
+// une mécanique montrée une fois ne se réexplique plus jamais, sauf
+// réinitialisation complète du jeu.
+let seenMechanics = loadSeenMechanics();
+
 function markStoryLevelCompleted(index) {
   if (index < 0 || index >= levels.length) return; // garde-fou: index invalide (ne devrait pas arriver)
   if (storyProgress.has(index)) return; // déjà fait: rejouer un niveau ne change rien à la progression
   storyProgress.add(index);
   saveStoryProgress(storyProgress);
   renderTitleStoryProgress();
+  // Round 22 (retour utilisateur): "les 3 suivants [avatars] se débloquent
+  // dans le mode campagne (tous les 10 niveaux) [...] il faudra freeze le
+  // jeu lors du déblocage [...] avec une animation en modale [...] pour
+  // montrer au joueur qu'il a débloqué tel ou tel cosmétique" — un seul
+  // avatar "story" peut correspondre à CE seuil précis (voir
+  // community-store.js: AVATARS, unlock.type === "story"/level), jamais
+  // recalculé depuis storyProgress.size ailleurs que dans avatarUnlocks().
+  const unlockedAvatar = AVATARS.find((a) => a.unlock?.type === "story" && a.unlock.level === storyProgress.size);
+  if (unlockedAvatar) {
+    showCosmeticUnlockModal({
+      kind: "avatar",
+      avatarId: unlockedAvatar.id,
+      title: `Avatar « ${unlockedAvatar.label} »`,
+      subtitle: `Débloqué en terminant ${storyProgress.size} niveaux de l'Histoire !`,
+    });
+  }
 }
 
 function renderTitleStoryProgress() {
@@ -284,6 +328,9 @@ function loadLevel(index) {
   grid = new LightUpGrid(currentLevel);
   levelNameEl.textContent = `${currentLevelIndex + 1}. ${currentLevel.name}`;
   startBoard();
+  // Round 23: voir queueNewMechanicSchemas() plus bas — uniquement le mode
+  // Histoire (seul mode qui appelle loadLevel(), voir plus haut).
+  queueNewMechanicSchemas(currentLevel.cells);
 }
 
 function handleCellClick(r, c) {
@@ -358,12 +405,21 @@ btnUndo.onclick = undoLastMove;
 // storage.js comme le reste, sans autre changement ici. Partagé entre
 // Histoire et Infini (pas de remise à zéro au changement de niveau).
 const HINT_HIGHLIGHT_MS = 2400;
+// Round 21 (retour utilisateur): stock de départ ET récompense par pub tous
+// deux ramenés de 10 à 5 — voir btnHintWatchAd.onclick plus bas.
+// Round 23 (retour utilisateur: "les 5 indices en regardant la pub ne
+// s'accompagnent pas de 50 points [...] les 50 points en regardant la pub,
+// c'est uniquement dans Remember") — plus de récompense en points ici,
+// SOMMATION_AD_POINTS_REWARD (sommation.js) reste seul à en accorder.
+const HINT_STARTING_STOCK = 5;
+const HINT_AD_HINTS_REWARD = 5;
 const btnHint = document.getElementById("btn-hint");
 const hintCountEl = document.getElementById("hint-count");
 const hintModal = document.getElementById("hint-modal");
 const btnHintWatchAd = document.getElementById("btn-hint-watch-ad");
+const hintAdStatusEl = document.getElementById("hint-ad-status");
 
-let hintStock = 10;
+let hintStock = HINT_STARTING_STOCK;
 let hintHighlightTimeout = null;
 
 function renderHintUI() {
@@ -416,7 +472,19 @@ function showHintAt(r, c) {
   }, HINT_HIGHLIGHT_MS);
 }
 
+function setHintAdStatus(text, isError) {
+  if (!hintAdStatusEl) return;
+  hintAdStatusEl.textContent = text ?? "";
+  hintAdStatusEl.classList.toggle("hidden", !text);
+  hintAdStatusEl.classList.toggle("hint-ad-status--error", !!isError);
+}
+
 function openHintModal() {
+  // Repart toujours propre (bouton actif, pas de message résiduel d'une
+  // tentative précédente) — même principe que sommation.js: openAdModal().
+  setHintAdStatus(null);
+  btnHintWatchAd.disabled = false;
+  btnHintWatchAd.textContent = `Regarder la pub (+${HINT_AD_HINTS_REWARD} indices)`;
   hintModal.classList.remove("hidden");
 }
 function closeHintModal() {
@@ -445,13 +513,81 @@ btnHint.onclick = () => {
 
 document.querySelectorAll("[data-hint-modal-close]").forEach((el) => (el.onclick = closeHintModal));
 
-btnHintWatchAd.onclick = () => {
-  // Gratuit pour l'instant, sans intégration publicitaire réelle (voir
-  // demande utilisateur: "cet ajout se fait gratuitement... dans le but du
-  // test") — seuls le design et le flux sont branchés.
-  hintStock += 10;
-  renderHintUI();
-  closeHintModal();
+// ---------- Modale "cosmétique débloqué" ----------
+// Round 22 (retour utilisateur): "il faudra freeze le jeu lors du déblocage
+// d'un objet cosmétique [...] pareillement pour les badges [...] avec une
+// animation en modale transparente mais fond sombre pour montrer au joueur
+// qu'il a débloqué tel ou tel cosmétique" — réutilise le même mécanisme
+// .modal/.modal-backdrop que les autres modales de ce fichier: le fond
+// semi-transparent sombre de .modal-backdrop EST le "freeze" demandé (plus
+// rien sous la modale n'est cliquable tant qu'elle reste ouverte), aucune
+// plomberie boardLocked séparée n'est nécessaire. Un seul point d'entrée
+// pour les DEUX types de cosmétiques — voir markStoryLevelCompleted() et
+// refreshProfileAvatarPicker() plus bas pour les avatars (campagne/achat),
+// sommation.js: pointsApi.onBadgeEarned (voir plus bas, initSommation) pour
+// les badges Remember.
+const cosmeticUnlockModal = document.getElementById("cosmetic-unlock-modal");
+const cosmeticUnlockKickerEl = document.getElementById("cosmetic-unlock-kicker");
+const cosmeticUnlockRevealEl = document.getElementById("cosmetic-unlock-reveal");
+const cosmeticUnlockTitleEl = document.getElementById("cosmetic-unlock-title");
+const cosmeticUnlockTextEl = document.getElementById("cosmetic-unlock-text");
+
+/** @param {{kind: "avatar"|"badge", avatarId?: string, badgeTier?: number, title: string, subtitle: string}} opts */
+function showCosmeticUnlockModal({ kind, avatarId, badgeTier, title, subtitle }) {
+  cosmeticUnlockKickerEl.textContent = kind === "badge" ? "Nouveau badge débloqué" : "Nouvel avatar débloqué";
+  cosmeticUnlockRevealEl.innerHTML = "";
+  if (kind === "avatar") {
+    const bubble = document.createElement("span");
+    bubble.className = "cosmetic-unlock-avatar";
+    bubble.innerHTML = getAvatarSvg(avatarId);
+    cosmeticUnlockRevealEl.appendChild(bubble);
+  } else {
+    // Même langage visuel que les carrés teaser de sélection Remember (voir
+    // badges.css: .badge-teaser--tier-N.earned), juste agrandi ici — jamais
+    // un composant dupliqué, cohérent avec ce que le joueur reverra ensuite
+    // dans "Mon profil".
+    const tile = document.createElement("span");
+    tile.className = `cosmetic-unlock-badge badge-teaser badge-teaser--tier-${badgeTier} earned`;
+    const deco = document.createElement("span");
+    deco.className = "badge-teaser-deco";
+    deco.setAttribute("aria-hidden", "true");
+    tile.appendChild(deco);
+    cosmeticUnlockRevealEl.appendChild(tile);
+  }
+  cosmeticUnlockTitleEl.textContent = title;
+  cosmeticUnlockTextEl.textContent = subtitle;
+  cosmeticUnlockModal.classList.remove("hidden");
+}
+
+document.querySelectorAll("[data-cosmetic-unlock-close]").forEach((el) => {
+  el.onclick = () => cosmeticUnlockModal.classList.add("hidden");
+});
+
+// Round 21 (retour utilisateur: "intégrer une pub-récompense lorsqu'on
+// demande à recharger les indices") — remplace l'ancien placeholder gratuit,
+// même principe que sommation.js: adWatchBtn.onclick (showRewardedAd() ne
+// résout `earned: true` QUE sur confirmation du SDK, jamais de façon
+// optimiste : indices ET points ne sont donc crédités que dans ce cas
+// précis, jamais avant ni en cas d'échec/fermeture anticipée de la pub).
+btnHintWatchAd.onclick = async () => {
+  btnHintWatchAd.disabled = true;
+  btnHintWatchAd.textContent = "Chargement…";
+  setHintAdStatus(null);
+  const { earned, reason } = await showRewardedAd();
+  if (earned) {
+    hintStock += HINT_AD_HINTS_REWARD;
+    renderHintUI();
+    closeHintModal();
+    return;
+  }
+  btnHintWatchAd.disabled = false;
+  btnHintWatchAd.textContent = `Regarder la pub (+${HINT_AD_HINTS_REWARD} indices)`;
+  setHintAdStatus(
+    reason === "unavailable"
+      ? "Pas de pub disponible pour l'instant — réessaie dans un instant."
+      : "Pub fermée avant la fin — rien de crédité.",
+    true
+  );
 };
 
 renderHintUI();
@@ -534,6 +670,23 @@ applyVolumes();
 // native Capacitor.
 initAds();
 
+// Round 20 (Firestore): démarre l'écoute temps réel du fil communautaire +
+// l'authentification anonyme (voir game/community-store.js). Comme initAds()
+// ci-dessus, ne bloque jamais le chargement (pas de await) — tant que la
+// première réponse Firestore n'est pas arrivée, le fil affiche juste la
+// seed, sans jamais planter faute de réseau.
+initCommunityCloud();
+// Ré-affiche l'écran Communauté/Mon profil s'il est actif quand le fil
+// change (nouvelle grille publiée par vous ou un autre joueur, résolution de
+// l'uid anonyme...) — même logique de rendu que showView() pour ces deux
+// écrans (voir plus bas), pour ne jamais laisser un fil périmé à l'écran
+// après un aller-retour Firestore qui arrive après coup.
+onLevelsChanged(() => {
+  const active = viewStack[viewStack.length - 1];
+  if (active === "community") renderCommunityFeed();
+  else if (active === "community-profile") renderCommunityProfile();
+});
+
 // Précharge les 7 pistes dès le chargement de la page (pas besoin d'un
 // geste utilisateur pour ÇA, seule la LECTURE l'exige — voir startMusic
 // dans handleCellClick) pour qu'elles soient déjà prêtes au premier clic.
@@ -569,7 +722,11 @@ document.querySelectorAll("[data-reset-modal-close]").forEach((el) => {
 document.getElementById("btn-reset-confirm").onclick = () => {
   eraseAllProgress();
   resetSommationProgress();
-  updateProfile({ avatar: DEFAULT_AVATAR, activeBadge: null });
+  // Round 22: `ownedAvatars` (avatars achetés avec des points, voir
+  // community-store.js: unlock.type === "purchase") est lui aussi un "bonus
+  // débloqué" au même titre qu'avatar/activeBadge ci-dessous — les points
+  // eux-mêmes sont déjà remis à zéro par eraseAllProgress().
+  updateProfile({ avatar: DEFAULT_AVATAR, activeBadge: null, ownedAvatars: [] });
   window.location.reload();
 };
 
@@ -668,6 +825,19 @@ let infiniteEnabledFeatures = new Set(Object.keys(FEATURES).filter((k) => FEATUR
 let lastInfiniteResult = null; // dernier niveau généré (pour "Réglages" -> retour au jeu sans perdre la partie)
 let infiniteRequestInFlight = false;
 
+// Round 21 (retour utilisateur: "publicités courtes [...] tous les 5
+// niveaux du mode infinity" mais "ne pas comptabiliser [...] avant qu'il ait
+// posé au moins 6 lampes, afin qu'il puisse re-générer des niveaux autant
+// qu'il veut [...] sans être spammé/bloqué") — voir loadInfiniteLevel(): un
+// niveau ne compte QUE s'il a reçu au moins INFINITE_AD_MIN_LAMPS lampes
+// avant d'être quitté (peu importe la raison: victoire, "Niveau suivant",
+// changement de réglages...). Compteur volontairement EN MÉMOIRE seulement
+// (même choix que hintStock ci-dessus) — se réinitialise au rechargement de
+// la page, jamais persisté.
+const INFINITE_AD_EVERY_N_LEVELS = 5;
+const INFINITE_AD_MIN_LAMPS = 6;
+let infiniteLevelsPlayedSinceAd = 0;
+
 /** Config courante, telle que passée à requestLevel/ensureLevelBuffer/
  * takeBufferedLevel — un seul endroit pour construire cet objet, pour ne
  * jamais désynchroniser la signature utilisée pour lire/écrire le buffer. */
@@ -700,7 +870,7 @@ const FEATURE_ICON_HTML = {
   // orbite) est le rendu le plus reconnaissable de la mécanique.
   color: chargeIcon({ number: 2, color: "r", _adjacentLights: 2 }),
   mirror: mirrorIcon({ orientation: "/", _mirrorColor: { r: false, g: false, b: true } }),
-  filter: filterIcon({ filterColor: "g" }),
+  // "filter" retiré (round 22: feature jamais implémentée, voir generator.js).
   prism: prismIcon({ firstColor: "r", _prismAdjacentCount: 0 }),
   pyra: pyraIcon({ _activeColor: "b", _state: "success" }),
   mirrorNeuron: mirrorNeuronIcon(),
@@ -761,6 +931,93 @@ function refreshFeatureDependencies() {
 
 buildFeatureChecklist();
 
+// ---------- Modales "schéma" pédagogiques (mode Histoire) ----------
+// Round 23 (retour utilisateur: "lors du mode histoire, dans la
+// progression, ça n'est pas assez clair pour le joueur de comprendre les
+// mécaniques. On pourrait essayer d'intégrer des 'schéma' qui expliquent
+// les mécaniques de façon très simplifiée à chaque nouveau composant
+// ajouté") — une entrée par mécanique DÉTECTABLE (voir community-store.js:
+// detectMechanics, même vocabulaire que les icônes de cartes Communauté et
+// FEATURE_ICON_HTML ci-dessus, réutilisé tel quel pour le schéma: même
+// rendu que partout ailleurs dans le jeu, pas une illustration à part).
+// Volontairement PAS d'entrée pour la règle de base (case numérotée +
+// lumière) : c'est la mécanique fondatrice, apprise dès le niveau 1 par le
+// jeu lui-même — ces modales couvrent seulement ce qui s'AJOUTE par-dessus.
+const MECHANIC_SCHEMAS = {
+  forbidden: {
+    title: "Case interdite",
+    text: "Une case interdite ne peut jamais avoir de lumière juste à côté (en haut, en bas, à gauche ou à droite).",
+  },
+  color: {
+    title: "Couleurs",
+    text: "Une charge colorée tire un rayon de sa couleur vers la première lumière rencontrée. Une case cible attend un mélange précis de rouge/vert/bleu pour s'allumer correctement.",
+  },
+  mirror: {
+    title: "Miroir",
+    text: "Un miroir dévie un rayon coloré de 90°, sans jamais s'allumer lui-même.",
+  },
+  prism: {
+    title: "Prisme",
+    text: "Un prisme teinte automatiquement une lumière dans chacune de ses 4 directions, dès qu'il en voit une sur sa ligne ou sa colonne.",
+  },
+  pyra: {
+    title: "Pyra",
+    text: "Pyra s'active dès qu'il a entre 1 et 3 lumières autour de lui (pas besoin d'un compte exact), et tire un rayon dont la couleur dépend de ce nombre.",
+  },
+  mirrorNeuron: {
+    title: "Neurone miroir",
+    text: "Un neurone miroir duplique en symétrie toute lumière qui l'éclaire directement.",
+  },
+};
+
+const mechanicSchemaModal = document.getElementById("mechanic-schema-modal");
+const mechanicSchemaIconEl = document.getElementById("mechanic-schema-icon");
+const mechanicSchemaTitleEl = document.getElementById("mechanic-schema-title");
+const mechanicSchemaTextEl = document.getElementById("mechanic-schema-text");
+// File d'attente: un même niveau peut (rarement) introduire plusieurs
+// mécaniques à la fois — on les montre une par une plutôt que de les
+// entasser dans une seule modale, jamais plus d'une à l'écran en même
+// temps (voir showNextMechanicSchema ci-dessous).
+let mechanicSchemaQueue = [];
+
+function showNextMechanicSchema() {
+  const key = mechanicSchemaQueue.shift();
+  if (!key) {
+    mechanicSchemaModal.classList.add("hidden");
+    return;
+  }
+  const schema = MECHANIC_SCHEMAS[key];
+  if (!schema) {
+    showNextMechanicSchema();
+    return;
+  }
+  mechanicSchemaIconEl.innerHTML = FEATURE_ICON_HTML[key] ?? "";
+  mechanicSchemaTitleEl.textContent = schema.title;
+  mechanicSchemaTextEl.textContent = schema.text;
+  mechanicSchemaModal.classList.remove("hidden");
+}
+
+/** Appelée par loadLevel() (mode Histoire uniquement): compare les
+ * mécaniques de la grille qui vient de charger à celles déjà vues (voir
+ * storage.js: loadSeenMechanics/saveSeenMechanics), enfile les nouvelles et
+ * les marque vues IMMÉDIATEMENT (pas seulement à la fermeture de la
+ * modale — même si le joueur quitte l'écran sans la fermer, elle ne doit
+ * jamais réapparaître pour la même mécanique). */
+function queueNewMechanicSchemas(cells) {
+  const found = detectMechanics(cells);
+  const fresh = found.filter((key) => MECHANIC_SCHEMAS[key] && !seenMechanics.has(key));
+  if (fresh.length === 0) return;
+  for (const key of fresh) seenMechanics.add(key);
+  saveSeenMechanics(seenMechanics);
+  const alreadyShowing = !mechanicSchemaModal.classList.contains("hidden");
+  mechanicSchemaQueue.push(...fresh);
+  if (!alreadyShowing) showNextMechanicSchema();
+}
+
+document.querySelectorAll("[data-mechanic-schema-close]").forEach((el) => {
+  el.onclick = showNextMechanicSchema; // ferme celle-ci, enchaîne sur la suivante s'il y en a une
+});
+
 // Amorce le buffer de niveaux Infini dès le chargement de l'app (pas
 // seulement au premier changement de réglage) — retour utilisateur: "je
 // veux qu'on preload les niveaux dès le chargement de l'app", pour que
@@ -782,6 +1039,25 @@ function loadInfiniteLevel(result) {
   // victoire). Les appels manuels (clic sur "Nouveau niveau", Réinitialiser)
   // ne passent jamais par `advanceAfterWin`, donc `boardLocked` y vaut déjà
   // `false` et n'a rien à réinitialiser.
+
+  // Round 21: compte le niveau qu'on s'apprête à QUITTER (celui encore dans
+  // `grid` à cet instant) s'il a reçu assez de lampes — voir constantes
+  // ci-dessus. `result !== lastInfiniteResult` exclut le cas "Réinitialiser"
+  // (voir btn-reset: recharge intentionnellement le MÊME `result`), qui ne
+  // doit jamais compter comme un niveau de plus. Fait AVANT d'écraser `grid`
+  // juste en dessous, sinon getPlacedLights() lirait déjà le niveau suivant.
+  if (mode === "infinite" && grid && result !== lastInfiniteResult && grid.getPlacedLights().length >= INFINITE_AD_MIN_LAMPS) {
+    infiniteLevelsPlayedSinceAd++;
+    if (infiniteLevelsPlayedSinceAd >= INFINITE_AD_EVERY_N_LEVELS) {
+      infiniteLevelsPlayedSinceAd = 0;
+      // Fire-and-forget (voir ads.js: showInterstitialAd) — l'interstitielle
+      // s'affiche par-dessus pendant que le niveau suivant finit de se
+      // charger juste en dessous, jamais de délai supplémentaire pour le
+      // joueur.
+      showInterstitialAd();
+    }
+  }
+
   lastInfiniteResult = result;
   currentLevelIndex = -1;
   currentLevel = result.level;
@@ -974,8 +1250,7 @@ const profileBadgePreviewEl = document.getElementById("profile-badge-preview");
 const profileSommationBadgesEl = document.getElementById("profile-sommation-badges");
 const btnProfileBadgesDebugUnlock = document.getElementById("btn-profile-badges-debug-unlock");
 const titleProfileBanner = document.getElementById("title-profile-banner");
-const titleProfileAvatarEl = document.getElementById("title-profile-avatar");
-const titleProfilePseudoEl = document.getElementById("title-profile-pseudo");
+const titleProfileIdentityEl = document.getElementById("title-profile-identity");
 
 let communitySearch = "";
 let communitySort = "recent";
@@ -986,12 +1261,21 @@ let selectedProfileAvatar = AVATARS[0].id;
 // de profile.activeBadge, ré-synchronisé à chaque entrée dans "Mon profil".
 let selectedActiveBadge = null;
 
-/** Bag d'unlocks résolu ici (main.js reste le seul point qui connaît à la
- * fois community-store.js ET sommation.js) — même contrat que dans
- * editor.js: `isAvatarUnlocked(avatar, unlocks)` ne connaît que la forme
- * `{ pixelart: boolean }`, jamais sommation.js directement. */
+/** État d'unlocks résolu ici (main.js reste le seul point qui connaît à la
+ * fois community-store.js, sommation.js ET la progression Histoire/le
+ * profil) — `isAvatarUnlocked(avatar, state)` (community-store.js) ne
+ * connaît que cette forme `{ pixelart, storyCompleted, owned }`, jamais les
+ * modules sources (sommation.js, storyProgress, storage.js) directement.
+ * Round 22: `storyCompleted` (niveaux Histoire complétés, voir storyProgress
+ * plus haut — PAS `unlockedCount`, qui compte l'accessible plutôt que le
+ * complété) pour les avatars "story", `owned` (Set d'ids, voir
+ * profile.ownedAvatars) pour les avatars "purchase". */
 function avatarUnlocks() {
-  return { pixelart: isPixelArtUnlocked() };
+  return {
+    pixelart: isPixelArtUnlocked(),
+    storyCompleted: storyProgress.size,
+    owned: new Set(loadProfile()?.ownedAvatars ?? []),
+  };
 }
 
 /** Construit un "encadré" avatar+pseudo — la surface publique du badge actif
@@ -1010,10 +1294,36 @@ function avatarUnlocks() {
  * donc innerHTML (pas textContent) pour l'avatar. Cette même fonction sert
  * aussi de prévisualisation d'IDENTITÉ complète (avatar+pseudo+badge) en
  * haut de "Mon profil" (retour utilisateur: la prévisu remplace l'ancien
- * avatar dupliqué à côté du pseudo). */
-function buildBadgeFrame(avatarId, pseudoText, badgeTier) {
+ * avatar dupliqué à côté du pseudo).
+ *
+ * Round 22 (retour utilisateur): `compact` ajoute le modificateur
+ * `.badge-frame--compact` (voir badges.css) — pensé pour se substituer au
+ * pseudo texte dans la byline des cartes "Communauté" et l'en-tête de jeu,
+ * jamais utilisé pour la bannière de titre/prévisualisation "Mon profil",
+ * qui gardent le format normal.
+ *
+ * Round 23 (retour utilisateur: "le badge/avatar/nom dans le menu [...] au
+ * niveau visuel ça fait bizarre [...] le badge lui-même [doit être] le
+ * bouton [...] on intègre l'icône '>' à l'intérieur"): `framed` ajoute le
+ * fond/bordure "pilule" directement sur le cadre (voir badges.css:
+ * .badge-frame--framed, définie avant les --tier-N pour qu'un badge actif
+ * garde la priorité sur son propre décor) — utilisé pour la bannière de
+ * titre ET pour la grande prévisualisation "Mon profil" (retour
+ * utilisateur: "cohérente et similaire à l'apparence qu'il a dans le
+ * menu"), même sans être cliquable. `chevron` ajoute EN PLUS un chevron ">"
+ * comme dernier enfant, uniquement là où le cadre est réellement cliquable
+ * vers le profil — le badge devient ainsi lui-même l'indice visuel
+ * "cliquable", plutôt que d'être imbriqué dans un second bouton à
+ * l'apparence redondante (voir renderTitleProfileBanner ci-dessous et
+ * title.css: .title-profile-banner, désormais un simple wrapper sans
+ * apparence propre). */
+function buildBadgeFrame(avatarId, pseudoText, badgeTier, { compact = false, framed = false, chevron = false } = {}) {
   const frame = document.createElement("span");
-  frame.className = "badge-frame" + (badgeTier ? ` badge-frame--tier-${badgeTier}` : "");
+  frame.className =
+    "badge-frame" +
+    (badgeTier ? ` badge-frame--tier-${badgeTier}` : "") +
+    (compact ? " badge-frame--compact" : "") +
+    (framed || chevron ? " badge-frame--framed" : "");
   const deco = document.createElement("span");
   deco.className = "badge-frame-deco";
   deco.setAttribute("aria-hidden", "true");
@@ -1024,6 +1334,14 @@ function buildBadgeFrame(avatarId, pseudoText, badgeTier) {
   pseudoEl.className = "badge-frame-pseudo";
   pseudoEl.textContent = pseudoText || "Joueur";
   frame.append(deco, avatarEl, pseudoEl);
+  if (chevron) {
+    const chevronEl = document.createElement("span");
+    chevronEl.className = "badge-frame-chevron";
+    chevronEl.setAttribute("aria-hidden", "true");
+    chevronEl.innerHTML =
+      '<svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+    frame.appendChild(chevronEl);
+  }
   return frame;
 }
 
@@ -1050,7 +1368,9 @@ function buildCommunityCard(level, { showUnpublish = false, onChange } = {}) {
 
   const byline = document.createElement("div");
   byline.className = "community-card-byline";
-  byline.appendChild(buildBadgeFrame(level.author?.avatar, level.author?.pseudo ?? "Joueur", level.author?.badge));
+  byline.appendChild(
+    buildBadgeFrame(level.author?.avatar, level.author?.pseudo ?? "Joueur", level.author?.badge, { compact: true })
+  );
 
   const mechanicsRow = document.createElement("div");
   mechanicsRow.className = "community-card-mechanics";
@@ -1227,7 +1547,7 @@ function loadCommunityLevel(level) {
   communityLevelTitleEl.textContent = level.title;
   communityLevelAuthorEl.innerHTML = "";
   communityLevelAuthorEl.appendChild(
-    buildBadgeFrame(level.author?.avatar, level.author?.pseudo ?? "Joueur", level.author?.badge)
+    buildBadgeFrame(level.author?.avatar, level.author?.pseudo ?? "Joueur", level.author?.badge, { compact: true })
   );
   refreshCommunityLikeButton();
   startBoard();
@@ -1257,26 +1577,69 @@ btnCommunityLike.onclick = () => {
 // perturber un autre champ en cours d'édition (ex: cliquer un avatar
 // pendant que le pseudo est en mode édition ne doit pas fermer ce dernier).
 
+const profileAvatarPurchaseStatusEl = document.getElementById("profile-avatar-purchase-status");
+
+function setProfileAvatarPurchaseStatus(text, isError) {
+  if (!profileAvatarPurchaseStatusEl) return;
+  profileAvatarPurchaseStatusEl.textContent = text ?? "";
+  profileAvatarPurchaseStatusEl.classList.toggle("hidden", !text);
+  profileAvatarPurchaseStatusEl.classList.toggle("profile-avatar-purchase-status--error", !!isError);
+}
+
+/** Round 22 (retour utilisateur): "ces quatre derniers avatars se
+ * débloquent en les achetant avec des points en cliquant dessus (100, 200,
+ * 400, 1000)" — un avatar "purchase" pas encore possédé N'EST PAS traité
+ * comme les autres avatars verrouillés (voir .profile-avatar-btn.locked,
+ * réservé aux avatars "story"/"pixelart" pas encore atteints): il reste
+ * cliquable, le clic TENTE l'achat (spendSharedPoints) au lieu de simplement
+ * sélectionner l'avatar — voir avatarUnlockLabel (community-store.js) pour
+ * le texte d'indice affiché aux deux types de verrouillage. */
 function refreshProfileAvatarPicker() {
   profileAvatarPicker.innerHTML = "";
   const unlocks = avatarUnlocks();
   for (const avatar of AVATARS) {
     const unlocked = isAvatarUnlocked(avatar, unlocks);
+    const purchasable = !unlocked && avatar.unlock?.type === "purchase";
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className =
       "profile-avatar-btn" +
       (avatar.id === selectedProfileAvatar ? " active" : "") +
-      (unlocked ? "" : " locked");
+      (unlocked ? "" : purchasable ? " purchasable" : " locked");
     btn.innerHTML = avatar.svg;
-    btn.disabled = !unlocked;
-    btn.title = unlocked ? avatar.label : `${avatar.label} (verrouillé)`;
+    btn.disabled = !unlocked && !purchasable;
+    btn.title = unlocked ? avatar.label : `${avatar.label} — ${avatarUnlockLabel(avatar)}`;
+    if (purchasable) {
+      const price = document.createElement("span");
+      price.className = "profile-avatar-price";
+      price.textContent = String(avatar.unlock.cost);
+      btn.appendChild(price);
+    }
     if (unlocked) {
       btn.addEventListener("click", () => {
         selectedProfileAvatar = avatar.id;
         updateProfile({ avatar: avatar.id });
         refreshProfileAvatarPicker();
         refreshProfileBadgePreview();
+      });
+    } else if (purchasable) {
+      btn.addEventListener("click", () => {
+        setProfileAvatarPurchaseStatus(null);
+        if (!spendSharedPoints(avatar.unlock.cost)) {
+          setProfileAvatarPurchaseStatus(`Pas assez de points (${avatar.unlock.cost} nécessaires).`, true);
+          return;
+        }
+        const owned = loadProfile()?.ownedAvatars ?? [];
+        selectedProfileAvatar = avatar.id;
+        updateProfile({ ownedAvatars: [...owned, avatar.id], avatar: avatar.id });
+        refreshProfileAvatarPicker();
+        refreshProfileBadgePreview();
+        showCosmeticUnlockModal({
+          kind: "avatar",
+          avatarId: avatar.id,
+          title: `Avatar « ${avatar.label} »`,
+          subtitle: `Débloqué pour ${avatar.unlock.cost} points !`,
+        });
       });
     }
     profileAvatarPicker.appendChild(btn);
@@ -1290,11 +1653,23 @@ function refreshProfileAvatarPicker() {
  * storage.js: loadProfile renvoie null), plutôt que d'afficher un pseudo
  * vide ou "undefined". Ré-exécutée à chaque retour au titre (showView),
  * même principe que renderPointsEverywhere: jamais figée sur un profil
- * modifié depuis (pseudo changé dans "Mon profil" puis retour ici). */
+ * modifié depuis (pseudo changé dans "Mon profil" puis retour ici).
+ *
+ * Round 22 (retour utilisateur): "l'avatar+pseudo dans le menu (en haut)
+ * doit être aussi affiché avec le badge" — utilise désormais buildBadgeFrame
+ * (même composant que la byline des cartes Communauté et la prévisualisation
+ * "Mon profil") au lieu d'un simple avatar+texte bruts. */
 function renderTitleProfileBanner() {
   const profile = loadProfile();
-  titleProfileAvatarEl.innerHTML = getAvatarSvg(profile?.avatar ?? AVATARS[0].id);
-  titleProfilePseudoEl.textContent = profile?.pseudo?.trim() || "Configurer mon profil";
+  titleProfileIdentityEl.innerHTML = "";
+  titleProfileIdentityEl.appendChild(
+    buildBadgeFrame(
+      profile?.avatar ?? AVATARS[0].id,
+      profile?.pseudo?.trim() || "Configurer mon profil",
+      profile?.activeBadge,
+      { chevron: true }
+    )
+  );
 }
 
 titleProfileBanner.onclick = () => pushView("community-profile");
@@ -1309,7 +1684,7 @@ function refreshProfileBadgePreview() {
   if (!profileBadgePreviewEl) return;
   profileBadgePreviewEl.innerHTML = "";
   const pseudo = profilePseudoInput.value.trim() || "Joueur";
-  profileBadgePreviewEl.appendChild(buildBadgeFrame(selectedProfileAvatar, pseudo, selectedActiveBadge));
+  profileBadgePreviewEl.appendChild(buildBadgeFrame(selectedProfileAvatar, pseudo, selectedActiveBadge, { framed: true }));
 }
 
 /** Petits carrés "teaser" de sélection (retour utilisateur round 19: "moins
@@ -1374,6 +1749,7 @@ function renderCommunityProfile() {
     profile?.avatar && isAvatarUnlocked(AVATARS.find((a) => a.id === profile.avatar) ?? {}, avatarUnlocks());
   selectedProfileAvatar = savedAvatarUnlocked ? profile.avatar : AVATARS[0].id;
   selectedActiveBadge = profile?.activeBadge ?? null;
+  setProfileAvatarPurchaseStatus(null); // jamais un message d'achat resté d'une visite précédente
 
   refreshProfileAvatarPicker();
   refreshProfileBadges();
@@ -1505,6 +1881,13 @@ function setMode(next) {
 }
 
 const editorApi = initEditor({ levels });
+// Tier auquel Remember débloque le thème PixelArt EN MÊME TEMPS que son
+// dernier badge (voir sommation.js: PIXELART_BADGE_TIER/BADGE_DEFS.length,
+// gardées volontairement égales là-bas) — dupliqué ici uniquement pour le
+// texte de la modale de révélation ci-dessous, jamais pour une logique de
+// déblocage réelle (toujours isPixelArtUnlocked() côté sommation.js).
+const PIXELART_BADGE_UNLOCK_TIER = 5;
+
 const sommationApi = initSommation({
   getPoints: () => infinitePoints,
   spendPoints: spendSharedPoints,
@@ -1512,6 +1895,23 @@ const sommationApi = initSommation({
   // Round 19 (retour utilisateur): bouton "Mon profil" sous le message
   // "terminé" — voir sommation.js: onShow().
   goToProfile: () => pushView("community-profile"),
+  // Round 22: voir buildBadgeFrame() plus haut — passé tel quel pour que
+  // sommation.js affiche le MÊME composant avatar+pseudo+badge sur son
+  // écran "terminé" sans dépendre de main.js directement.
+  buildBadgeFrame,
+  // Round 22 (retour utilisateur): "il faudra freeze le jeu lors du
+  // déblocage d'un objet cosmétique [...] pareillement pour les badges" —
+  // voir showCosmeticUnlockModal() plus bas.
+  onBadgeEarned: (tier, name) =>
+    showCosmeticUnlockModal({
+      kind: "badge",
+      badgeTier: tier,
+      title: name ? `Badge « ${name} »` : "Nouveau badge",
+      subtitle:
+        tier >= PIXELART_BADGE_UNLOCK_TIER
+          ? "Nouveau badge débloqué, et le thème PixelArt avec !"
+          : "Nouveau badge débloqué !",
+    }),
 });
 
 // ---------- Navigation (pile d'écrans + bouton Retour générique) ----------

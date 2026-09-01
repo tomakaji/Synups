@@ -46,9 +46,14 @@
              dans main.js: retombe sur l'avatar par défaut + "Configurer mon
              profil" tant qu'aucun pseudo n'est enregistré). -->
         <button id="title-profile-banner" class="title-profile-banner" type="button">
-          <span id="title-profile-avatar" class="title-profile-avatar">🙂</span>
-          <span id="title-profile-pseudo" class="title-profile-pseudo">Configurer mon profil</span>
-          <svg viewBox="0 0 24 24" class="icon-svg title-profile-chevron" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          <!-- Round 23 (retour utilisateur): "le badge lui-même [doit être]
+               le bouton [...] on intègre l'icône '>' à l'intérieur, pour
+               éviter une redondance visuelle" — ce <button> n'a plus AUCUNE
+               apparence propre (voir title.css: .title-profile-banner),
+               c'est le .badge-frame rempli ici, chevron inclus, qui porte
+               tout le rendu visuel (voir main.js: renderTitleProfileBanner,
+               buildBadgeFrame({chevron: true})). -->
+          <span id="title-profile-identity" class="title-profile-identity"></span>
         </button>
 
         <h1 class="game-logo">Synups</h1>
@@ -205,7 +210,7 @@
               <path d="M10 21h4"></path>
               <path d="M12 3a6 6 0 0 0-4 10.47c.53.5.86 1.17.9 1.87v.16a1 1 0 0 0 1 1h4.2a1 1 0 0 0 1-1v-.16c.04-.7.37-1.37.9-1.87A6 6 0 0 0 12 3Z"></path>
             </svg>
-            <span id="hint-count" class="hint-count">10</span>
+            <span id="hint-count" class="hint-count">5</span>
           </button>
           <button id="btn-undo" class="icon-btn" disabled aria-label="Annuler" title="Annuler">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -354,8 +359,7 @@
                juste sous d'autres IDs (même classe CSS) puisqu'un ID ne peut
                apparaître qu'une fois dans le document. -->
           <button id="som-done-profile-link" class="title-profile-banner som-done-profile-link" type="button">
-            <span id="som-done-profile-avatar" class="title-profile-avatar"></span>
-            <span id="som-done-profile-pseudo" class="title-profile-pseudo"></span>
+            <span id="som-done-profile-identity" class="title-profile-identity"></span>
           </button>
         </div>
 
@@ -443,6 +447,13 @@
           <div class="profile-identity">
             <div id="profile-badge-preview" class="badge-frame-preview"></div>
             <div id="profile-avatar-picker" class="profile-avatar-picker"></div>
+            <!-- Round 22 (retour utilisateur): 4 avatars s'achètent avec des
+                 points en cliquant dessus (100/200/400/1000) — feedback
+                 "pas assez de points" affiché ici, même principe que
+                 #hint-ad-status/#som-ad-status (texte discret, jamais une
+                 vraie alerte navigateur). Vide et caché tant qu'il n'y a
+                 rien à signaler. -->
+            <p id="profile-avatar-purchase-status" class="profile-avatar-purchase-status hidden"></p>
 
             <div class="profile-pseudo-wrap">
               <span id="profile-pseudo-text" class="profile-pseudo-text" role="button" tabindex="0" title="Modifier le pseudo"></span>
@@ -619,12 +630,6 @@
                      onglet "Expérimentales" séparé, fusionnées ici dans le
                      même onglet/palette que les tuiles normales (le texte
                      d'avertissement dédié est retiré). -->
-                <button data-tool="filter" class="tool-btn" title="Filtre">
-                  <svg class="tool-icon" viewBox="0 0 100 100">
-                    <path d="M15,25 85,25 60,50 60,80 40,80 40,50 Z" fill="none" stroke="#9aa6bc" stroke-width="6" stroke-linejoin="round"/>
-                  </svg>
-                  <span class="tool-label">Filtre</span>
-                </button>
                 <button data-tool="prism" class="tool-btn" title="Prisme">
                   <svg class="tool-icon" viewBox="0 0 100 100">
                     <polygon points="50,50 50,10 90,50" fill="#ff5d6c"/>
@@ -691,16 +696,6 @@
                   <select id="ed-mirror-orientation">
                     <option value="/">/ (bas-gauche &harr; haut-droit)</option>
                     <option value="\">\ (haut-gauche &harr; bas-droit)</option>
-                  </select>
-                </label>
-              </div>
-
-              <div id="ed-filter-options" class="tool-options hidden">
-                <label class="editor-field">Canal conservé
-                  <select id="ed-filter-color">
-                    <option value="r">rouge</option>
-                    <option value="g">vert</option>
-                    <option value="b">bleu</option>
                   </select>
                 </label>
               </div>
@@ -789,11 +784,75 @@
       <div id="hint-modal" class="modal hidden">
         <div class="modal-backdrop" data-hint-modal-close></div>
         <div class="modal-card">
+          <!-- Round 23 (retour utilisateur: "les modals 'regarder une pub'
+               n'affichent pas de bouton 'annuler' mais une croix en haut à
+               droite [...] + possibilité de fermer en cliquant simplement en
+               dehors") — le clic en dehors fonctionnait déjà via
+               .modal-backdrop ci-dessus (data-hint-modal-close), seule la
+               croix manquait; le bouton "Annuler" est retiré. -->
+          <button type="button" class="modal-close-x" data-hint-modal-close aria-label="Fermer">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
           <h3 class="modal-title">Plus d'indices</h3>
-          <p class="modal-text">Regarde une pub pour récupérer 10 indices.</p>
+          <p class="modal-text">Regarde une pub pour récupérer 5 indices.</p>
+          <!-- Round 21 (migration Capacitor/AdMob, même principe que
+               #som-ad-status): feedback de chargement/échec de la rewarded ad
+               — voir main.js: btnHintWatchAd.onclick. Vide et caché tant qu'il
+               n'y a rien à signaler. -->
+          <p id="hint-ad-status" class="hint-ad-status hidden"></p>
           <div class="modal-actions">
-            <button id="btn-hint-cancel" class="options-btn" data-hint-modal-close>Annuler</button>
-            <button id="btn-hint-watch-ad" class="options-btn options-btn--accent">Regarder la pub (+10)</button>
+            <button id="btn-hint-watch-ad" class="options-btn options-btn--accent">Regarder la pub (+5 indices)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modale "cosmétique débloqué" (round 22, retour utilisateur):
+           "il faudra freeze le jeu lors du déblocage d'un objet cosmétique
+           (pareillement pour les badges) avec une animation en modale
+           transparente mais fond sombre pour montrer au joueur qu'il a
+           débloqué tel ou tel cosmétique" — même mécanisme .modal que les
+           autres modales de ce fichier (le fond semi-transparent sombre de
+           .modal-backdrop EST le "freeze": aucun clic ne traverse jusqu'au
+           plateau tant qu'elle est ouverte), réutilisée à l'identique pour
+           un avatar (campagne/achat, voir main.js: markStoryLevelCompleted/
+           refreshProfileAvatarPicker) ET un badge Remember (voir
+           sommation.js: pointsApi.onBadgeEarned) — voir main.js:
+           showCosmeticUnlockModal(). -->
+      <div id="cosmetic-unlock-modal" class="modal cosmetic-unlock-modal hidden">
+        <div class="modal-backdrop" data-cosmetic-unlock-close></div>
+        <div class="modal-card cosmetic-unlock-card">
+          <p class="cosmetic-unlock-kicker" id="cosmetic-unlock-kicker">Nouveau cosmétique débloqué</p>
+          <div class="cosmetic-unlock-reveal" id="cosmetic-unlock-reveal"></div>
+          <h3 class="modal-title cosmetic-unlock-title" id="cosmetic-unlock-title"></h3>
+          <p class="modal-text cosmetic-unlock-text" id="cosmetic-unlock-text"></p>
+          <div class="modal-actions">
+            <button id="btn-cosmetic-unlock-close" class="options-btn options-btn--accent" data-cosmetic-unlock-close>Génial !</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modale "schéma" pédagogique (mode Histoire, round 23, retour
+           utilisateur): "ça n'est pas assez clair pour le joueur de
+           comprendre les mécaniques [...] intégrer des 'schéma' qui
+           expliquent les mécaniques de façon très simplifiée à chaque
+           nouveau composant ajouté" — icône réutilisée telle quelle
+           (FEATURE_ICON_HTML, voir main.js) dans une case de plateau
+           .cell.cell--empty agrandie, + un texte court. Fermable comme
+           #hint-modal (croix + clic en dehors), et enchaîne sur la
+           mécanique suivante si plusieurs sont découvertes d'un coup (voir
+           main.js: showNextMechanicSchema). -->
+      <div id="mechanic-schema-modal" class="modal mechanic-schema-modal hidden">
+        <div class="modal-backdrop" data-mechanic-schema-close></div>
+        <div class="modal-card mechanic-schema-card">
+          <button type="button" class="modal-close-x" data-mechanic-schema-close aria-label="Fermer">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+          <p class="mechanic-schema-kicker">Nouvelle mécanique</p>
+          <div id="mechanic-schema-icon" class="cell cell--empty mechanic-schema-icon"></div>
+          <h3 class="modal-title mechanic-schema-title" id="mechanic-schema-title"></h3>
+          <p class="modal-text mechanic-schema-text" id="mechanic-schema-text"></p>
+          <div class="modal-actions">
+            <button type="button" class="options-btn options-btn--accent" data-mechanic-schema-close>Compris !</button>
           </div>
         </div>
       </div>
@@ -803,6 +862,12 @@
       <div id="som-ad-modal" class="modal hidden">
         <div class="modal-backdrop" data-som-ad-modal-close></div>
         <div class="modal-card">
+          <!-- Round 23 (retour utilisateur): croix de fermeture au lieu du
+               bouton "Annuler" — le clic en dehors (backdrop ci-dessus) le
+               fait déjà. -->
+          <button type="button" class="modal-close-x" data-som-ad-modal-close aria-label="Fermer">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
           <h3 class="modal-title">Plus assez de points</h3>
           <p class="modal-text">Regarde une pub pour récupérer 200 points.</p>
           <!-- Round 20 (migration Capacitor/AdMob): feedback de chargement/échec
@@ -811,7 +876,6 @@
                tentée). -->
           <p id="som-ad-status" class="som-ad-status hidden"></p>
           <div class="modal-actions">
-            <button id="btn-som-ad-cancel" class="options-btn" data-som-ad-modal-close>Annuler</button>
             <button id="btn-som-ad-watch" class="options-btn options-btn--accent">Regarder la pub (+200)</button>
           </div>
         </div>

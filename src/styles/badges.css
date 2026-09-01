@@ -233,26 +233,36 @@
 }
 
 /* ---------- .badge-frame: rendu APPLIQUÉ (avatar+pseudo encadrés) ----------
-   Réutilisé à 4 endroits (voir main.js: buildBadgeFrame): prévisualisation
-   en haut de "Mon profil", écran "terminé" de Remember, byline des cartes
-   communautaires, en-tête de jeu en mode Communauté. Sans tier (pas de
-   badge actif), reste visuellement neutre — aucun bruit visuel pour qui n'a
-   pas de badge sélectionné. Round 19 (retour utilisateur): "plus fourni,
-   plus stylisé, intégré des designs sur sa bordure qui n'est pas obligée
-   d'être toujours de la même forme [...] les bords sont pas forcément
-   arrondis partout" — chaque tier casse la pilule parfaite d'une façon
-   différente (coin coupé, angle tranché, rectangle net...) tout en gardant
-   le MÊME format général (hauteur/padding), voir chaque .badge-frame--tier-N
-   ci-dessous. */
+   Réutilisé à plusieurs endroits (voir main.js: buildBadgeFrame):
+   prévisualisation en haut de "Mon profil", écran "terminé" de Remember,
+   byline des cartes communautaires, bannière de titre, en-tête de jeu en
+   mode Communauté. Sans tier (pas de badge actif), reste visuellement
+   neutre — aucun bruit visuel pour qui n'a pas de badge sélectionné. Round
+   19 (retour utilisateur): "plus fourni, plus stylisé, intégré des designs
+   sur sa bordure qui n'est pas obligée d'être toujours de la même forme
+   [...] les bords sont pas forcément arrondis partout" — chaque tier casse
+   la pilule parfaite d'une façon différente (coin coupé, angle tranché,
+   rectangle net...) tout en gardant le MÊME format général
+   (hauteur/padding), voir chaque .badge-frame--tier-N ci-dessous.
+
+   Round 22 (retour utilisateur): "moins grand en hauteur et plus allongé
+   [...] adapter la taille aussi de la police d'écriture" — le format de
+   base est resserré en hauteur (avatar 24px -> 20px, padding vertical
+   réduit) et étiré horizontalement (padding droit plus large), avec un
+   font-size par défaut explicite (au lieu d'un simple `inherit` qui
+   dépendait entièrement du contexte d'appel) pour rester lisible même
+   resserré. `.badge-frame--compact` ci-dessous va plus loin pour
+   s'intégrer à l'emplacement des pseudo dans "Communauté" (byline). */
 .badge-frame {
   position: relative;
   overflow: hidden;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 3px 12px 3px 3px;
+  gap: 6px;
+  padding: 2px 14px 2px 2px;
   border-radius: 999px;
   border: 1px solid transparent;
+  font-size: 0.82rem;
   vertical-align: middle;
   transition: border-radius 0.2s;
 }
@@ -268,11 +278,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
   background: #1c2130;
-  font-size: 0.85rem;
+  font-size: 0.7rem;
   flex-shrink: 0;
 }
 
@@ -283,6 +293,64 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Round 23 (retour utilisateur: "le badge/avatar/nom dans le menu [...] au
+   niveau visuel ça fait bizarre [...] le badge lui-même [doit être] le
+   bouton") — apparence "pilule" neutre, portée directement par le badge
+   quand IL sert lui-même de cible cliquable (bannière de titre/écran
+   "terminé" Remember, voir main.js: buildBadgeFrame({chevron: true}) qui
+   pose cette classe). Placée ICI, avant toutes les règles --tier-N
+   ci-dessous: à spécificité égale (une seule classe), c'est l'ORDRE dans ce
+   fichier qui tranche — un badge avec un tier actif garde donc la priorité
+   sur son propre décor plutôt que ce fond neutre. */
+.badge-frame--framed {
+  background: var(--panel);
+  border-color: #1c2130;
+  transition: border-color 0.2s, background 0.2s, border-radius 0.2s;
+}
+
+.badge-frame--framed:hover {
+  border-color: var(--accent);
+}
+
+/* Chevron notant "cliquable vers Mon profil" — dernier enfant du cadre,
+   jamais posé sans .badge-frame--framed (voir buildBadgeFrame). `margin-left:
+   auto` n'est pas nécessaire: le pseudo est déjà en `flex:1` dans ce
+   contexte (voir title.css: .title-profile-identity .badge-frame-pseudo),
+   donc le chevron se retrouve naturellement collé au bord droit. */
+.badge-frame-chevron {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--text-dim);
+}
+
+.badge-frame-chevron .icon-svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Variante compacte du badge APPLIQUÉ lui-même (à ne pas confondre avec
+   .badge-frame-preview--compact plus bas, qui est un WRAPPER autour d'un
+   .badge-frame standard) — modificateur posé directement sur .badge-frame
+   par buildBadgeFrame (voir main.js, param `compact`) pour se substituer
+   proprement à un simple pseudo texte, notamment dans la byline des cartes
+   "Communauté" (retour utilisateur round 22: "qu'on puisse avoir un format
+   normal et un format plus petit pour bien l'intégrer à son
+   environnement"). */
+.badge-frame--compact {
+  gap: 5px;
+  padding: 1px 10px 1px 1px;
+  font-size: 0.72rem;
+}
+
+.badge-frame--compact .badge-frame-avatar {
+  width: 16px;
+  height: 16px;
+  font-size: 0.58rem;
 }
 
 /* Tier 1 "Étincelle" — le plus sobre: pilule intacte + une étincelle. */
@@ -467,15 +535,29 @@
    main.js: refreshProfileBadgePreview. Centrée au-dessus du pseudo (retour
    utilisateur round 19), et suffisamment agrandie pour rester la référence
    visuelle principale de l'écran. */
+/* Round 23 (retour utilisateur: "dans le profil, la prévisualisation du
+   badge/avatar/nom doit prendre plus de largeur, d'une façon cohérente et
+   similaire à l'apparence qu'il a dans le menu") — le cadre s'étire
+   désormais sur toute la largeur disponible (comme .title-profile-identity
+   dans title.css) au lieu de se limiter à la largeur de son contenu centré;
+   `.badge-frame--framed` (voir plus haut) lui donne le même traitement
+   "pilule" que la bannière de titre, pour une apparence cohérente entre les
+   deux contextes malgré une taille différente. */
 .badge-frame-preview {
   display: flex;
-  justify-content: center;
+  width: 100%;
   padding: 4px 0 6px;
   font-size: 1.15rem;
 }
 
 .badge-frame-preview .badge-frame {
-  padding: 6px 18px 6px 6px;
+  display: flex;
+  width: 100%;
+  padding: 8px 20px 8px 8px;
+  /* Round 22: .badge-frame porte désormais son propre font-size par défaut
+     (voir plus haut) — ré-hérite explicitement ici celui du wrapper, sinon
+     la prévisualisation "Mon profil" perdrait son agrandissement. */
+  font-size: inherit;
 }
 
 .badge-frame-preview .badge-frame-avatar {
@@ -484,12 +566,22 @@
   font-size: 1.3rem;
 }
 
+.badge-frame-preview .badge-frame-pseudo {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+
 /* Variante compacte pour la modale de publication de l'éditeur (voir
    index.html: #editor-publish-author-preview) — juste une prévisualisation
    en lecture seule, pas besoin de la même taille que "Mon profil". */
 .badge-frame-preview--compact {
   font-size: 0.95rem;
   padding: 2px 0 10px;
+}
+
+.badge-frame-preview--compact .badge-frame {
+  font-size: inherit;
 }
 
 .badge-frame-preview--compact .badge-frame-avatar {
