@@ -37,7 +37,12 @@ const firebaseConfig = {
   measurementId: "G-HZ1LM00DZE",
 };
 
-const app = initializeApp(firebaseConfig);
+// Exportée (round analytics): analytics.js a besoin de CETTE MÊME instance
+// d'app pour getAnalytics(app) — jamais une 2e initializeApp() séparée, qui
+// dupliquerait la config pour rien et risquerait une désynchro si le projet
+// Firebase change un jour (voir commentaire de tête: un seul endroit connaît
+// firebaseConfig).
+export const app = initializeApp(firebaseConfig);
 
 /** Instance Firestore — sûre à utiliser immédiatement. Les lectures
  * publiques (ex. le fil communautaire) ne nécessitent PAS d'attendre
