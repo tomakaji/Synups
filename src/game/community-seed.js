@@ -11,7 +11,8 @@ export const SEED_LEVELS = [
     "title": "Premier signal",
     "author": {
       "pseudo": "Neurosynth",
-      "avatar": "neuron"
+      "avatar": "neuron",
+      "badge": 3
     },
     "rows": 8,
     "cols": 6,
@@ -36,7 +37,8 @@ export const SEED_LEVELS = [
     "title": "Écho simple",
     "author": {
       "pseudo": "Lucie.exe",
-      "avatar": "charge"
+      "avatar": "charge",
+      "badge": 1
     },
     "rows": 8,
     "cols": 7,
@@ -63,7 +65,8 @@ export const SEED_LEVELS = [
     "title": "Circuit calme",
     "author": {
       "pseudo": "M. Prisme",
-      "avatar": "synapse"
+      "avatar": "synapse",
+      "badge": 5
     },
     "rows": 9,
     "cols": 7,
@@ -116,7 +119,8 @@ export const SEED_LEVELS = [
     "title": "Le nœud aveugle",
     "author": {
       "pseudo": "Voltaic",
-      "avatar": "prism"
+      "avatar": "prism",
+      "badge": 2
     },
     "rows": 9,
     "cols": 7,
@@ -145,7 +149,8 @@ export const SEED_LEVELS = [
     "title": "Chambre interdite",
     "author": {
       "pseudo": "Songe",
-      "avatar": "pyra"
+      "avatar": "pyra",
+      "badge": 4
     },
     "rows": 9,
     "cols": 8,
@@ -204,7 +209,8 @@ export const SEED_LEVELS = [
     "title": "Miroir brisé",
     "author": {
       "pseudo": "Vortex_9",
-      "avatar": "target"
+      "avatar": "target",
+      "badge": 1
     },
     "rows": 9,
     "cols": 7,
@@ -234,7 +240,8 @@ export const SEED_LEVELS = [
     "title": "Dérive bleue",
     "author": {
       "pseudo": "Mira",
-      "avatar": "wall"
+      "avatar": "wall",
+      "badge": 3
     },
     "rows": 9,
     "cols": 8,
@@ -263,7 +270,8 @@ export const SEED_LEVELS = [
     "title": "Fractale mineure",
     "author": {
       "pseudo": "Ombre Claire",
-      "avatar": "neuron"
+      "avatar": "neuron",
+      "badge": 2
     },
     "rows": 12,
     "cols": 8,
@@ -326,7 +334,8 @@ export const SEED_LEVELS = [
     "title": "Le dernier neurone",
     "author": {
       "pseudo": "Ignis",
-      "avatar": "synapse"
+      "avatar": "synapse",
+      "badge": 5
     },
     "rows": 9,
     "cols": 6,
@@ -355,7 +364,8 @@ export const SEED_LEVELS = [
     "title": "Pyra dormant",
     "author": {
       "pseudo": "Halo",
-      "avatar": "mirror"
+      "avatar": "mirror",
+      "badge": 4
     },
     "rows": 12,
     "cols": 7,
@@ -388,7 +398,8 @@ export const SEED_LEVELS = [
     "title": "Réseau silencieux",
     "author": {
       "pseudo": "Cascade",
-      "avatar": "prism"
+      "avatar": "prism",
+      "badge": 2
     },
     "rows": 9,
     "cols": 7,
@@ -416,7 +427,8 @@ export const SEED_LEVELS = [
     "title": "Angle mort",
     "author": {
       "pseudo": "Fable",
-      "avatar": "pyra"
+      "avatar": "pyra",
+      "badge": 3
     },
     "rows": 8,
     "cols": 7,
@@ -443,7 +455,8 @@ export const SEED_LEVELS = [
     "title": "Résonance",
     "author": {
       "pseudo": "Zed",
-      "avatar": "filter"
+      "avatar": "mirror",
+      "badge": 1
     },
     "rows": 11,
     "cols": 8,

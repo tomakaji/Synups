@@ -5,23 +5,31 @@
 // Usage: node scripts/gen-community-seed.mjs > src/game/community-seed.js
 import { generateLevel } from "../src/game/generator.js";
 
+// `avatar`: ID réel (voir community-store.js: AVATARS), pas un emoji — ce
+// tableau a été resynchronisé sur le contenu actuel de community-seed.js
+// (qui avait dérivé de ce script depuis la refonte des avatars, round 19).
+// `badge`: tier de badge (1-5, voir sommation.js: BADGE_DEFS) affiché sur le
+// profil de cet auteur fictif dans Communauté — round 23 (retour
+// utilisateur: badge des faux profils de la seed). Certains auteurs restent
+// volontairement SANS badge (champ omis), pour simuler de vrais joueurs
+// débutants plutôt qu'un fil 100% de vétérans.
 const AUTHORS = [
-  { pseudo: "Neurosynth", avatar: "🧠" },
-  { pseudo: "Lucie.exe", avatar: "✨" },
-  { pseudo: "M. Prisme", avatar: "🔷" },
-  { pseudo: "Aeon", avatar: "🌌" },
-  { pseudo: "Voltaic", avatar: "⚡" },
-  { pseudo: "Songe", avatar: "🌙" },
-  { pseudo: "Katsu", avatar: "🦋" },
-  { pseudo: "Vortex_9", avatar: "🌀" },
-  { pseudo: "Mira", avatar: "🪐" },
-  { pseudo: "Ombre Claire", avatar: "🌊" },
-  { pseudo: "Petit Nex", avatar: "🧩" },
-  { pseudo: "Ignis", avatar: "🔥" },
-  { pseudo: "Halo", avatar: "🛰️" },
-  { pseudo: "Cascade", avatar: "🦉" },
-  { pseudo: "Fable", avatar: "🎯" },
-  { pseudo: "Zed", avatar: "🔮" },
+  { pseudo: "Neurosynth", avatar: "neuron", badge: 3 },
+  { pseudo: "Lucie.exe", avatar: "charge", badge: 1 },
+  { pseudo: "M. Prisme", avatar: "synapse", badge: 5 },
+  { pseudo: "Aeon", avatar: "mirror" },
+  { pseudo: "Voltaic", avatar: "prism", badge: 2 },
+  { pseudo: "Songe", avatar: "pyra", badge: 4 },
+  { pseudo: "Katsu", avatar: "target" },
+  { pseudo: "Vortex_9", avatar: "target", badge: 1 },
+  { pseudo: "Mira", avatar: "wall", badge: 3 },
+  { pseudo: "Ombre Claire", avatar: "neuron", badge: 2 },
+  { pseudo: "Petit Nex", avatar: "charge" },
+  { pseudo: "Ignis", avatar: "synapse", badge: 5 },
+  { pseudo: "Halo", avatar: "mirror", badge: 4 },
+  { pseudo: "Cascade", avatar: "prism", badge: 2 },
+  { pseudo: "Fable", avatar: "pyra", badge: 3 },
+  { pseudo: "Zed", avatar: "mirror", badge: 1 },
 ];
 
 const TITLES = [
