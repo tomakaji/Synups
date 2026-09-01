@@ -4,6 +4,11 @@ import { findSolution } from "./game/solver.js";
 // Round 20 (migration Capacitor/AdMob) — no-op silencieux hors app native
 // (voir game/ads.js), donc sûr à appeler ici même pendant `npm run dev`.
 import { initAds, showRewardedAd, showInterstitialAd } from "./game/ads.js";
+// Round 24 (retour utilisateur: "retour haptique sur les boutons de
+// navigation en général, et dans le jeu et le mode remember") — no-op
+// silencieux hors app native (même garde que ads.js), donc sûr à appeler ici
+// même pendant `npm run dev`.
+import { hapticLight, hapticWarning, hapticSuccess } from "./game/haptics.js";
 import {
   playPlace,
   playRemove,
@@ -81,6 +86,25 @@ import {
   initCommunityCloud,
   onLevelsChanged,
 } from "./game/community-store.js";
+
+// Round 24 (retour utilisateur: "retour haptique sur les boutons de
+// navigation en général") — UN SEUL listener délégué plutôt que d'ajouter
+// hapticLight() à chaque handler de bouton un par un (des dizaines, répartis
+// entre main.js/editor.js/sommation.js): capture tout clic qui atteint un
+// <button> non désactivé, y compris ceux créés dynamiquement (cartes
+// Communauté, tuiles d'avatar...) puisque la délégation écoute sur document.
+// Volontairement scopé aux <button> (jamais aux cases du plateau .cell ni
+// aux générateurs Remember .som-cell, qui sont des <div>) — ceux-ci ont leur
+// propre retour haptique dédié, plus riche (succès/échec), voir
+// handleCellClick ci-dessous et sommation.js.
+document.addEventListener(
+  "click",
+  (e) => {
+    const btn = e.target.closest("button");
+    if (btn && !btn.disabled) hapticLight();
+  },
+  { capture: true }
+);
 
 let currentLevelIndex = 0;
 // Le niveau EFFECTIVEMENT en cours, statique (`levels[currentLevelIndex]`)
@@ -348,9 +372,16 @@ function handleCellClick(r, c) {
     moveHistory.push({ cells: grid.getLastAffectedCells() });
     syncMoveUi();
   }
-  if (result === "placed") playPlace();
-  else if (result === "removed") playRemove();
-  else playError();
+  if (result === "placed") {
+    playPlace();
+    hapticLight();
+  } else if (result === "removed") {
+    playRemove();
+    hapticLight();
+  } else {
+    playError();
+    hapticWarning();
+  }
 
   renderer.render();
 
@@ -369,6 +400,7 @@ function handleCellClick(r, c) {
 
   if (grid.isWon()) {
     playWin();
+    hapticSuccess();
     advanceAfterWin();
   }
 }
@@ -390,6 +422,10 @@ function undoLastMove() {
   }
   // Après la mutation de `grid.lights`, pas avant: le compteur affiché lit
   // `grid.getPlacedLightCount()` (voir syncMoveUi), donc l'ordre importe ici.
+  // Round 24: pas de hapticLight() ici — undoLastMove() est TOUJOURS déclenché
+  // par btnUndo (un <button>), déjà couvert par le listener délégué global
+  // (voir plus haut) ; un second appel ici ferait vibrer deux fois pour un
+  // seul geste.
   syncMoveUi();
   if (anyPlaced) playPlace();
   else playRemove();

@@ -54,6 +54,13 @@ import { DEFAULT_AVATAR } from "./game/community-store.js";
 // SEUL endroit de l'app qui appelle showRewardedAd() pour l'instant (seule
 // pub demandée par le retour utilisateur à ce jour).
 import { showRewardedAd } from "./game/ads.js";
+// Round 24 (retour utilisateur: "retour haptique [...] dans le mode
+// remember") — no-op silencieux hors app native (voir game/haptics.js pour
+// le détail des 3 intensités). Volontairement PAS posé sur la simple prise
+// en main d'un générateur (startDrag) — trop fréquent/accidentel (un tap qui
+// ne fait que sélectionner) — seulement sur la RÉSOLUTION d'un geste
+// (dépôt), voir handleDrop/doDropOnLock/doDropOnObjective plus bas.
+import { hapticLight, hapticWarning, hapticSuccess } from "./game/haptics.js";
 // Sons: un son NEUF, court et étouffé, dédié à la génération (spammable via
 // le bouton "Générer" — voir spawnFromSelected) ; les autres actions
 // réutilisent des sons déjà existants du jeu principal, de façon symbolique
@@ -771,8 +778,10 @@ export function initSommation(pointsApi) {
     if (UNLOCK_COLORS.every((c) => lockFill[c])) {
       lockedCells.delete(key);
       lockFill = {};
+      hapticSuccess();
       return { ok: true, fx: "unlocked" };
     }
+    hapticLight();
     return { ok: true, fx: "lock-progress", color: letter };
   }
 
@@ -1029,6 +1038,7 @@ export function initSommation(pointsApi) {
         return { ok: true, fx: "obj-recycle" };
       }
       playTargetLost();
+      hapticWarning();
       return { ok: true, fx: "obj-fail" };
     }
     req.fulfilled += 1;
@@ -1057,9 +1067,11 @@ export function initSommation(pointsApi) {
       objectiveIndex = (objectiveIndex + 1) % OBJECTIVE_SCRIPT.length;
       objectiveState = cloneObjective(OBJECTIVE_SCRIPT[objectiveIndex]);
       playWin();
+      hapticSuccess();
       return { ok: true, fx: "obj-complete" };
     }
     playTargetSuccess();
+    hapticLight();
     return { ok: true, fx: "obj-progress", reqColor: req.color, reqKind: req.kind, reqTier: req.tier, orbIndex };
   }
 
@@ -1181,6 +1193,7 @@ export function initSommation(pointsApi) {
       }
       pendingFx = { type: "move", r: target.r, c: target.c };
       playRemove();
+      hapticLight();
       return;
     }
 
@@ -1192,6 +1205,7 @@ export function initSommation(pointsApi) {
 
     if (outcome?.ok && outcome.resultCell) {
       pendingFx = { type: outcome.fx, r: outcome.resultCell.r, c: outcome.resultCell.c };
+      hapticLight();
       return;
     }
 
@@ -1205,6 +1219,7 @@ export function initSommation(pointsApi) {
     }
     pendingFx = { type: "move", r: target.r, c: target.c };
     playRemove();
+    hapticLight();
   }
 
   let drag = null; // { r, c, pointerId, startX, startY, moved, ghostEl, previewEl, sourceEl, lastHoverEl }
@@ -1310,6 +1325,12 @@ export function initSommation(pointsApi) {
       const cell = board[r]?.[c];
       if (cell?.type === "gen") {
         if (selectedGen && selectedGen.r === r && selectedGen.c === c) {
+          // Round 24: hapticLight() ici — ce second tap déclenche l'action
+          // au même titre qu'un clic sur som-spawn-btn (déjà couvert par le
+          // listener délégué global de main.js pour LUI), mais CE chemin-ci
+          // passe par une case (<div>), jamais un <button> — sans cet appel
+          // explicite, le double-tap pour spammer resterait sans retour.
+          hapticLight();
           spawnFromSelected();
         } else {
           selectedGen = { r, c };
