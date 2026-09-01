@@ -21,9 +21,14 @@
 
 /* Même coquille mobile que #view-community/#view-editor: hauteur bornée au
    viewport + une seule zone qui défile (ici .som-board-wrap), pour que le
-   plateau ne pousse jamais le header hors écran sur petit format. */
+   plateau ne pousse jamais le header hors écran sur petit format.
+   Round 25: la hauteur totale est réduite de la hauteur du bandeau
+   publicitaire (voir base.css: --ad-banner-height) — .som-board-wrap étant
+   le seul enfant flexible (flex:1) de cette colonne, c'est LUI qui absorbe
+   automatiquement la réduction, sans toucher au header/à la barre de
+   progression au-dessus. */
 #view-sommation {
-  height: 100vh;
+  height: calc(100vh - var(--ad-banner-height, 0px));
   overflow: hidden;
   margin-top: -24px;
   margin-bottom: -48px;

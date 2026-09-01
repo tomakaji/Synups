@@ -20,6 +20,14 @@
   --text-dim: #7b869c;
   --cell-size: 56px;
   --gap: 6px;
+  /* Round 25 (retour utilisateur): hauteur RÉELLE du bandeau publicitaire
+     natif affiché en bas d'écran pendant qu'on joue (Histoire/Infini/
+     Communauté/Remember) — mise à jour en JS (voir main.js:
+     onBannerHeightChange), 0 tant qu'aucun bandeau n'est affiché (web/dev,
+     ou app native avant le premier showBannerAd()). Consommée par
+     screen-header.css (#view-play) et sommation.css (#view-sommation) pour
+     réserver exactement cet espace, jamais une valeur devinée. */
+  --ad-banner-height: 0px;
 }
 
 * {

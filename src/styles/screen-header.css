@@ -53,11 +53,16 @@
    plus bas) pour que le plateau ne se retrouve jamais caché derrière. Reste
    un descendant de #view-play : masquée automatiquement avec le reste de
    l'écran (voir .screen.hidden), sans classe ni logique JS séparée pour ça. */
+/* Round 25: décalée au-dessus du bandeau publicitaire natif (voir
+   base.css: --ad-banner-height) plutôt que collée à bottom:0 — sinon le
+   bandeau, dessiné PAR-DESSUS la WebView par le SDK natif, la recouvrirait
+   (et les boutons Indice/Annuler/Réinitialiser avec). 0 tant qu'aucun
+   bandeau n'est affiché: comportement inchangé sur web/dev. */
 .play-action-bar {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: var(--ad-banner-height, 0px);
   z-index: 40;
   display: flex;
   justify-content: center;
@@ -89,7 +94,11 @@
   min-height: 100vh;
   margin-top: -24px;
   margin-bottom: -48px;
-  padding-bottom: 78px;
+  /* Round 25: 78px pour .play-action-bar (inchangé) + la hauteur du bandeau
+     publicitaire (voir base.css: --ad-banner-height, et .play-action-bar
+     ci-dessus qui remonte de la même hauteur) — sinon le bas du plateau se
+     retrouverait sous .play-action-bar une fois celle-ci décalée. */
+  padding-bottom: calc(78px + var(--ad-banner-height, 0px));
 }
 
 #play-view {

@@ -25,7 +25,14 @@
 // planter faute de SDK natif disponible.
 
 import { Capacitor } from "@capacitor/core";
-import { AdMob, RewardAdPluginEvents, AdmobConsentStatus } from "@capacitor-community/admob";
+import {
+  AdMob,
+  RewardAdPluginEvents,
+  BannerAdPluginEvents,
+  BannerAdPosition,
+  BannerAdSize,
+  AdmobConsentStatus,
+} from "@capacitor-community/admob";
 
 // Round 21 (retour utilisateur: "pub-récompense pour recharger les indices" +
 // "publicités courtes (pas des reward ads) tous les 5 niveaux du mode
@@ -88,6 +95,20 @@ const INTERSTITIAL_AD_UNIT_ID = {
   ios: "ca-app-pub-3940256099942544/4411468910",
 };
 
+// Bandeau (bannière collée en bas de l'écran, PAS un format plein écran) —
+// retour utilisateur round 25: "lorsqu'on joue une grille (histoire ou
+// infinity) ou au mode bonus, on veut afficher un bandeau publicitaire tout
+// en bas de l'écran EN MÊME TEMPS" (donc affiché en continu PENDANT que le
+// joueur joue, contrairement au rewarded/interstitiel qui interrompent
+// ponctuellement — voir showBannerAd/hideBannerAd plus bas). IDs de TEST
+// publics Google — format bandeau, différents des autres formats ci-dessus.
+// Aucun ad unit RÉEL créé pour ce format pour l'instant (même remarque que
+// INTERSTITIAL_AD_UNIT_ID) — à créer dans la console AdMob avant publication.
+const BANNER_AD_UNIT_ID = {
+  android: "ca-app-pub-3940256099942544/6300978111",
+  ios: "ca-app-pub-3940256099942544/2934735716",
+};
+
 let initPromise = null;
 let rewardedReady = false;
 // Une préparation à la fois: éviter d'empiler prepareRewardVideoAd() si
@@ -97,6 +118,22 @@ let rewardedReady = false;
 let preparingRewarded = null;
 let interstitialReady = false;
 let preparingInterstitial = null;
+// `bannerCreated`: showBanner() a déjà réussi au moins une fois (un vrai
+// bandeau existe côté natif) — tant que c'est faux, showBannerAd() doit
+// appeler showBanner() (charge + affiche) plutôt que resumeBanner() (réaffiche
+// un bandeau déjà chargé), qui échouerait sur un bandeau qui n'a jamais existé.
+let bannerCreated = false;
+// `bannerVisible`: état VOULU par le dernier appel (show vs hide) — sert à
+// ignorer un événement asynchrone (SizeChanged, potentiellement en vol au
+// moment d'un hideBannerAd()) qui arriverait APRÈS que le joueur ait déjà
+// quitté l'écran de jeu, pour ne jamais réserver d'espace pour un bandeau
+// qu'on vient de cacher.
+let bannerVisible = false;
+// Callback fourni par main.js (voir onBannerHeightChange) — informé de la
+// hauteur RÉELLE du bandeau (0 = caché/pas encore chargé/échoué) pour que
+// l'appelant réserve exactement l'espace nécessaire sous le plateau, jamais
+// une valeur fixe devinée qui laisserait un vide ou chevaucherait le jeu.
+let bannerHeightListener = null;
 
 function platform() {
   // "web" inclut aussi bien le navigateur classique que le dev server Vite
@@ -112,6 +149,10 @@ function rewardedAdUnitId() {
 
 function interstitialAdUnitId() {
   return INTERSTITIAL_AD_UNIT_ID[platform()];
+}
+
+function bannerAdUnitId() {
+  return BANNER_AD_UNIT_ID[platform()];
 }
 
 /** Précharge une rewarded ad — appelée après init, et après chaque
@@ -268,4 +309,71 @@ export function showInterstitialAd() {
   // Consommée dans tous les cas (affichée ou échec d'affichage): recharge
   // immédiatement pour le prochain palier de 5 niveaux.
   prepareInterstitial();
+}
+
+/** Enregistre le callback appelé à chaque changement de hauteur du bandeau
+ * (voir bannerHeightListener ci-dessus) — à appeler UNE fois au démarrage de
+ * l'app (voir main.js), avant tout showBannerAd(). `heightPx` est en dp/pt
+ * (unité CSS px directement utilisable côté WebView) — 0 quand le bandeau
+ * est caché, pas encore chargé, ou en échec, JAMAIS une valeur devinée. */
+export function onBannerHeightChange(callback) {
+  bannerHeightListener = callback;
+}
+
+let bannerListenersReady = false;
+
+function ensureBannerListeners() {
+  if (bannerListenersReady) return;
+  bannerListenersReady = true;
+  AdMob.addListener(BannerAdPluginEvents.SizeChanged, (info) => {
+    // Ignore un événement en vol arrivé après un hideBannerAd() (voir
+    // bannerVisible ci-dessus) — sinon un SizeChanged tardif rouvrirait
+    // l'espace réservé sous un plateau qu'on vient de quitter.
+    if (bannerVisible) bannerHeightListener?.(info?.height || 0);
+  }).catch(() => {});
+  AdMob.addListener(BannerAdPluginEvents.FailedToLoad, () => {
+    if (bannerVisible) bannerHeightListener?.(0);
+  }).catch(() => {});
+}
+
+/** Affiche le bandeau publicitaire collé en bas de l'écran — voir main.js:
+ * showView(), appelé à l'entrée de tout écran de JEU (Histoire/Infini/
+ * Communauté en train de jouer une grille, et Remember). Réutilise le MÊME
+ * bandeau entre deux écrans plutôt que d'en recréer un à chaque fois
+ * (resumeBanner réaffiche celui déjà chargé, sans recharger de pub) — un
+ * showBanner() complet n'est fait qu'une seule fois, à la toute première
+ * entrée en jeu. No-op silencieux hors app native ou en cas d'échec (le
+ * jeu continue sans bandeau, jamais d'espace réservé pour rien). */
+export async function showBannerAd() {
+  if (!Capacitor.isNativePlatform()) return;
+  bannerVisible = true;
+  if (bannerCreated) {
+    await AdMob.resumeBanner().catch(() => {
+      // Le bandeau natif a pu être détruit entre-temps (rare) — retente un
+      // vrai showBanner() au prochain appel plutôt que de rester bloqué sur
+      // resumeBanner() qui échouera indéfiniment.
+      bannerCreated = false;
+    });
+    return;
+  }
+  ensureBannerListeners();
+  bannerCreated = true;
+  await AdMob.showBanner({
+    adId: bannerAdUnitId(),
+    adSize: BannerAdSize.ADAPTIVE_BANNER,
+    position: BannerAdPosition.BOTTOM_CENTER,
+    isTesting: true,
+  }).catch(() => {
+    bannerCreated = false;
+    if (bannerVisible) bannerHeightListener?.(0);
+  });
+}
+
+/** Cache le bandeau SANS le détruire (voir showBannerAd) — appelé à la
+ * sortie de tout écran de jeu (menu, options, éditeur, communauté...). */
+export function hideBannerAd() {
+  if (!Capacitor.isNativePlatform() || !bannerVisible) return;
+  bannerVisible = false;
+  bannerHeightListener?.(0);
+  if (bannerCreated) AdMob.hideBanner().catch(() => {});
 }
