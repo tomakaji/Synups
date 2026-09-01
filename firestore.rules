@@ -1,0 +1,54 @@
+// Règles de sécurité Firestore — projet "Synups" (console Firebase,
+// synups-3b038). Copie de référence tenue à jour dans le repo ; la version
+// qui fait foi est celle publiée dans la console Firebase (Firestore
+// Database > Règles), voir community-store.js pour le code qui s'appuie
+// dessus.
+//
+// Une seule collection utilisée par l'app : `levels` (le fil communautaire,
+// voir game/community-store.js). Tout le reste (profil, points, options,
+// likes/plays...) reste local à l'appareil (localStorage), jamais dans
+// Firestore — voir échange avec l'utilisateur : seule la Communauté est une
+// vraie donnée multi-joueurs.
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /levels/{levelId} {
+      // Le fil communautaire est public en lecture (tout le monde peut voir
+      // les grilles publiées, connecté ou non) — voir community-store.js:
+      // listLevels() ne nécessite jamais d'attendre l'authentification.
+      allow read: if true;
+
+      // Publier (depuis l'éditeur ou un code de partage, voir
+      // community-store.js: publishToCloud) exige d'être authentifié
+      // (compte anonyme Firebase, créé automatiquement au chargement de
+      // l'app — voir firebase-config.js) ET que le document déclare
+      // l'auteur comme étant l'uid courant (empêche de publier "au nom" de
+      // quelqu'un d'autre). Vérifications de forme minimales en plus, pour
+      // ne jamais laisser entrer un document manifestement cassé/abusif.
+      allow create: if request.auth != null
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 80
+        && request.resource.data.rows is int
+        && request.resource.data.rows > 0
+        && request.resource.data.rows <= 30
+        && request.resource.data.cols is int
+        && request.resource.data.cols > 0
+        && request.resource.data.cols <= 30
+        && request.resource.data.cells is list
+        && request.resource.data.author is map;
+
+      // Aucune édition en place : l'app ne propose que "Retirer" + republier
+      // (voir community-store.js, en-tête de fichier) — une grille publiée
+      // est immuable jusqu'à suppression.
+      allow update: if false;
+
+      // Retirer une grille (bouton "Retirer" de l'écran "Mon profil") :
+      // uniquement le joueur qui l'a publiée.
+      allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+    }
+  }
+}

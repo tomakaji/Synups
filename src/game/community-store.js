@@ -1,28 +1,55 @@
-// Communauté (créer / partager / jouer des grilles d'autres joueurs) — voir
-// plan validé avec l'utilisateur : "tout local, feed simulé". Aucun vrai
-// backend pour l'instant : ce module est l'UNIQUE endroit qui sait comment
-// les grilles communautaires sont stockées et calculées (SEED_LEVELS statique
-// + une couche locale dans localStorage) — le jour où un vrai service est
-// branché, seul ce fichier changera, pas l'UI (main.js/editor.js).
+// Communauté (créer / partager / jouer des grilles d'autres joueurs).
+//
+// Round 20 (retour utilisateur: "j'ai un compte firebase [...] tu peux
+// mettre en place tout ce qu'il faut ?") — les grilles PUBLIÉES/IMPORTÉES
+// vivent désormais dans Firestore (collection `levels`, voir
+// firebase-config.js) au lieu de localStorage: c'est la seule donnée
+// GENUINEMENT partagée entre joueurs (voir échange avec l'utilisateur:
+// PlayStore/AppStore ne fournissent aucun stockage, et c'est la seule partie
+// de l'app qui a vraiment besoin d'un vrai backend multi-joueurs). Ce module
+// reste l'UNIQUE endroit qui sait comment les grilles communautaires sont
+// stockées et calculées — le jour où ça change encore, seul ce fichier
+// bouge, pas l'UI (main.js/editor.js).
+//
+// `likes`/`plays`, eux, restent 100% locaux (localStorage) comme avant: ce
+// sont des compteurs délibérément personnels/"fictifs" (voir plus bas), pas
+// une vraie fonctionnalité sociale — les remonter en base aurait exigé un
+// vrai système de compteurs partagés (transactions Firestore) pour un
+// bénéfice hors scope de cette demande.
 //
 // Trois familles de données, toutes indépendantes (même raisonnement que
-// storage.js: une erreur de parsing sur l'une ne corrompt jamais les autres) :
-//   - `published`: les grilles QUE VOUS avez publiées (créées dans l'éditeur,
-//     ou importées par code) — la seule chose qu'on écrit vraiment ici.
-//   - `likes`: l'ensemble des ids de grilles que VOUS avez likées (seed ou
-//     publiées) — un like n'a aucun effet sur les autres joueurs, il n'existe
-//     que dans votre navigateur.
-//   - `plays`: combien de fois VOUS avez résolu chaque grille.
+// storage.js: une erreur sur l'une ne corrompt jamais les autres) :
+//   - les grilles Firestore (`cloudLevels`, cache local tenu à jour en temps
+//     réel par onSnapshot, voir initCommunityCloud) — TOUTES les grilles
+//     publiées/importées par TOUS les joueurs, les vôtres comme celles des
+//     autres (distinguées via `ownerUid`, voir listLevels: source "local" vs
+//     "community").
+//   - `likes` (localStorage): l'ensemble des ids de grilles que VOUS avez
+//     likées (seed, vôtres, ou d'un autre joueur) — un like n'a aucun effet
+//     sur les autres joueurs, il n'existe que dans votre navigateur.
+//   - `plays` (localStorage): combien de fois VOUS avez résolu chaque grille.
 // Le nombre de likes/parties AFFICHÉ à l'écran = la base fictive de la seed
 // (`baseLikes`/`basePlays`, voir community-seed.js) + votre propre couche
-// locale — ça donne l'impression d'un fil vivant sans jamais prétendre
-// refléter de vraies statistiques multi-joueurs.
+// locale — pour une grille Firestore d'un autre joueur (pas de base fictive),
+// ça se résume donc à "0 ou 1 like (le vôtre) / vos propres parties" tant
+// qu'aucun vrai compteur partagé n'est branché — comportement honnête plutôt
+// qu'un faux total, décision assumée plutôt qu'un oubli.
 import { LightUpGrid } from "./grid.js";
 import { analyzeSolve } from "./solver.js";
 import { SEED_LEVELS } from "./community-seed.js";
+import {
+  collection,
+  doc,
+  addDoc,
+  deleteDoc,
+  onSnapshot,
+  serverTimestamp,
+} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+import { db, firebaseReady } from "./firebase-config.js";
+
+const LEVELS_COLLECTION = "levels";
 
 const KEYS = {
-  published: "lightup-community-published",
   likes: "lightup-community-likes",
   plays: "lightup-community-plays",
 };
@@ -144,15 +171,6 @@ function writeJson(key, value) {
   }
 }
 
-function loadPublished() {
-  const data = readJson(KEYS.published, []);
-  return Array.isArray(data) ? data : [];
-}
-
-function savePublished(list) {
-  writeJson(KEYS.published, list);
-}
-
 function loadLikedIds() {
   const data = readJson(KEYS.likes, []);
   return new Set(Array.isArray(data) ? data : []);
@@ -171,19 +189,15 @@ function savePlays(map) {
   writeJson(KEYS.plays, map);
 }
 
-function nextLocalId() {
-  return `local-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-}
-
 /** Ajoute les champs calculés (likes/plays affichés, likedByMe) à une entrée
- * brute (seed ou publiée) — TOUJOURS relu depuis localStorage à l'appel
+ * brute (seed ou Firestore) — TOUJOURS relu depuis localStorage à l'appel
  * plutôt que mis en cache, pour ne jamais afficher un like/une partie
  * périmé après une action juste avant. */
 function decorate(entry, source, likedIds, plays) {
   const myPlays = plays[entry.id] || 0;
   return {
     ...entry,
-    source, // "seed" (contenu fictif intégré) | "local" (créé/importé par vous)
+    source, // "seed" (contenu fictif intégré) | "local" (publié/importé par vous) | "community" (par un autre joueur)
     likes: (entry.baseLikes ?? 0) + (likedIds.has(entry.id) ? 1 : 0),
     plays: (entry.basePlays ?? 0) + myPlays,
     likedByMe: likedIds.has(entry.id),
@@ -191,14 +205,92 @@ function decorate(entry, source, likedIds, plays) {
   };
 }
 
-/** Tout le fil communautaire (vos créations/imports d'abord, puis la seed),
- * prêt à être filtré/trié/affiché par l'appelant (voir main.js). */
+// ---------- Cache Firestore temps réel ----------
+// `cloudLevels` est la copie locale, toujours à jour, de la collection
+// Firestore `levels` — alimentée par onSnapshot (voir initCommunityCloud),
+// jamais lue directement depuis Firestore ailleurs dans ce fichier. Ça
+// permet à listLevels()/getLevel()/likedLevels() de rester SYNCHRONES (comme
+// avant la migration Firestore), sans changer un seul appelant côté
+// main.js/editor.js : ils continuent de lire un instantané en mémoire, qui
+// se trouve maintenant être tenu à jour par le réseau plutôt que par
+// localStorage.
+let cloudLevels = [];
+let myUid = null;
+let started = false;
+const changeListeners = new Set();
+
+function notifyChange() {
+  changeListeners.forEach((cb) => {
+    try {
+      cb();
+    } catch {
+      // Un listener cassé (erreur dans le code appelant) ne doit jamais
+      // empêcher les autres d'être notifiés.
+    }
+  });
+}
+
+/** S'abonne aux mises à jour du fil communautaire (nouvelle grille publiée
+ * par vous ou un autre joueur, uid anonyme résolu après coup...) — voir
+ * main.js: ré-affiche l'écran Communauté/Mon profil s'il est actif quand un
+ * changement arrive. Renvoie une fonction de désabonnement. */
+export function onLevelsChanged(callback) {
+  changeListeners.add(callback);
+  return () => changeListeners.delete(callback);
+}
+
+/** Démarre l'écoute temps réel Firestore + l'authentification anonyme — à
+ * appeler UNE fois au chargement de l'app (voir main.js, même principe que
+ * ads.js: initAds()). Idempotent. Ne bloque jamais le reste du chargement
+ * (pas de await ici) : tant que la première réponse Firestore n'est pas
+ * arrivée (ou en cas d'erreur réseau/règles), listLevels() se contente de
+ * renvoyer la seed, exactement comme si le fil communautaire "vrais
+ * joueurs" était vide — jamais de plantage. */
+export function initCommunityCloud() {
+  if (started) return;
+  started = true;
+
+  firebaseReady().then((uid) => {
+    myUid = uid;
+    notifyChange(); // un uid qui arrive après coup change qui est "local" pour vous
+  });
+
+  onSnapshot(
+    collection(db, LEVELS_COLLECTION),
+    (snapshot) => {
+      cloudLevels = snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          ...data,
+          id: d.id,
+          // `serverTimestamp()` arrive en Firestore Timestamp — reconverti en
+          // chaîne ISO ici pour que le reste du code (voir main.js: tri par
+          // date via `new Date(level.createdAt)`) n'ait jamais à savoir que
+          // la donnée vient de Firestore plutôt que de localStorage.
+          createdAt: data.createdAt?.toDate?.().toISOString() ?? data.createdAt ?? new Date().toISOString(),
+        };
+      });
+      notifyChange();
+    },
+    () => {
+      // Hors ligne / règles refusées / etc.: on garde le dernier cache connu
+      // plutôt que de le vider — mieux vaut un fil légèrement périmé qu'un
+      // fil qui disparaît d'un coup pendant un creux réseau.
+    }
+  );
+}
+
+/** Tout le fil communautaire (grilles Firestore d'abord — les vôtres comme
+ * celles des autres joueurs —, puis la seed), prêt à être filtré/trié/
+ * affiché par l'appelant (voir main.js). */
 export function listLevels() {
   const likedIds = loadLikedIds();
   const plays = loadPlays();
-  const local = loadPublished().map((l) => decorate(l, "local", likedIds, plays));
+  const cloud = cloudLevels.map((l) =>
+    decorate(l, l.ownerUid && l.ownerUid === myUid ? "local" : "community", likedIds, plays)
+  );
   const seed = SEED_LEVELS.map((l) => decorate(l, "seed", likedIds, plays));
-  return [...local, ...seed];
+  return [...cloud, ...seed];
 }
 
 export function getLevel(id) {
@@ -300,13 +392,44 @@ export function isDuplicatePublication(title, authorPseudo) {
   );
 }
 
-/** Publie une grille (depuis l'éditeur, voir editor.js) dans VOTRE espace
- * local — visible dans le fil communautaire de ce même navigateur
- * uniquement (voir en-tête du fichier). L'appelant doit avoir déjà validé
- * la grille via `validatePlayableLevel`. */
+/** Écrit une nouvelle grille dans Firestore, partagée factorisée entre
+ * publishLevel et importSharedLevel (même forme de document dans les deux
+ * cas). Optimiste : la grille apparaît IMMÉDIATEMENT dans `cloudLevels` (id
+ * provisoire "pending-..."), avant même la confirmation réseau — voir
+ * en-tête du fichier: le fil ne doit jamais paraître figé le temps d'un
+ * aller-retour Firestore. Dès que le snapshot temps réel confirme
+ * l'écriture, le doc provisoire est remplacé par le vrai (id Firestore
+ * définitif) au prochain rendu — il n'a jamais existé qu'en mémoire, donc
+ * rien à nettoyer explicitement. En cas d'échec d'écriture (hors ligne,
+ * règles Firestore...), la version optimiste est retirée plutôt que de
+ * laisser croire qu'elle a été publiée pour de vrai. */
+function publishToCloud(base) {
+  const optimisticId = `pending-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const nowIso = new Date().toISOString();
+  cloudLevels = [{ ...base, id: optimisticId, ownerUid: myUid, createdAt: nowIso }, ...cloudLevels];
+  notifyChange();
+
+  firebaseReady().then((uid) => {
+    if (!uid) return; // pas de connexion Firebase dispo (hors ligne...): reste juste local/optimiste pour cette session
+    addDoc(collection(db, LEVELS_COLLECTION), {
+      ...base,
+      ownerUid: uid,
+      createdAt: serverTimestamp(),
+    }).catch(() => {
+      cloudLevels = cloudLevels.filter((l) => l.id !== optimisticId);
+      notifyChange();
+    });
+  });
+
+  return decorate({ ...base, id: optimisticId, ownerUid: myUid, createdAt: nowIso }, "local", loadLikedIds(), loadPlays());
+}
+
+/** Publie une grille (depuis l'éditeur, voir editor.js) — désormais visible
+ * dans le fil communautaire de TOUS les joueurs (voir en-tête du fichier:
+ * migration Firestore round 20). L'appelant doit avoir déjà validé la
+ * grille via `validatePlayableLevel`. */
 export function publishLevel({ title, rows, cols, cells, author, difficulty }) {
-  const entry = {
-    id: nextLocalId(),
+  return publishToCloud({
     title,
     author,
     rows,
@@ -314,20 +437,24 @@ export function publishLevel({ title, rows, cols, cells, author, difficulty }) {
     cells,
     mechanics: detectMechanics(cells),
     difficulty: difficulty ?? null,
-    createdAt: new Date().toISOString(),
-    baseLikes: 0,
-    basePlays: 0,
-  };
-  const list = loadPublished();
-  list.unshift(entry);
-  savePublished(list);
-  return decorate(entry, "local", loadLikedIds(), loadPlays());
+  });
 }
 
-/** Retire une grille que vous aviez publiée (voir écran "Mon profil") — sans
- * effet sur une grille seed (contenu fictif intégré, jamais éditable). */
+/** Retire une grille que VOUS aviez publiée (voir écran "Mon profil", bouton
+ * affiché seulement quand `source === "local"`, donc seulement sur vos
+ * propres grilles) — sans effet sur une grille seed (contenu fictif intégré,
+ * jamais éditable) ni sur celle d'un autre joueur (voir firestore.rules:
+ * delete refusé si `ownerUid` ne correspond pas). Optimiste comme
+ * publishToCloud : disparaît immédiatement de `cloudLevels`. */
 export function unpublishLevel(id) {
-  savePublished(loadPublished().filter((l) => l.id !== id));
+  cloudLevels = cloudLevels.filter((l) => l.id !== id);
+  notifyChange();
+  if (id.startsWith("pending-")) return; // jamais écrit côté serveur (encore en vol) — rien à supprimer
+  deleteDoc(doc(db, LEVELS_COLLECTION, id)).catch(() => {
+    // Échec de suppression (hors ligne...) : le prochain snapshot temps réel
+    // remettra de toute façon le doc dans cloudLevels s'il existe encore
+    // vraiment côté serveur — pas besoin de le regérer manuellement ici.
+  });
 }
 
 // ---------- Partage par code (export/import manuel, sans backend) ----------
@@ -402,11 +529,12 @@ export function decodeShareCode(code) {
   };
 }
 
-/** Ajoute à votre espace local une grille déjà décodée+validée par
- * `decodeShareCode`. */
+/** Ajoute au fil communautaire (Firestore, voir publishToCloud) une grille
+ * déjà décodée+validée par `decodeShareCode` — apparaît comme publiée par
+ * VOUS (source "local"), au même titre qu'une publication depuis
+ * l'éditeur. */
 export function importSharedLevel(level) {
-  const entry = {
-    id: nextLocalId(),
+  return publishToCloud({
     title: level.title,
     author: level.author,
     rows: level.rows,
@@ -414,12 +542,5 @@ export function importSharedLevel(level) {
     cells: level.cells,
     mechanics: level.mechanics,
     difficulty: level.difficulty ?? null,
-    createdAt: new Date().toISOString(),
-    baseLikes: 0,
-    basePlays: 0,
-  };
-  const list = loadPublished();
-  list.unshift(entry);
-  savePublished(list);
-  return decorate(entry, "local", loadLikedIds(), loadPlays());
+  });
 }

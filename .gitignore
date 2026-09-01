@@ -4,3 +4,6 @@ dist
 *.log
 .env
 music-demos
+.idea
+android/.idea
+ios/App/Pods

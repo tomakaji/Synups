@@ -67,10 +67,13 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 
-	<!-- Round 20 (migration Capacitor/AdMob) — voir src/game/ads.js pour le
-	     détail. App ID de TEST Google (même ID que TEST_APP_ID.ios là-bas, à
-	     remplacer ICI ET dans ads.js le jour où un vrai compte AdMob existe,
-	     jamais l'un sans l'autre). -->
+	<!-- Round 20 (migration Capacitor/AdMob) — App ID de TEST public Google
+	     (voir src/game/ads.js: APP_ID.ios) — actif tant que l'app est en dev
+	     (retour utilisateur: "l'app n'est pas terminée, on remet les ID de
+	     test"). Le vrai App ID (ca-app-pub-4606745726023654~8047186954, voir
+	     ads.js: REAL_APP_ID) est gardé de côté pour la publication : à
+	     reporter ici ET dans AndroidManifest.xml en même temps, jamais l'un
+	     sans l'autre. -->
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-3940256099942544~1458002511</string>
 
