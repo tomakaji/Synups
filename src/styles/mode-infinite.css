@@ -16,6 +16,15 @@
   letter-spacing: 0.04em;
 }
 
+/* Défi Quotidien (voir index.html: #nav-daily, main.js: setMode) — même
+   traitement visuel que #infinite-level-label mais teinté étoile plutôt
+   qu'accent, pour rester cohérent avec .daily-challenge-fab. */
+.nav-daily-label {
+  color: #ffd76e;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+
 .infinite-badge {
   font-size: 0.68rem;
   letter-spacing: 0.03em;

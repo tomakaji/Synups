@@ -227,6 +227,19 @@
   height: 64px;
 }
 
+/* Défi Quotidien: 3e variante de bulle de révélation (voir main.js:
+   showCosmeticUnlockModal, kind "star") — même gabarit que
+   .cosmetic-unlock-avatar ci-dessus, juste reteintée étoile (même couleur
+   que .daily-challenge-fab, voir floating-controls.css) au lieu du cyan par
+   défaut, pour rester cohérente avec le langage visuel du bouton flottant. */
+.cosmetic-unlock-star {
+  background: radial-gradient(circle, rgba(255, 215, 110, 0.2), transparent 70%);
+  box-shadow:
+    0 0 0 2px rgba(255, 215, 110, 0.5),
+    0 0 40px -6px rgba(255, 215, 110, 0.65);
+  color: #ffd76e;
+}
+
 .cosmetic-unlock-badge {
   width: 110px;
   height: 110px;

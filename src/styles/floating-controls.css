@@ -37,3 +37,142 @@
   opacity: 1;
 }
 
+/* Défi Quotidien (retour utilisateur: "un petit bouton event qui apparait en
+   flottant sur un côté dans le menu") — côté GAUCHE (le mute global occupe
+   déjà la droite, voir .global-mute-btn ci-dessus), et UNIQUEMENT sur l'écran
+   titre par construction: ce bouton vit DANS #view-title (pas dans #app comme
+   .global-mute-btn), donc `position:fixed` reste correctement masqué par la
+   règle .screen.hidden de son ANCÊTRE dès qu'un autre écran est affiché — pas
+   besoin de logique JS dédiée pour le cacher/montrer selon l'écran.
+
+   Round suivant (retour utilisateur): "doit être au niveau du titre sur
+   l'axe vertical et être collé au bord gauche, comme si il en sortait [...]
+   plutôt dans un conteneur plus carré (bords bien arrondis quand même)". Le
+   bord gauche du bouton reste donc VOLONTAIREMENT anguleux (border-radius
+   nul sur ce côté, flush contre `left:0`, sans bordure sur ce côté non plus)
+   pour lire comme un onglet qui sort de l'écran, alors que les 3 autres
+   coins restent largement arrondis — plus le côté "pilule" 999px d'avant,
+   voir aussi le libellé texte ajouté (.daily-challenge-fab-label). `top` par
+   défaut ci-dessous n'est qu'un repli avant mesure: main.js
+   (alignDailyChallengeFab) le recalcule pour centrer verticalement le
+   bouton sur le logo dès que l'écran titre s'affiche, quelle que soit la
+   hauteur réelle de la bannière profil au-dessus (jamais fiable à deviner
+   en CSS pur).
+
+   Round suivant (retour utilisateur): "l'animation est un peu buguée [...]
+   je préfèrerais que le bouton garde le même positionnement dès le début en
+   hauteur mais apparaisse en arrivant par la gauche". Le bug venait de
+   `transition: all` ci-dessous: elle animait AUSSI `top`, donc chaque
+   recalcul par alignDailyChallengeFab() (au retour sur le titre, au resize)
+   se voyait comme un petit saut vertical parasite. `transition` est donc
+   désormais scopée aux seules propriétés de survol (bordure/ombre), JAMAIS
+   `top`/`transform` — la position verticale change instantanément, sans
+   anim. L'entrée par la gauche est une VRAIE animation dédiée
+   (daily-challenge-fab-enter, transform seul, jamais top) qui se rejoue à
+   chaque fois que l'élément repasse de display:none à visible (retour sur
+   l'écran titre, ou réapparition le jour suivant — voir plus bas
+   .daily-challenge-fab.hidden et main.js: renderDailyChallengeButton). */
+.daily-challenge-fab {
+  position: fixed;
+  top: 120px;
+  left: 0;
+  z-index: 50;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 64px;
+  padding: 10px 13px 10px 9px;
+  border-radius: 0 18px 18px 0;
+  background: var(--panel);
+  border: 1px solid rgba(255, 215, 110, 0.4);
+  border-left: none;
+  color: #ffd76e;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 0 0 rgba(255, 215, 110, 0);
+  animation: daily-challenge-fab-enter 0.5s ease-out;
+}
+
+/* Retour utilisateur: "doit disparaître si le défi a été réalisé" — masquée
+   entièrement (pas juste désactivée/grisée comme avant) une fois complétée
+   aujourd'hui, voir main.js: renderDailyChallengeButton. display:none (et
+   non juste opacity/visibility) est volontaire: c'est ce qui permet à
+   l'animation d'entrée ci-dessus de se REJOUER automatiquement le jour
+   suivant, quand la classe est retirée et l'élément redevient visible. */
+.daily-challenge-fab.hidden {
+  display: none;
+}
+
+@keyframes daily-challenge-fab-enter {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.daily-challenge-fab:hover {
+  border-color: #ffd76e;
+  box-shadow: 0 0 14px -4px rgba(255, 215, 110, 0.6);
+}
+
+.daily-challenge-fab-star {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.daily-challenge-fab-label {
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  text-align: center;
+  text-transform: uppercase;
+  color: #ffd76e;
+}
+
+/* Pastille (retour utilisateur implicite: signaler "récompense dispo" sans
+   texte) — un simple point tant que non complété aujourd'hui, remplacé par
+   un ✓ discret une fois fait (voir main.js: renderDailyChallengeButton). */
+.daily-challenge-fab-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--success);
+  color: #05060a;
+  font-size: 0.62rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.daily-challenge-fab-badge.hidden {
+  display: none;
+}
+
+/* En cours de génération (voir main.js: ensureTodayChallenge côté FAB) —
+   léger pulse pour signaler une attente sans bloquer visuellement le reste
+   du menu. */
+.daily-challenge-fab.generating {
+  opacity: 0.6;
+  animation: daily-challenge-fab-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes daily-challenge-fab-pulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+

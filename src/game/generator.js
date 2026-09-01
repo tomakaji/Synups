@@ -133,7 +133,12 @@ function seededRandom(seed) {
  */
 export const FEATURES = {
   forbidden: { label: "Cases interdites", weight: 1, implemented: true },
-  color: { label: "Couleur (charges + cibles)", weight: 3, implemented: true, pickProbability: 0.95 },
+  // Round 27 (retour utilisateur): "les éléments à charge sont des
+  // neurones" — seul `label` (texte affiché sur la tuile du mode Infini)
+  // est retouché ici, la clé `color`/le mot "charge" ailleurs dans ce
+  // fichier restent des noms INTERNES inchangés (voir main.js:
+  // MECHANIC_SCHEMAS pour le même principe côté texte de règles).
+  color: { label: "Couleur (neurones + cibles)", weight: 3, implemented: true, pickProbability: 0.95 },
   // pickProbability élevée (comme color) : voir generateLevel/isPerfect — la
   // boucle s'arrête dès le premier essai qui atteint le bon palier ET la
   // couleur, SANS jamais comparer d'essais ultérieurs via isBetterCandidate
@@ -2028,13 +2033,33 @@ function neutralizeDeadIsolatedCells(layout, rows, cols) {
     }
 }
 
-function tryGenerate(seed, stars, enabledFeatureKeys, deadline) {
+// Défi Quotidien (retour utilisateur: "générer une très grande grille
+// (difficulté 3 mais en plus grand) chaque jour") — décalage additif
+// appliqué aux BORNES de rowsRange/colsRange du palier 3★ UNIQUEMENT pour
+// cet appel précis (voir generateLevel/tryGenerate ci-dessous), jamais une
+// modification de DIFFICULTY_PRESETS lui-même: les paliers 1-3★ normaux
+// (mode Infini) restent EXACTEMENT ceux mesurés/calibrés empiriquement (voir
+// le commentaire au-dessus de DIFFICULTY_PRESETS sur le plafond ~96 cellules
+// pour la latence solveur). +3 lignes/+2 colonnes ~= +40% de cellules
+// (11-12x7-8 -> 14-15x9-10, ~126-150 cases) — sensiblement plus grand sans
+// s'aventurer dans une taille jamais mesurée. Le palier de difficulté visé
+// (solverTarget, voir SOLVER_TIER_FOR_STARS) reste celui du 3★ normal: même
+// TECHNIQUE de résolution exigée, seule la grille physique est plus grande.
+export const DAILY_CHALLENGE_SIZE_BOOST = { rows: 3, cols: 2 };
+
+function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
   const preset = DIFFICULTY_PRESETS[stars];
   const solverTarget = SOLVER_TIER_FOR_STARS[stars];
   const rand = seededRandom(seed);
 
-  const rows = pickInt(rand, preset.rowsRange);
-  const cols = pickInt(rand, preset.colsRange);
+  const rowsRange = sizeBoost
+    ? [preset.rowsRange[0] + sizeBoost.rows, preset.rowsRange[1] + sizeBoost.rows]
+    : preset.rowsRange;
+  const colsRange = sizeBoost
+    ? [preset.colsRange[0] + sizeBoost.cols, preset.colsRange[1] + sizeBoost.cols]
+    : preset.colsRange;
+  const rows = pickInt(rand, rowsRange);
+  const cols = pickInt(rand, colsRange);
   const clueDensity = pickFloat(rand, preset.initialClueDensity);
   const cornerVoid = pickInt(rand, preset.cornerVoidRange);
 
@@ -2209,6 +2234,11 @@ export function generateLevel({
   seed = Date.now() ^ (Math.random() * 0xffffffff),
   maxAttempts,
   maxTimeMs,
+  // Défi Quotidien uniquement (voir DAILY_CHALLENGE_SIZE_BOOST) — undefined
+  // pour tout appel existant (mode Infini), donc AUCUN changement de
+  // comportement pour eux (voir tryGenerate: sizeBoost falsy -> ranges
+  // inchangées).
+  sizeBoost,
 } = {}) {
   const stars = clampTier(difficulty);
   const solverTarget = SOLVER_TIER_FOR_STARS[stars]; // voir SOLVER_TIER_FOR_STARS: 1★→2, 2★→3, 3★→4
@@ -2240,7 +2270,7 @@ export function generateLevel({
   while (attempts < attemptsBudget && Date.now() - start < timeBudgetMs) {
     attempts++;
     const candidateSeed = Math.floor(seed) + attempts * 7919; // grand premier: étale les seeds
-    const raw = tryGenerate(candidateSeed, stars, enabledFeatureKeys, deadline);
+    const raw = tryGenerate(candidateSeed, stars, enabledFeatureKeys, deadline, sizeBoost);
     if (!raw) continue; // forme dégénérée ou réparation non convergée: on retente ailleurs
 
     const level = { name: "Infini", rows: raw.rows, cols: raw.cols, cells: raw.cells };

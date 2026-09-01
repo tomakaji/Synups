@@ -149,7 +149,7 @@ export function raceForBest(taskPromises, { isPerfect, isBetter }) {
  * se corrompre — en pratique la file d'attente `enqueuePoolJob` plus bas les
  * sérialise de toute façon (une seule génération à la fois sur le pool).
  */
-function generateOnce({ difficulty, enabledFeatureKeys, seed, maxAttempts, maxTimeMs } = {}) {
+function generateOnce({ difficulty, enabledFeatureKeys, seed, maxAttempts, maxTimeMs, sizeBoost } = {}) {
   const tier = clampTier(difficulty);
   // Voir generator.js/generateLevel: quand la couleur est demandée, un
   // résultat n'est "parfait" que s'il l'a AUSSI obtenue — sinon on continue
@@ -177,6 +177,7 @@ function generateOnce({ difficulty, enabledFeatureKeys, seed, maxAttempts, maxTi
       seed: baseSeed + i * WORKER_SEED_STRIDE,
       maxAttempts: perWorkerAttempts,
       maxTimeMs: totalTimeMs,
+      sizeBoost,
     })
   );
 

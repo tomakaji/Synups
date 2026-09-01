@@ -16,6 +16,13 @@ const KEYS = {
   progress: "lightup-story-progress",
   settings: "lightup-settings",
   seenMechanics: "lightup-seen-mechanics",
+  // Défi Quotidien (retour utilisateur: "une nouvelle ressource (une étoile)
+  // qu'on stocke sur le profil joueur") — clé DÉDIÉE, indépendante de
+  // `points` (monnaie Infini/Remember existante), même raisonnement que
+  // points/progress ci-dessus: chaque monnaie/progression a sa propre clé,
+  // jamais mélangées. Voir dailyChallenge.js pour le reste de la logique.
+  stars: "lightup-stars",
+  dailyChallenge: "lightup-daily-challenge",
 };
 
 function readJson(key, fallback) {
@@ -57,6 +64,59 @@ export function savePoints(points) {
   } catch {
     // voir writeJson
   }
+}
+
+// ---------- Étoiles (Défi Quotidien) ----------
+// Même forme que loadPoints/savePoints ci-dessus (clé dédiée, voir KEYS.stars).
+
+export function loadStars() {
+  try {
+    const raw = localStorage.getItem(KEYS.stars);
+    const n = raw ? Number(raw) : 0;
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function saveStars(stars) {
+  try {
+    localStorage.setItem(KEYS.stars, String(stars));
+  } catch {
+    // voir writeJson
+  }
+}
+
+/** Ajoute `n` étoiles (récompense du Défi Quotidien, voir dailyChallenge.js:
+ * completeTodayChallenge) et retourne le nouveau total — jamais négatif. */
+export function addStars(n) {
+  const next = Math.max(0, loadStars() + n);
+  saveStars(next);
+  return next;
+}
+
+/** Dépense `cost` étoiles si le solde le permet (déblocage d'avatar/badge —
+ * voir community-store.js: unlock.type "star") — même contrat que
+ * spendSharedPoints (main.js): retourne false SANS rien modifier si le solde
+ * est insuffisant, jamais de solde négatif. */
+export function spendStars(cost) {
+  const current = loadStars();
+  if (current < cost) return false;
+  saveStars(current - cost);
+  return true;
+}
+
+// ---------- Défi Quotidien (grille du jour, propre à ce joueur) ----------
+// Retour utilisateur: "on enregistre la grille sur les données du joueur
+// (pas de grille commune à tout le monde)" — générée et stockée uniquement
+// en local (voir dailyChallenge.js), jamais un niveau partagé/serveur.
+
+export function loadDailyChallenge() {
+  return readJson(KEYS.dailyChallenge, null);
+}
+
+export function saveDailyChallenge(data) {
+  writeJson(KEYS.dailyChallenge, data);
 }
 
 // ---------- Progression Histoire ----------
@@ -131,6 +191,12 @@ const DEFAULT_SETTINGS = {
   // qu'une fois débloqué, mais la valeur peut techniquement persister à
   // false même avant déverrouillage (pas de risque, juste inerte).
   pixelartEnabled: false,
+  // Mode daltonien (retour utilisateur): ajoute un repère textuel (R/G/B/
+  // RG/GB/RB/RGB) sur toute case qui porte une couleur, EN PLUS de la
+  // couleur elle-même — voir colorblind.js. N'a aucun effet sur la logique
+  // du jeu (colors.js/grid.js restent inchangés), purement un calque
+  // d'affichage optionnel.
+  colorblindEnabled: false,
 };
 
 export function loadSettings() {
@@ -174,6 +240,21 @@ export function eraseAllProgress() {
   // jamais, alors qu'il "redécouvre" chaque mécanique depuis le niveau 1.
   try {
     localStorage.removeItem(KEYS.seenMechanics);
+  } catch {
+    // voir writeJson
+  }
+  // Défi Quotidien: étoiles + grille du jour remises à zéro au même titre que
+  // le reste de la progression Histoire/Infini (voir KEYS.stars/dailyChallenge
+  // ci-dessus) — PAS les avatars/badges déjà achetés avec des étoiles (voir
+  // ownedAvatars/activeBadge dans le profil, hors périmètre ici, même
+  // traitement que les avatars achetés avec des points).
+  try {
+    localStorage.removeItem(KEYS.stars);
+  } catch {
+    // voir writeJson
+  }
+  try {
+    localStorage.removeItem(KEYS.dailyChallenge);
   } catch {
     // voir writeJson
   }

@@ -144,6 +144,24 @@ export const AVATARS = [
     unlock: { type: "pixelart" },
     svg: '<svg viewBox="0 0 100 100" shape-rendering="crispEdges"><g fill="#39ff14"><rect x="30" y="15" width="10" height="10"/><rect x="60" y="15" width="10" height="10"/><rect x="20" y="25" width="10" height="10"/><rect x="30" y="25" width="40" height="10"/><rect x="70" y="25" width="10" height="10"/><rect x="15" y="35" width="70" height="10"/><rect x="15" y="45" width="10" height="10"/><rect x="30" y="45" width="10" height="10"/><rect x="40" y="45" width="20" height="10"/><rect x="60" y="45" width="10" height="10"/><rect x="75" y="45" width="10" height="10"/><rect x="15" y="55" width="70" height="10"/><rect x="25" y="65" width="10" height="10"/><rect x="65" y="65" width="10" height="10"/></g></svg>',
   },
+  // Défi Quotidien (retour utilisateur: "[les étoiles] permettront de
+  // débloquer des avatars et des badges") — lot DÉDIÉ aux étoiles, séparé du
+  // lot "purchase" ci-dessus (points) : voir unlock.type "star" dans
+  // isAvatarUnlocked/avatarUnlockLabel plus bas, et dailyChallenge.js pour la
+  // monnaie elle-même (1 étoile/jour). Coûts choisis pour ~1 semaine puis
+  // ~1 mois de Défi Quotidien complété.
+  {
+    id: "comet",
+    label: "Comète",
+    unlock: { type: "star", cost: 5 },
+    svg: '<svg viewBox="0 0 100 100"><circle cx="68" cy="32" r="14" fill="#ffd76e"/><path d="M58,42 L18,86" stroke="#ffd76e" stroke-width="7" stroke-linecap="round" opacity="0.55"/><path d="M62,38 L30,78" stroke="#ffe9b0" stroke-width="4" stroke-linecap="round" opacity="0.8"/></svg>',
+  },
+  {
+    id: "nova",
+    label: "Supernova",
+    unlock: { type: "star", cost: 20 },
+    svg: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="14" fill="#ffe9b0"/><g stroke="#c98fe0" stroke-width="6" stroke-linecap="round"><line x1="50" y1="8" x2="50" y2="26"/><line x1="50" y1="74" x2="50" y2="92"/><line x1="8" y1="50" x2="26" y2="50"/><line x1="74" y1="50" x2="92" y2="50"/><line x1="21" y1="21" x2="34" y2="34"/><line x1="66" y1="66" x2="79" y2="79"/><line x1="79" y1="21" x2="66" y2="34"/><line x1="34" y1="66" x2="21" y2="79"/></g></svg>',
+  },
 ];
 
 /** Rétrocompatibilité (profils déjà enregistrés avec un avatar par défaut) :
@@ -178,6 +196,11 @@ export function isAvatarUnlocked(avatar, state = {}) {
       return !!state.owned?.has(avatar.id);
     case "pixelart":
       return !!state.pixelart;
+    // Défi Quotidien: même bookkeeping "owned" que "purchase" (voir
+    // profile.ownedAvatars — la monnaie dépensée n'a pas besoin d'être
+    // distinguée une fois l'achat fait, voir main.js: refreshProfileAvatarPicker).
+    case "star":
+      return !!state.owned?.has(avatar.id);
     default:
       return true;
   }
@@ -194,6 +217,8 @@ export function avatarUnlockLabel(avatar) {
       return `S'achète ${avatar.unlock.cost} points`;
     case "pixelart":
       return "Débloqué à la 5e récompense de Remember";
+    case "star":
+      return `S'achète ${avatar.unlock.cost} étoiles (Défi Quotidien)`;
     default:
       return "Verrouillé";
   }
