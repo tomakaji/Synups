@@ -148,14 +148,6 @@
   cursor: default;
 }
 
-/* Filtre: ne garde qu'un canal fixe d'un laser coloré qui le traverse (voir
-   CellType.FILTER). Couleur décidée au level-design, jamais cliquable. */
-.cell--filter {
-  background: transparent;
-  border-color: transparent;
-  cursor: default;
-}
-
 /* Prisme: colore ses 4 voisins directs selon une rotation dépendant du
    nombre de lumières actuellement adjacentes (voir CellType.PRISM). */
 .cell--prism {

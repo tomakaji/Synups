@@ -143,7 +143,11 @@ export const FEATURES = {
   // essai précis, pas de compter sur une comparaison ultérieure qui
   // n'arrive presque jamais en pratique.
   mirror: { label: "Miroir dévieur", weight: 2, implemented: true, requires: "color", pickProbability: 0.92 },
-  filter: { label: "Filtre", weight: 2, implemented: false, requires: "color" },
+  // "filter" (round 22, retour utilisateur: "supprime [...] la feature
+  // filtre, on ne l'utilise pas") retiré ici — n'a jamais été implémenté
+  // (implemented: false, aucun niveau seed/histoire ne s'en sert), sans
+  // impact sur le solveur/générateur qui n'en avaient de toute façon aucune
+  // logique réelle.
   prism: { label: "Prisme", weight: 3, implemented: false, requires: "color" },
   // `requires: "color"` (retour utilisateur : "ce qu'on veut c'est un
   // dilemme de COULEUR sur le Pyra", pas juste un dilemme sur son propre

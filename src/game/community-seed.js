@@ -175,7 +175,7 @@ export const SEED_LEVELS = [
     "title": "Triade rouge",
     "author": {
       "pseudo": "Katsu",
-      "avatar": "filter"
+      "avatar": "target"
     },
     "rows": 9,
     "cols": 7,

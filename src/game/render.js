@@ -21,7 +21,6 @@ import {
   pixelWallIcon,
   pixelPyraIcon,
   pixelMirrorNeuronIcon,
-  pixelFilterIcon,
   pixelPrismIcon,
 } from "./pixelIcons.js";
 
@@ -311,20 +310,6 @@ export function mirrorNeuronIcon() {
     <line x1="50" y1="10" x2="50" y2="90" stroke="#b98fe0" stroke-width="5" stroke-dasharray="7 6" stroke-linecap="round"/>
     <circle cx="26" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
     <circle cx="74" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
-  </svg>`;
-}
-
-/** Icône d'un filtre: entonnoir teinté de sa couleur fixe (décidée au
- * level-design, jamais changée en jeu) — même technique de double-contour
- * (sombre plein derrière, couleur devant) que les autres icônes, pour
- * rester lisible même sur un fond de la même teinte. */
-export function filterIcon(cell) {
-  if (isPixelTheme()) return pixelFilterIcon(cell);
-  const hex = hexFor(channelColor(cell.filterColor)) || "#888";
-  const shape = "M15,25 85,25 60,50 60,80 40,80 40,50 Z";
-  return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
-    <path d="${shape}" fill="none" stroke="#05060a" stroke-width="9" stroke-linejoin="round"/>
-    <path d="${shape}" fill="${hex}" fill-opacity="0.22" stroke="${hex}" stroke-width="4" stroke-linejoin="round"/>
   </svg>`;
 }
 
@@ -753,10 +738,6 @@ export function createBoardRenderer(boardEl) {
             if (mirrorActive) mirrorActiveCount++;
             break;
           }
-          case CellType.FILTER:
-            el.classList.add("cell--filter");
-            if (icon) icon.innerHTML = filterIcon(cellData);
-            break;
           case CellType.MIRROR_NEURON:
             el.classList.add("cell--mirror-neuron");
             if (icon) icon.innerHTML = mirrorNeuronIcon();

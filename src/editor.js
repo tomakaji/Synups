@@ -179,8 +179,6 @@ export function initEditor({ levels }) {
   const targetColorSel = document.getElementById("ed-target-color");
   const mirrorOptions = document.getElementById("ed-mirror-options");
   const mirrorOrientationSel = document.getElementById("ed-mirror-orientation");
-  const filterOptions = document.getElementById("ed-filter-options");
-  const filterColorSel = document.getElementById("ed-filter-color");
   const prismOptions = document.getElementById("ed-prism-options");
   const prismFirstColorSel = document.getElementById("ed-prism-first-color");
   const testBtn = document.getElementById("ed-test");
@@ -327,8 +325,6 @@ export function initEditor({ levels }) {
         return targetColorSel.value;
       case "mirror":
         return mirrorOrientationSel.value;
-      case "filter":
-        return `F${filterColorSel.value}`;
       case "prism":
         return `P${prismFirstColorSel.value}`;
       case "mirror_neuron":
@@ -418,7 +414,6 @@ export function initEditor({ levels }) {
     chargeOptions.classList.toggle("hidden", tool !== "charge");
     targetOptions.classList.toggle("hidden", tool !== "target");
     mirrorOptions.classList.toggle("hidden", tool !== "mirror");
-    filterOptions.classList.toggle("hidden", tool !== "filter");
     prismOptions.classList.toggle("hidden", tool !== "prism");
   }
 
@@ -429,7 +424,6 @@ export function initEditor({ levels }) {
   chargeColorSel.addEventListener("change", () => setTool("charge"));
   targetColorSel.addEventListener("change", () => setTool("target"));
   mirrorOrientationSel.addEventListener("change", () => setTool("mirror"));
-  filterColorSel.addEventListener("change", () => setTool("filter"));
   prismFirstColorSel.addEventListener("change", () => setTool("prism"));
 
   function guardStructureEdit() {

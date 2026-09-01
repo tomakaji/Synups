@@ -33,7 +33,6 @@ import {
   chargeIcon,
   synapseIcon,
   mirrorIcon,
-  filterIcon,
   prismIcon,
   pyraIcon,
   mirrorNeuronIcon,

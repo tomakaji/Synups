@@ -288,15 +288,6 @@ export function pixelPyraIcon(cell) {
   return `<svg viewBox="0 0 ${SIZE} ${SIZE}" class="cell-icon-svg" shape-rendering="crispEdges">${toSvgInner(base)}${dot(apex[0], apex[1], "#ff5d6c", "0s")}${dot(right[0], right[1], "#59e39d", "0.6s")}${dot(left[0], left[1], "#5da9ff", "1.2s")}</svg>`;
 }
 
-// ---------- Filtre ----------
-export function pixelFilterIcon(cell) {
-  const hex = hexFor(channelColor(cell.filterColor)) || "#888";
-  const grid = emptyGrid();
-  triangleOutline(grid, [5, 8], [27, 8], [16, 20], hex);
-  rectOutline(grid, 12, 20, 20, 27, hex);
-  return toSvg(grid);
-}
-
 // ---------- Prisme ----------
 // Le rotor de facettes "respirant" et pivotant du design lisse est ramené
 // à 4 triangles de couleur STATIQUES peints UNE FOIS dans l'arrangement de

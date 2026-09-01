@@ -31,20 +31,20 @@
 // (il bloque, sans dévier). Ça permet de router un laser en coude vers
 // une lumière qui n'est pas sur la même ligne/colonne que la charge.
 //
-// Filtre (FILTER, token "Fr"/"Fg"/"Fb"): couleur fixe décidée au
-// level-design (pas cliquable en jeu, contrairement au miroir qui ne
-// change pas de couleur non plus d'ailleurs — "pas cliquable" ici précise
-// juste qu'il n'y a aucune interaction joueur possible sur cette case).
-// Un laser coloré qui le traverse ne garde QUE le canal du filtre (ex: un
-// filtre rouge ne laisse jamais passer ni vert ni bleu, même si le rayon
-// entrant en contenait) — ne dévie pas, contrairement au miroir.
+// [Retiré round 22, retour utilisateur: "on ne l'utilise pas"] Filtre
+// (FILTER, token "Fr"/"Fg"/"Fb") existait ici — couleur fixe qui ne
+// laissait passer qu'un seul canal d'un laser coloré traversant la case,
+// sans dévier (contrairement au miroir). Supprimé du moteur (CellType,
+// parsing de token, propagation), de l'éditeur et du rendu — aucun niveau
+// Histoire ni seed communautaire n'en dépendait (voir git history pour
+// retrouver l'implémentation si jamais réintroduite).
 //
 // Prisme (PRISM, token "P" ou "Pr"/"Pg"/"Pb"/"Pw"): case fixe du niveau
 // (non posable par le joueur) qui colore une lumière sur chacune de ses 4
 // directions (gauche/bas/droite/haut) SI elle est "à portée de laser" —
 // PAS seulement adjacente: on scanne comme un laser de charge colorée
-// (transparent au VOID, mais arrêté par tout autre obstacle — mur,
-// miroir, filtre, charge, autre prisme...) jusqu'à la première lumière
+// (transparent au VOID, mais arrêté par tout autre obstacle — mur, miroir,
+// charge, autre prisme...) jusqu'à la première lumière
 // rencontrée sur cette ligne/colonne (voir `_scanRangeForLight`). La
 // "première couleur" (celle à gauche) s'applique dès la PREMIÈRE lumière
 // en portée (0 et 1 lumière en portée donnent donc le même état de
@@ -129,7 +129,6 @@ export const CellType = {
   CLUE: "clue", // obstacle plein "case à charge" (1 à 4 lumières adjacentes)
   FORBIDDEN: "forbidden", // obstacle plein: aucune lumière adjacente autorisée
   MIRROR: "mirror", // dévie un laser de charge colorée de 90°, opaque au reste
-  FILTER: "filter", // ne garde qu'un canal fixe d'un laser coloré qui le traverse
   PRISM: "prism", // colore ses 4 voisins directs, rotation selon lumières adjacentes
   MIRROR_NEURON: "mirror_neuron", // [expérimental] duplique en symétrie toute lumière qui l'éclaire
   PYRA: "pyra", // neurone pyramidal: activé dès 1 lumière adjacente (jusqu'à 3), surcharge à 4
@@ -173,9 +172,6 @@ function parseCellToken(token) {
   if (token === "0") return { type: CellType.FORBIDDEN };
   if (token === "/" || token === "\\") return { type: CellType.MIRROR, orientation: token };
   if (TARGET_CODES[token]) return { type: CellType.EMPTY, target: { ...TARGET_CODES[token] } };
-
-  const f = /^F([rgb])$/.exec(token);
-  if (f) return { type: CellType.FILTER, filterColor: f[1] };
 
   const p = /^P([rgbw])?$/.exec(token);
   if (p) return { type: CellType.PRISM, firstColor: p[1] || "r" };
@@ -877,17 +873,6 @@ export class LightUpGrid {
               continue;
             }
 
-            if (nCell.type === CellType.FILTER) {
-              // Ne dévie pas (contrairement au miroir) mais marque un point
-              // de rupture de couleur dans `points`, pour que la Passe B
-              // puisse appliquer le masque de canal à partir d'ici.
-              points.push([nr, nc]);
-              segmentEmpty = null;
-              nr += curDr;
-              nc += curDc;
-              continue;
-            }
-
             if (nCell.type !== CellType.EMPTY) break; // obstacle opaque: le laser s'arrête ici
             segmentEmpty = [nr, nc];
             nr += curDr;
@@ -898,9 +883,9 @@ export class LightUpGrid {
           else if (segmentEmpty) points.push(segmentEmpty);
 
           if (points.length > 1) {
-            // `points` garde toujours: départ, puis chaque miroir/filtre
+            // `points` garde toujours: départ, puis chaque miroir
             // traversé (dans l'ordre), puis l'arrivée (lumière ou dernière
-            // case vide) — jamais de miroir/filtre en dernière position.
+            // case vide) — jamais de miroir en dernière position.
             rawRays.push({ points, baseColor, hitLight });
           }
         }
@@ -915,11 +900,10 @@ export class LightUpGrid {
 
       for (let i = 0; i < segCount; i++) {
         colors[i] = current;
-        // Le point d'arrivée de ce segment est un miroir ou un filtre sauf
-        // s'il s'agit du tout dernier point du tracé (lumière atteinte ou
-        // bout de segment vide): un miroir mélange (union) avec TOUT ce qui
-        // le traverse actuellement ; un filtre masque (ne garde que son
-        // propre canal, quel que soit ce qui entre).
+        // Le point d'arrivée de ce segment est un miroir sauf s'il s'agit
+        // du tout dernier point du tracé (lumière atteinte ou bout de
+        // segment vide): un miroir mélange (union) avec TOUT ce qui le
+        // traverse actuellement.
         if (i < segCount - 1) {
           const [wr, wc] = points[i + 1];
           const waypoint = this.cells[wr][wc];
@@ -952,12 +936,6 @@ export class LightUpGrid {
             mirrorColor.r = mirrorColor.r || current.r;
             mirrorColor.g = mirrorColor.g || current.g;
             mirrorColor.b = mirrorColor.b || current.b;
-          } else if (waypoint.type === CellType.FILTER) {
-            current = {
-              r: current.r && waypoint.filterColor === "r",
-              g: current.g && waypoint.filterColor === "g",
-              b: current.b && waypoint.filterColor === "b",
-            };
           }
         }
       }
