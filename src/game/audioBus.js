@@ -39,10 +39,32 @@ Tone.setContext(new Tone.Context({ latencyHint: "playback" }));
 // comme un grésillement/une distorsion, et empire mécaniquement à mesure
 // que plus de couches se débloquent au fil d'un niveau — une cause
 // entièrement DIFFÉRENTE (et cumulable) du CPU/de la latence déjà traités.
-// `masterBus`, en aval de TOUT (musique ET effets de jeu, voir music.js/
-// sound.js qui s'y connectent tous les deux plutôt que d'appeler chacun
-// leur propre `.toDestination()`), est le seul point où la VRAIE somme
-// finale peut être surveillée. Tone.Limiter(-1) ne change rien tant que le
-// total reste sous -1dBFS, et compresse fortement seulement les pics qui
-// dépasseraient — inaudible en usage normal, un pur garde-fou anti-clipping.
-export const masterBus = new Tone.Limiter(-1).toDestination();
+//
+// Retour utilisateur (round suivant): "le son grésille toujours un peu [...]
+// il faut être un peu plus radical". Un `Tone.Limiter` seul est un pur
+// écrêteur dur (brickwall): tant que le total reste sous le seuil il ne
+// touche à RIEN, puis au-delà il coupe instantanément et sans transition —
+// sur un signal qui frôle souvent ce seuil (plusieurs couches + SFX qui
+// s'ajoutent en continu), cet écrêtage répété peut lui-même sonner comme un
+// grésillement, même une fois toutes les sources individuellement
+// raisonnables. `compressor` est posé EN AMONT du limiteur pour réduire la
+// somme PROGRESSIVEMENT dès -24dB (ratio 4:1, genou doux de 12dB pour éviter
+// tout effet de "pompage" audible) plutôt que d'attendre le tout dernier
+// moment: le limiteur en aval devient un pur filet de sécurité pour les
+// pics résiduels, au lieu de faire tout le travail lui-même en permanence.
+const compressor = new Tone.Compressor({
+  threshold: -24,
+  ratio: 4,
+  attack: 0.003,
+  release: 0.25,
+  knee: 12,
+});
+
+const limiter = new Tone.Limiter(-1).toDestination();
+compressor.connect(limiter);
+
+// `masterBus` reste le point d'entrée unique importé par music.js/sound.js
+// (aucun changement requis dans ces deux fichiers) — il pointe maintenant
+// vers le compresseur plutôt que directement vers le limiteur, ce dernier
+// restant caché en aval dans cette même chaîne.
+export const masterBus = compressor;

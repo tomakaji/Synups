@@ -84,8 +84,14 @@ export function setMasterVolume(level) {
 // jeu ET la reverb qui les prolonge).
 // Se connecte à `masterBus` (voir audioBus.js) plutôt qu'à sa propre
 // `.toDestination()` — c'est LUI, désormais, qui reçoit la somme finale
-// effets de jeu + musique (voir music.js) et la protège du clipping.
-const speakerSafeHighpass = new Tone.Filter(160, "highpass").connect(masterBus);
+// effets de jeu + musique (voir music.js) et la protège du clipping (et,
+// depuis le round "plus radical", passe aussi par un compresseur avant le
+// limiteur — voir audioBus.js).
+// Coupure remontée de 160 à 200Hz au round "plus radical" (retour
+// utilisateur: le grésillement persistait malgré tout ce qui précède) —
+// voir music.js pour le même changement, et plus bas (playPlace) pour la
+// transposition qui en découle sur G3/C#4.
+const speakerSafeHighpass = new Tone.Filter(200, "highpass").connect(masterBus);
 
 // Bus commun : un peu de reverb + un léger delay pour une sensation
 // d'espace/onde, plutôt qu'un son sec qui claque.
@@ -207,9 +213,15 @@ export async function playPlace() {
     // (tritone) et le même caractère "grave/sombre" RELATIF au reste de la
     // palette, tout en restant au-dessus du filtre — donc audible et
     // propre plutôt que filtré ou source de bourdonnement.
+    // Round "plus radical": la coupure du filtre est remontée de 160 à
+    // 200Hz (voir speakerSafeHighpass ci-dessus) — G3 (~196Hz) se
+    // retrouverait juste EN DESSOUS du nouveau seuil, ce qui aurait
+    // recréé exactement le problème que l'octave précédente réglait.
+    // Remonté à A3/D#4 (mêmes 6 demi-tons, donc même tritone) pour
+    // garder une marge confortable au-dessus des 200Hz.
     const now = Tone.now();
-    darkPlaceLow.triggerAttackRelease("G3", "8n", now);
-    darkPlaceHigh.triggerAttackRelease("C#4", "8n", now);
+    darkPlaceLow.triggerAttackRelease("A3", "8n", now);
+    darkPlaceHigh.triggerAttackRelease("D#4", "8n", now);
     return;
   }
   // Voir nextPlacementNote() plus haut: avance dans la suite de notes du

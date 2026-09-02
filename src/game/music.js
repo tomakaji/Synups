@@ -166,8 +166,14 @@ const NORMAL_CUTOFF_HZ = 20000; // au-delà du spectre audible: filtre inactif e
 // passe pas par duckFilter ci-dessous, voir sa raison d'être).
 // Se connecte à `masterBus` (voir audioBus.js) plutôt qu'à sa propre
 // `.toDestination()` — c'est LUI, désormais, qui reçoit la somme finale
-// musique + effets de jeu (voir sound.js) et la protège du clipping.
-const speakerSafeHighpass = new Tone.Filter(160, "highpass").connect(masterBus);
+// musique + effets de jeu (voir sound.js) et la protège du clipping (et,
+// depuis le round "plus radical", passe aussi par un compresseur avant le
+// limiteur — voir audioBus.js).
+// Coupure remontée de 160 à 200Hz au round "plus radical" (retour
+// utilisateur: le grésillement persistait malgré tout ce qui précède) —
+// on sacrifie un peu plus de grave (déjà peu présent/peu utile sur ce type
+// d'enceinte) pour une marge de sécurité plus large contre le bourdonnement.
+const speakerSafeHighpass = new Tone.Filter(200, "highpass").connect(masterBus);
 const musicBus = new Tone.Volume(0).connect(speakerSafeHighpass);
 
 // Passe-bas PARTAGÉ pour base + couches mécaniques uniquement — échec.wav
