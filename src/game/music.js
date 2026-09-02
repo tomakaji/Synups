@@ -215,8 +215,35 @@ function rampParam(param, target, seconds) {
   param.linearRampToValueAtTime(target, now + seconds);
 }
 
+// BUG réel trouvé en testant réellement le code (voir harnais Node avec un
+// faux AudioContext à 48000Hz, la fréquence native de la quasi-totalité du
+// matériel audio moderne — PAS 44100Hz, contrairement à ce que Howler.js
+// suppose encore en dur): `Howl.init()` (voir howler.js ~ligne 627) appelle
+// automatiquement `Howler._unlockAudio()` dès la création du TOUT PREMIER
+// Howl de la page. Cette fonction (howler.js ~ligne 315, pensée à l'origine
+// pour un bug de Mobile Safari datant de ~2015) compare
+// `Howler.ctx.sampleRate` à 44100 et, si différent (donc quasiment
+// TOUJOURS sur du matériel actuel), appelle `Howler.unload()` — qui FERME
+// le contexte audio courant et le RECRÉE entièrement. Comme
+// `ensureOutputChain()` ci-dessous construit `duckFilter`/etc. AVANT ce
+// premier Howl, ce mécanisme les orphelinait sur l'ANCIEN contexte fermé,
+// provoquant "cannot connect to an AudioNode belonging to a different
+// audio context" dès le tout premier appel de `rerouteThroughDuckFilter`.
+// On désactive spécifiquement CE mécanisme (`_mobileUnloaded`, propriété
+// interne mais suffisante à neutraliser uniquement ce comportement) sans
+// toucher au reste du déverrouillage audio mobile (légitime et toujours
+// actif — écouteurs touchstart/click posés par `_unlockAudio` plus bas
+// dans son propre code, inchangés).
+Howler._mobileUnloaded = true;
+
 function ensureOutputChain() {
-  if (outputChainBuilt) return;
+  // Garde-fou supplémentaire (au cas où un autre mécanisme interne de
+  // Howler, encore non identifié, recréerait Howler.ctx après coup comme
+  // le faisait `_mobileUnloaded` ci-dessus avant d'être neutralisé): si le
+  // contexte a changé depuis la dernière construction de la chaîne, on la
+  // reconstruit entièrement plutôt que de laisser `duckFilter`/etc.
+  // orphelins sur un contexte fermé.
+  if (outputChainBuilt && Howler.ctx === ctx) return;
   // Force la création de Howler.ctx/Howler.masterGain si ce n'est pas déjà
   // fait — `Howler.volume()` (API publique documentée) appelle en interne
   // `setupAudioContext()` quand `self.ctx` est encore `null`, exactement
