@@ -65,7 +65,14 @@ export function setMasterVolume(level) {
 
 // Bus commun : un peu de reverb + un léger delay pour une sensation
 // d'espace/onde, plutôt qu'un son sec qui claque.
-const reverb = new Tone.Reverb({ decay: 4.5, wet: 0.4 }).toDestination();
+// Retour utilisateur (grésillement mobile — voir aussi music.js: le
+// changement de contexte audio en latence "playback", correctif principal):
+// Tone.Reverb est une convolution, le calcul DSP continu le plus coûteux de
+// ce fichier — son coût croît avec `decay` (la queue de réverbération
+// traitée en continu tant qu'elle n'est pas éteinte). 4.5s ramené à 2.5s:
+// toujours "un peu de reverb" perceptible, mais une queue nettement plus
+// courte à calculer en continu, pour laisser plus de marge au CPU mobile.
+const reverb = new Tone.Reverb({ decay: 2.5, wet: 0.4 }).toDestination();
 const delay = new Tone.FeedbackDelay({ delayTime: 0.3, feedback: 0.22, wet: 0.16 }).connect(reverb);
 
 const tone = new Tone.Synth({

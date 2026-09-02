@@ -820,7 +820,9 @@ trackEvent("app_open");
 // l'interface, il faudrait ajouter une marge" — marge ajoutée UNIQUEMENT
 // quand un bandeau est réellement affiché (px > 0), jamais quand il est
 // caché/pas chargé (web/dev), pour ne rien décaler dans ce cas.
-const AD_BANNER_MARGIN = 10;
+// Retour utilisateur (round suivant): "encore davantage de marge" — 10px
+// jugé encore insuffisant, remonté à 28px.
+const AD_BANNER_MARGIN = 28;
 onBannerHeightChange((px) => {
   document.documentElement.style.setProperty("--ad-banner-height", `${px > 0 ? px + AD_BANNER_MARGIN : 0}px`);
 });

@@ -22,6 +22,28 @@
 import * as Tone from "tone";
 import { isPixelTheme } from "./pixelIcons.js";
 
+// Retour utilisateur: "le son grésille assez vite sur téléphone, et si je
+// laisse tourner un peu, ça grésille de plus en plus" — Tone.js démarre par
+// défaut sur un contexte audio en latence "interactive" (le plus petit
+// buffer possible, pensé pour un jeu de rythme où chaque frappe doit sonner
+// quasi instantanément). Or cette musique tourne EN CONTINU dès le premier
+// clic et n'est plus jamais interrompue de toute la session (voir
+// startMusic plus bas) : 11 pistes bouclées EN MÊME TEMPS, plus le passe-bas
+// partagé et la reverb/delay ci-dessous — un buffer aussi petit laisse très
+// peu de marge au thread audio pour absorber la moindre pause (le
+// ramasse-miettes JS, un pic de rendu à l'écran, et surtout le throttling
+// thermique progressif d'un CPU mobile sous charge soutenue: le processeur
+// ralentit au fil des minutes, ce qui explique le "de plus en plus" — un
+// buffer confortable au départ finit par ne plus suivre). Un contexte dédié
+// en latence "playback" (buffer nettement plus généreux) absorbe ces
+// à-coups sans craquer, au prix d'une latence supplémentaire de quelques
+// dizaines de ms au déclenchement d'un son — inaudible pour de la musique de
+// fond et des synths doux (voir sound.js), on n'est pas sur un jeu de rythme.
+// DOIT être posé ici, tout en haut du tout premier fichier qui touche Tone
+// (music.js — sound.js l'importe, donc s'évalue après lui) : un contexte ne
+// peut plus être changé une fois des nodes déjà créés dessus.
+Tone.setContext(new Tone.Context({ latencyHint: "playback" }));
+
 // Gamme utilisée par TOUTES les couches mélodiques (voir
 // music-demos/couches: neurone-couleur.wav, prismes.wav) — exportée comme
 // référence de tonalité pour toute synthèse/extension future de ces
