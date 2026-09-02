@@ -23,13 +23,20 @@
 /* Round suivant (retour utilisateur): "le bouton profil doit s'arrêter
    avant le bouton du son global qui flotte afin de ne pas s'y superposer"
    — .global-mute-btn est position:fixed en haut à droite (40px + 14px
-   d'offset, voir floating-controls.css) ; sur un écran étroit (~420-480px),
-   la bannière (width:min(420px,100%), donc quasi pleine largeur) pouvait
-   s'étendre jusque sous ce bouton fixe. Le 3e terme de min() réserve 64px
-   (40px de bouton + 14px d'offset + 10px de marge) sur la largeur de
-   viewport, quelle que soit la taille d'écran. */
+   d'offset, voir floating-controls.css). BUG CORRIGÉ (retour utilisateur
+   suivant: "la bannière profil [...] ne doit pas prendre toute la largeur
+   à droite"): la version précédente réservait 64px sur `100vw`, mais
+   .screen centre ses enfants (align-items:center) — cette réservation se
+   retrouvait donc coupée en deux (moitié à gauche, moitié à droite),
+   laissant en pratique deux fois moins de marge que prévu à droite, là où
+   le bouton flottant se trouve réellement. Corrigé en sortant la bannière
+   de la centration (align-self:flex-start) et en réservant l'espace
+   directement dans sa largeur (calc(100% - 64px), relatif à son propre
+   parent — jamais à 100vw) : tout l'espace non utilisé reste alors
+   naturellement à droite, sans dépendre d'un calcul de centrage. */
 .title-profile-banner {
-  width: min(420px, 100%, calc(100vw - 64px));
+  align-self: flex-start;
+  width: min(420px, calc(100% - 64px));
   display: flex;
   margin: 0 0 22px;
   padding: 0;

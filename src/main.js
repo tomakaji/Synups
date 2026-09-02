@@ -15,6 +15,7 @@ import {
   isSignedIn as isPlayGamesSignedIn,
   refreshStatus as refreshPlayGamesStatus,
   signIn as signInToPlayGames,
+  getPlayerDisplayName as getPlayGamesDisplayName,
   saveProgressToCloud,
   restoreProgressFromCloud,
 } from "./game/playGamesServices.js";
@@ -138,7 +139,12 @@ const boardEl = document.getElementById("board");
 const levelNameEl = document.getElementById("level-name");
 const boardContainerEl = document.getElementById("board-container");
 const btnUndo = document.getElementById("btn-undo");
-const renderer = createBoardRenderer(boardEl);
+// Retour utilisateur (zoom tactile): "on ne peut pas déplacer la grille en
+// touchant le vide autour d'elle" — voir render.js: createBoardRenderer,
+// `panSurfaceEl` capte les gestes sur toute la zone de jeu (#play-view,
+// jamais transformée elle-même) plutôt que seulement sur #board (qui, lui,
+// rétrécit visuellement autour de son centre une fois dézoomé/déplacé).
+const renderer = createBoardRenderer(boardEl, { panSurfaceEl: document.getElementById("play-view") });
 
 // ---------- Transition de fin de niveau (fondu, partagée Jouer/Infini) ----------
 // Un niveau résolu n'affiche plus de menu bloquant ("Niveau suivant" à
@@ -153,7 +159,10 @@ const renderer = createBoardRenderer(boardEl);
 // une transition d'environ la durée du son de victoire (voir sound.js:
 // playWin).
 const BOARD_FADE_MS = 450;
-const BOARD_HOLD_MS = 900;
+// Retour utilisateur: "la durée de transition à la victoire est un chouilla
+// trop longue" — réduite de 900 à 700ms (durée MINIMUM d'affichage du
+// plateau vide/niveau suivant en cours de génération, voir plus bas).
+const BOARD_HOLD_MS = 700;
 // Round 23 (retour utilisateur: "lorsqu'on termine une grille, on passe
 // trop vite à la suivante [...] ça serait bien de marquer un temps avant de
 // faire disparaître la grille actuelle afin que le joueur puisse intégrer
@@ -163,7 +172,9 @@ const BOARD_HOLD_MS = 900;
 // retour utilisateur) — l'Infini enchaîne les grilles trop vite pour ce
 // genre de pause sans nuire au rythme voulu, et Communauté redemande de
 // toute façon une note juste après (voir openCommunityRateModal).
-const STORY_WIN_HOLD_MS = 1100;
+// Retour utilisateur (round suivant): "un chouilla trop longue" — réduite
+// de 1100 à 850ms.
+const STORY_WIN_HOLD_MS = 850;
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -805,8 +816,13 @@ trackEvent("app_open");
 // un vide ou chevaucherait le jeu. 0 = bandeau caché/pas chargé/échoué,
 // retombe alors sur aucun espace réservé. Voir showView() plus bas pour
 // quand le bandeau est montré/caché.
+// Retour utilisateur: "la pub bandeau en bas en jeu mange trop sur
+// l'interface, il faudrait ajouter une marge" — marge ajoutée UNIQUEMENT
+// quand un bandeau est réellement affiché (px > 0), jamais quand il est
+// caché/pas chargé (web/dev), pour ne rien décaler dans ce cas.
+const AD_BANNER_MARGIN = 10;
 onBannerHeightChange((px) => {
-  document.documentElement.style.setProperty("--ad-banner-height", `${px}px`);
+  document.documentElement.style.setProperty("--ad-banner-height", `${px > 0 ? px + AD_BANNER_MARGIN : 0}px`);
 });
 
 // Round 20 (Firestore): démarre l'écoute temps réel du fil communautaire +
@@ -994,6 +1010,32 @@ function renderPlayGamesSection() {
     : "Connecte-toi pour sauvegarder ta progression dans le cloud.";
 }
 
+/** Retour utilisateur: "par défaut, on récupère le pseudo fourni par Google
+ * Play via le profil joueur" — appelée juste après une connexion réussie
+ * (au démarrage via refreshStatus si une session était déjà active, ou après
+ * un clic explicite sur "Se connecter"). Ne touche JAMAIS un pseudo déjà
+ * choisi par le joueur (voir la garde `!profile?.pseudo?.trim()` ci-dessous):
+ * c'est un préremplissage par défaut, pas une synchronisation forcée — un
+ * joueur qui a délibérément choisi un pseudo différent du sien sur Google
+ * Play garde le sien. Best-effort comme le reste du module: aucune erreur
+ * visible si le nom n'a pas pu être récupéré. */
+async function maybeAdoptPlayGamesPseudo() {
+  if (!isPlayGamesSignedIn()) return;
+  const profile = loadProfile();
+  if (profile?.pseudo?.trim()) return;
+  const displayName = await getPlayGamesDisplayName();
+  if (!displayName) return;
+  updateProfile({ pseudo: displayName });
+  // Rafraîchit tout affichage déjà visible du pseudo — la bannière de titre
+  // (toujours montée) et, si le joueur est déjà sur "Mon profil", le champ
+  // texte + la prévisu (sinon renderCommunityProfile les reconstruira à la
+  // prochaine ouverture de l'écran de toute façon).
+  renderTitleProfileBanner();
+  if (profilePseudoLabelEl) profilePseudoLabelEl.textContent = displayName;
+  if (profilePseudoInput) profilePseudoInput.value = displayName;
+  refreshProfileBadgePreview();
+}
+
 btnPlaygamesSignin.onclick = async () => {
   btnPlaygamesSignin.disabled = true;
   btnPlaygamesSignin.textContent = "Connexion…";
@@ -1005,7 +1047,10 @@ btnPlaygamesSignin.onclick = async () => {
   // silencieuse — voir saveProgressToCloud) : évite qu'un joueur qui vient
   // de se connecter reste sans sauvegarde cloud tant qu'il n'a pas cliqué
   // explicitement "Sauvegarder".
-  if (isAuthenticated) saveProgressToCloud();
+  if (isAuthenticated) {
+    saveProgressToCloud();
+    maybeAdoptPlayGamesPseudo();
+  }
 };
 
 btnPlaygamesSave.onclick = async () => {
@@ -1049,7 +1094,15 @@ btnPlaygamesRestore.onclick = async () => {
 // Vérifie la session au démarrage (silencieux, jamais de popup — voir
 // playGamesServices.js: refreshStatus) puis met à jour la section si le
 // joueur est déjà sur Options au moment où ça résout (cas rare, mais safe).
-refreshPlayGamesStatus().then(renderPlayGamesSection);
+// Round suivant (retour utilisateur): si une session Google Play était déjà
+// active (reconnexion silencieuse), c'est ICI — pas seulement après un clic
+// explicite sur "Se connecter" — qu'il faut tenter le préremplissage du
+// pseudo, sinon un joueur déjà connecté d'une session précédente ne le
+// verrait jamais appliqué automatiquement.
+refreshPlayGamesStatus().then(() => {
+  renderPlayGamesSection();
+  maybeAdoptPlayGamesPseudo();
+});
 
 // ---------- Mode Infini ----------
 // Voir docs/infinite-mode-design.md. Un niveau généré est un objet niveau
@@ -1097,8 +1150,18 @@ function infiniteConfig() {
 }
 
 document.querySelectorAll(".infinite-star-btn").forEach((btn) => {
+  // Retour utilisateur: "afficher le nombre de points à gagner par niveau
+  // en fonction [de la difficulté]" — rempli ici plutôt qu'en dur dans
+  // index.html: INFINITE_POINTS_BY_TIER (ci-dessus) reste l'UNIQUE source
+  // du barème, à la fois pour ce texte et pour le vrai gain (voir
+  // awardInfinitePoints) — jamais deux valeurs à tenir manuellement
+  // synchronisées.
+  const tier = Number(btn.dataset.difficulty);
+  const pointsEl = btn.querySelector(".infinite-star-points");
+  if (pointsEl) pointsEl.textContent = `+${INFINITE_POINTS_BY_TIER[tier] ?? 1} pt/niveau`;
+
   btn.onclick = () => {
-    infiniteDifficulty = Number(btn.dataset.difficulty);
+    infiniteDifficulty = tier;
     document.querySelectorAll(".infinite-star-btn").forEach((b) => b.classList.toggle("active", b === btn));
     // Amorce le buffer dès le changement de réglage (pas seulement une fois
     // en jeu) : si le joueur clique "Générer" juste après, le premier niveau
@@ -1116,15 +1179,21 @@ document.querySelectorAll(".infinite-star-btn").forEach((btn) => {
  * HTML retourné par la fonction, prêt à être injecté dans un `.cell-icon`
  * (même structure DOM que sur le plateau). */
 const FEATURE_ICON_HTML = {
-  // Règle de base (retour utilisateur: "il faut aussi une explication pour
-  // le neurone sans couleur") — une impulsion "neutre" (les 3 canaux
-  // allumés: c'est la couleur par défaut d'une impulsion posée sans neurone
-  // coloré à proximité, voir grid.js), même rendu qu'en jeu (voir render.js:
+  // Règle de base — une impulsion "neutre" (les 3 canaux allumés: c'est la
+  // couleur par défaut d'une impulsion posée sans neurone coloré à
+  // proximité, voir grid.js), même rendu qu'en jeu (voir render.js:
   // neuronIcon, désormais exportée). N'apparaît PAS dans FEATURES
   // (generator.js): ce n'est pas une mécanique optionnelle du mode Infini,
   // donc pas de tuile dans buildFeatureChecklist() pour cette clé — utilisée
   // UNIQUEMENT par MECHANIC_SCHEMAS.base ci-dessous.
   base: neuronIcon({ r: true, g: true, b: true }),
+  // Retour utilisateur: "il faut une pop up explicative pour le Neurone
+  // (sans couleur)" — dédiée, séparée de "base" (qui n'explique que la
+  // règle de pose de l'impulsion) : un neurone satisfait SANS couleur
+  // (aucune clé `color`), même rendu que sur le plateau (voir render.js:
+  // chargeIcon). Comme "base", forcée dans queueNewMechanicSchemas plutôt
+  // que détectée (un neurone est présent dès le niveau 1).
+  neuron: chargeIcon({ number: 2, _adjacentLights: 2 }),
   forbidden: synapseIcon("intact"),
   // "Couleur (charges + cibles)": une charge colorée satisfaite (glow +
   // orbite) est le rendu le plus reconnaissable de la mécanique.
@@ -1201,14 +1270,16 @@ buildFeatureChecklist();
 // FEATURE_ICON_HTML ci-dessus, réutilisé tel quel pour le schéma: même
 // rendu que partout ailleurs dans le jeu, pas une illustration à part).
 //
-// "base" (retour utilisateur: "il faut aussi une explication pour le
-// neurone sans couleur") — contrairement aux autres entrées, elle n'est
-// jamais retournée par detectMechanics (case numérotée + lumière, présente
-// dans TOUS les niveaux, pas une mécanique optionnelle détectable au cas par
-// cas) : voir queueNewMechanicSchemas ci-dessous, qui l'ajoute
-// systématiquement à la liste de candidats plutôt que de la dériver du
-// contenu de la grille — seul `seenMechanics` (voir plus bas) garantit
-// qu'elle ne s'affiche qu'une fois, comme les autres.
+// "base" ET "neuron" (retour utilisateur: "il faut une pop up explicative
+// pour le Neurone (sans couleur)") — deux entrées DISTINCTES pour deux
+// règles distinctes (poser une impulsion / lire un neurone), contrairement
+// aux autres entrées ci-dessous elles ne sont jamais retournées par
+// detectMechanics (présentes dans TOUS les niveaux dès le niveau 1, pas une
+// mécanique optionnelle détectable au cas par cas) : voir
+// queueNewMechanicSchemas ci-dessous, qui les ajoute systématiquement à la
+// liste de candidats plutôt que de les dériver du contenu de la grille —
+// seul `seenMechanics` (voir plus bas) garantit que chacune ne s'affiche
+// qu'une fois, comme les autres.
 //
 // Terminologie (retour utilisateur, round 27 — remplace la convention
 // "lumière"/"neurone" du round précédent, voir git log pour l'historique):
@@ -1226,7 +1297,11 @@ buildFeatureChecklist();
 const MECHANIC_SCHEMAS = {
   base: {
     title: "Impulsion",
-    text: "Clique sur une case vide pour y poser une impulsion. Elle éclaire toute sa ligne et sa colonne jusqu'au premier obstacle, et deux impulsions ne doivent jamais s'éclairer l'une l'autre. Un neurone doit être entouré d'exactement le nombre d'impulsions indiqué.",
+    text: "Clique sur une case vide pour y poser une impulsion. Elle éclaire toute sa ligne et sa colonne jusqu'au premier obstacle, et deux impulsions ne doivent jamais s'éclairer l'une l'autre.",
+  },
+  neuron: {
+    title: "Neurone",
+    text: "Un neurone affiche un nombre : il doit être entouré d'exactement ce nombre d'impulsions (en haut, en bas, à gauche et à droite) — ni plus, ni moins.",
   },
   forbidden: {
     title: "Case interdite",
@@ -1288,10 +1363,11 @@ function showNextMechanicSchema() {
  * modale — même si le joueur quitte l'écran sans la fermer, elle ne doit
  * jamais réapparaître pour la même mécanique). */
 function queueNewMechanicSchemas(cells) {
-  // "base" n'est jamais renvoyée par detectMechanics (voir MECHANIC_SCHEMAS
-  // ci-dessus) — ajoutée systématiquement en tête de liste, `seenMechanics`
-  // (juste en dessous) se charge seule de ne la montrer qu'une fois.
-  const found = ["base", ...detectMechanics(cells)];
+  // "base"/"neuron" ne sont jamais renvoyées par detectMechanics (voir
+  // MECHANIC_SCHEMAS ci-dessus) — ajoutées systématiquement en tête de
+  // liste, `seenMechanics` (juste en dessous) se charge seule de ne montrer
+  // chacune qu'une fois.
+  const found = ["base", "neuron", ...detectMechanics(cells)];
   const fresh = found.filter((key) => MECHANIC_SCHEMAS[key] && !seenMechanics.has(key));
   if (fresh.length === 0) return;
   for (const key of fresh) seenMechanics.add(key);
@@ -1442,9 +1518,27 @@ document.getElementById("btn-next").onclick = () => {
   if (!boardLocked) loadLevel(currentLevelIndex + 1);
 };
 
+// Retour utilisateur: "dans la grille quotidienne, si je fais 'effacer',
+// j'ai les nouvelles mécaniques qui pop sur mon écran. Ca ne devrait pas !"
+// — BUG CORRIGÉ: en mode "daily" (Défi Quotidien) ET "community", cette
+// branche retombait dans le `else` ci-dessous, qui appelle loadLevel() — le
+// chargeur du mode HISTOIRE, qui relit `levels[currentLevelIndex]`. Or
+// loadCommunityLevel/loadDailyChallengeLevel mettent currentLevelIndex à -1
+// (voir leurs définitions plus bas: ils ne s'appuient jamais sur `levels[]`,
+// juste sur `currentLevel`/`currentCommunityLevel` gardés en mémoire) — donc
+// loadLevel(-1) rechargeait en fait le DERNIER niveau Histoire (-1 % N ->
+// N-1), PUIS appelait queueNewMechanicSchemas() dessus (jamais silencieux,
+// voir loadLevel): un niveau Histoire inconnu du joueur à cet instant du
+// jeu Quotidien/Communauté pouvait donc déclencher une popup de mécanique
+// "nouvelle" hors contexte — exactement le symptôme rapporté, même si le
+// vrai bug (mauvaise grille rechargée) était plus large que la seule popup.
+// Chaque mode "Effacer" doit recharger SA PROPRE grille en mémoire, jamais
+// passer par le chemin Histoire.
 document.getElementById("btn-reset").onclick = () => {
   if (boardLocked) return;
   if (mode === "infinite" && lastInfiniteResult) loadInfiniteLevel(lastInfiniteResult);
+  else if (mode === "community" && currentCommunityLevel) loadCommunityLevel(currentCommunityLevel);
+  else if (mode === "daily") loadDailyChallengeLevel(currentLevel);
   else loadLevel(currentLevelIndex);
 };
 

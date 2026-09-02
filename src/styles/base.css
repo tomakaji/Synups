@@ -118,16 +118,27 @@ body {
   color: var(--text-dim);
 }
 
-/* Boutons icône (Annuler/Réinitialiser) — mêmes dimensions/comportement que
-   .level-controls button mais sans texte, l'icône SVG seule porte le sens
-   (voir aria-label/title dans le markup pour l'accessibilité). Plus grands
-   que les icônes toggle son/musique ci-dessous (retour utilisateur): ce
-   sont des actions de jeu fréquentes, elles doivent rester faciles à viser. */
+/* Boutons icône (Indice/Annuler/Réinitialiser) — mêmes dimensions/
+   comportement que .level-controls button mais sans texte, l'icône SVG
+   seule porte le sens (voir aria-label/title dans le markup pour
+   l'accessibilité). Plus grands que les icônes toggle son/musique
+   ci-dessous (retour utilisateur): ce sont des actions de jeu fréquentes,
+   elles doivent rester faciles à viser.
+   Retour utilisateur: "ces boutons doivent avoir un background [...] pour
+   qu'ils ne soient jamais transparents au dessus de la grille zoomée" —
+   BUG CORRIGÉ: `background:none` laissait ces boutons totalement
+   transparents, posés dans .play-action-bar (voir screen-header.css) qui
+   n'a elle-même qu'un dégradé PARTIEL (dégradé vers transparent en haut de
+   la barre) — un plateau zoomé/déplacé sous cette zone (voir render.js:
+   zoom tactile) pouvait donc se voir EN TRANSPARENCE À TRAVERS le bouton
+   lui-même. `var(--panel)`, la même couleur de fond déjà utilisée partout
+   ailleurs pour ce type de bouton (ex: .options-btn, .community-card-btn)
+   plutôt qu'une nouvelle teinte inventée pour l'occasion. */
 .icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: none;
+  background: var(--panel);
   border: 1px solid #2a3040;
   color: var(--text);
   width: 44px;

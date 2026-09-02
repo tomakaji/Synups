@@ -45,9 +45,15 @@
   width: 100%;
 }
 
+/* Retour utilisateur: "on présentera les badges avec une limite de 6 par
+   ligne" — .profile-avatar-btn a une largeur fixe (40px), donc un simple
+   flex-wrap laissait le nombre par ligne varier avec la largeur d'écran
+   (jusqu'à 8-9 sur un écran large). Une grille à 6 colonnes FIXES force
+   exactement 6 badges par ligne quelle que soit la largeur disponible — la
+   6e colonne se retrouve pleine avant de passer à la ligne suivante. */
 .profile-avatar-picker {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(6, 40px);
   justify-content: center;
   gap: 8px;
 }
@@ -195,6 +201,13 @@
    cliquable — display:inline-flex aligne les deux plutôt qu'un simple
    texte, l'icône n'a pas son propre gestionnaire de clic (voir main.js:
    le listener reste posé sur #profile-pseudo-text en entier). */
+/* Retour utilisateur: "'Configurer mon pseudo' doit apparaitre directement
+   sous sa forme 'hover' [...] sur mobile on n'a pas trop d'état hover en
+   pratique" — le contour + fond, avant réservés à :hover/:focus-visible
+   (donc quasi invisibles sur tactile, qui n'a pas de survol), sont
+   maintenant permanents pour signaler visuellement que ce texte est
+   cliquable même sans souris. :hover ne change donc plus rien de nouveau;
+   seul :focus-visible (clavier) garde un accent dédié. */
 .profile-pseudo-text {
   display: inline-flex;
   align-items: center;
@@ -205,14 +218,13 @@
   cursor: pointer;
   padding: 6px 14px;
   border-radius: 8px;
-  border: 1px solid transparent;
+  border: 1px solid #2a3040;
+  background: var(--panel);
   transition: all 0.15s;
 }
 
-.profile-pseudo-text:hover,
 .profile-pseudo-text:focus-visible {
-  border-color: #2a3040;
-  background: var(--panel);
+  border-color: var(--accent);
   outline: none;
 }
 

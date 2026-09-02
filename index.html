@@ -163,10 +163,35 @@
           <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
-          <!-- Titre/infos juste à côté du Retour (retour utilisateur: "à
-               gauche du titre/informations, toutes les autres boutons à
-               droite") — plus de flex:1/centrage, voir style.css:
-               .play-controls. -->
+          <!-- Retour utilisateur (round 28): "on va plutôt placer les
+               boutons d'action dans la barre du haut à gauche plutôt qu'à
+               droite (juste après le bouton retour)" — .header-actions
+               passe désormais juste après le bouton Retour, .play-controls
+               (titre/infos de niveau) est poussé à l'extrémité droite (voir
+               screen-header.css: margin-left:auto déplacé sur
+               .play-controls). -->
+          <div class="header-actions">
+            <button id="btn-level-grid" class="icon-btn" aria-label="Sélection de niveau" title="Sélection de niveau">
+              <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>
+            </button>
+            <button id="btn-infinite-settings" class="icon-btn hidden" aria-label="Réglages" title="Réglages">
+              <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </button>
+            <!-- Reprend l'icône "rafraîchir" qu'utilisait Réinitialiser
+                 (retour utilisateur: illustre mieux "nouvelle grille" que
+                 les flèches diagonales précédentes) — voir btn-reset
+                 ci-dessous pour son remplacement. -->
+            <button id="btn-infinite-next" class="icon-btn hidden" aria-label="Nouveau niveau" title="Nouveau niveau">
+              <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+            </button>
+          </div>
           <div class="play-controls">
             <span id="nav-static" class="nav-group">
               <!-- Prev/Suivant: gardés pour le confort du développement, seront
@@ -191,31 +216,6 @@
             <span id="nav-daily" class="nav-group hidden">
               <span class="nav-daily-label">★ Défi Quotidien</span>
             </span>
-          </div>
-          <!-- Toutes les AUTRES actions du bandeau, groupées à droite (retour
-               utilisateur) — chaque bouton reste visible uniquement dans son
-               mode (voir main.js: setMode()), jamais plusieurs à la fois. -->
-          <div class="header-actions">
-            <button id="btn-level-grid" class="icon-btn" aria-label="Sélection de niveau" title="Sélection de niveau">
-              <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>
-            </button>
-            <button id="btn-infinite-settings" class="icon-btn hidden" aria-label="Réglages" title="Réglages">
-              <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="3"></circle>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-              </svg>
-            </button>
-            <!-- Reprend l'icône "rafraîchir" qu'utilisait Réinitialiser
-                 (retour utilisateur: illustre mieux "nouvelle grille" que
-                 les flèches diagonales précédentes) — voir btn-reset
-                 ci-dessous pour son remplacement. -->
-            <button id="btn-infinite-next" class="icon-btn hidden" aria-label="Nouveau niveau" title="Nouveau niveau">
-              <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="23 4 23 10 17 10"></polyline>
-                <polyline points="1 20 1 14 7 14"></polyline>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-              </svg>
-            </button>
           </div>
         </header>
 
@@ -274,10 +274,25 @@
         </header>
         <div id="infinite-config-view">
           <div class="infinite-config">
+            <!-- Retour utilisateur: "afficher le nombre de points à gagner
+                 par niveau en fonction [de la difficulté]" — .infinite-star-points
+                 est vide ici, rempli par main.js (source unique: la
+                 constante INFINITE_POINTS_BY_TIER, aussi utilisée pour
+                 calculer le gain réel) plutôt que dupliqué en dur ici, pour
+                 ne jamais désynchroniser l'affichage du vrai barème. -->
             <div id="infinite-difficulty" class="infinite-difficulty">
-              <button data-difficulty="1" class="infinite-star-btn active" aria-label="1 étoile">★☆☆</button>
-              <button data-difficulty="2" class="infinite-star-btn" aria-label="2 étoiles">★★☆</button>
-              <button data-difficulty="3" class="infinite-star-btn" aria-label="3 étoiles">★★★</button>
+              <button data-difficulty="1" class="infinite-star-btn active" aria-label="1 étoile">
+                <span class="infinite-star-glyph">★☆☆</span>
+                <span class="infinite-star-points"></span>
+              </button>
+              <button data-difficulty="2" class="infinite-star-btn" aria-label="2 étoiles">
+                <span class="infinite-star-glyph">★★☆</span>
+                <span class="infinite-star-points"></span>
+              </button>
+              <button data-difficulty="3" class="infinite-star-btn" aria-label="3 étoiles">
+                <span class="infinite-star-glyph">★★★</span>
+                <span class="infinite-star-points"></span>
+              </button>
             </div>
 
             <div id="infinite-features" class="infinite-features"></div>
@@ -453,13 +468,16 @@
           <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
-          <h2 class="screen-title">Communauté</h2>
+          <!-- Retour utilisateur (round 28): bouton d'action juste après
+               Retour plutôt que poussé à droite — voir community.css:
+               margin-left:auto déplacé sur .screen-title. -->
           <button id="btn-community-profile" class="icon-btn" aria-label="Mon profil" title="Mon profil">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="8" r="4"></circle>
               <path d="M4 20v-.5A6.5 6.5 0 0 1 10.5 13h3A6.5 6.5 0 0 1 20 19.5V20"></path>
             </svg>
           </button>
+          <h2 class="screen-title">Communauté</h2>
         </header>
 
         <div class="community-toolbar">

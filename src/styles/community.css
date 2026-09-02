@@ -55,12 +55,12 @@
   font-size: 0.8rem;
 }
 
-/* Bouton "Mon profil" du header Communauté: poussé sur la droite (retour
-   utilisateur) — seul élément du header à en avoir besoin, donc un
-   margin-left:auto ciblé plutôt que de rendre .screen-title flex:1
-   (éviterait d'affecter les autres écrans qui suivent ce même motif
-   d'en-tête, ex. Remember). */
-#btn-community-profile {
+/* Round 28 (retour utilisateur): bouton "Mon profil" déplacé juste après
+   Retour (voir index.html) — c'est maintenant le TITRE qui est poussé à
+   droite, ciblé sur CET écran seulement (#view-community) pour ne pas
+   affecter les autres écrans qui réutilisent .screen-title (ex. Remember,
+   Options), dont le header n'a pas de bouton d'action à gauche. */
+#view-community .screen-title {
   margin-left: auto;
 }
 
@@ -164,17 +164,24 @@
   inset: 0;
 }
 
-/* Retour utilisateur: "un bouton-icon Play [...] qui prenne tout l'espace
-   en hauteur de community-card-byline et community-card-bottom" — colonne à
-   2 enfants: .community-card-info (byline + mécaniques éventuelles + bottom,
-   empilés comme avant) et .community-card-play (voir plus bas), qui s'étire
-   sur toute la hauteur cumulée de .community-card-info grâce à
-   align-items:stretch (comportement PAR DÉFAUT de flex, gardé explicite ici
-   pour la lisibilité — c'est lui qui fait tout le travail, pas une hauteur
-   fixée à la main qui se désynchroniserait du contenu réel). */
+/* Retour utilisateur (round suivant): "les boutons 'Play' doivent avoir une
+   taille carré, alignés en bas à droite, en gardant la hauteur qu'ils ont
+   actuellement lorsqu'ils prennent la hauteur de deux lignes [...] plutôt
+   que quand il y a trois lignes" — BUG CORRIGÉ: `align-items:stretch`
+   (round précédent) étirait .community-card-play sur TOUTE la hauteur
+   cumulée de .community-card-info, qui varie selon que la rangée
+   d'icônes de mécaniques (voir .community-card-mechanics) est présente ou
+   non (2 lignes: byline + bottom, ou 3 lignes: byline + mécaniques +
+   bottom) — le bouton n'était donc NI carré, NI de taille stable, sa
+   hauteur changeant de carte en carte. Colonne à 2 enfants:
+   .community-card-info (byline + mécaniques éventuelles + bottom, empilés
+   comme avant) et .community-card-play (voir plus bas), désormais de
+   taille FIXE et carrée (jamais étirée), alignée au bas de la rangée via
+   `align-items:flex-end` (déjà à droite de facto: dernier enfant, après
+   .community-card-info qui absorbe tout l'espace restant en flex:1). */
 .community-card-middle {
   display: flex;
-  align-items: stretch;
+  align-items: flex-end;
   gap: 10px;
 }
 
@@ -187,11 +194,18 @@
   gap: 10px;
 }
 
+/* 64px: approche la hauteur réelle d'une carte à 2 lignes (byline ~22px,
+   dominée par .community-avatar, + gap 10px + bottom ~34px, dominé par
+   .community-card-like — voir plus bas) plutôt qu'une valeur arbitraire,
+   sans dépendre d'une mesure JS qui varierait elle-même selon le contenu
+   présent. Largeur alignée sur cette même valeur (au lieu des 56px
+   précédents) pour rester un carré parfait. */
 .community-card-play {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
+  width: 64px;
+  height: 64px;
   flex-shrink: 0;
   padding: 0;
   border-radius: 10px;

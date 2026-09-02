@@ -13,9 +13,15 @@
      LUI qui porte le décor le plus élaboré désormais (inversion volontaire
      par rapport à l'ancien .badge-banner unique (round ≤18), qui faisait
      l'inverse). */
+/* Retour utilisateur: "les bannières [avec] 3 par ligne" (renommage round
+   75: ces badge-teasers Remember s'appellent désormais "Bannières" dans
+   l'UI) — remplace l'ancien auto-fill (qui affichait 4-6 teasers par ligne
+   sur un écran large, minmax(64px,1fr) se limitant juste à ne pas rétrécir
+   sous 64px) par exactement 3 colonnes fixes, quelle que soit la largeur
+   disponible. */
 .profile-badges-teasers {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 

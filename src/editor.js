@@ -147,7 +147,11 @@ export function initEditor({ levels }) {
   const levelListSel = document.getElementById("ed-level-list");
   const exportOutput = document.getElementById("ed-export-output");
 
-  const renderer = createBoardRenderer(boardEl);
+  // Voir main.js pour la même logique côté jeu: `panSurfaceEl` capte les
+  // gestes de zoom/pan sur toute la zone (.editor-board-wrap), pas
+  // seulement sur #editor-board qui rétrécit visuellement autour de son
+  // centre une fois dézoomé/déplacé.
+  const renderer = createBoardRenderer(boardEl, { panSurfaceEl: document.querySelector(".editor-board-wrap") });
 
   let customLevels = loadCustomLevels();
   // Un niveau tout neuf n'a pas de nom par défaut. Round 19 (retour

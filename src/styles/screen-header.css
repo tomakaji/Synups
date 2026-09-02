@@ -23,27 +23,24 @@
   gap: 10px;
 }
 
-/* Dans l'en-tête du jeu (#view-play), le titre est remplacé par les
-   contrôles de niveau (nav-static/nav-infinite) — occupe l'espace central,
-   les actions (Annuler/Réinitialiser) restent poussées à droite. */
-/* Juste à côté du bouton Retour, PAS centré (retour utilisateur: "le bouton
-   retour à gauche du titre/informations") — hugging son contenu plutôt que
-   flex:1, voir .header-actions ci-dessous pour ce qui pousse le reste à
-   droite. */
+/* Round 28 (retour utilisateur): "on va plutôt placer les boutons d'action
+   dans la barre du haut à gauche plutôt qu'à droite (juste après le bouton
+   retour)" — .header-actions (sélection de niveau, réglages Infini,
+   nouveau niveau) est désormais juste après le bouton Retour dans le
+   markup (voir index.html), .play-controls (titre/infos de niveau) hérite
+   du margin-left:auto qui poussait auparavant .header-actions, pour rester
+   à l'extrémité droite du header — l'inverse exact de la disposition
+   précédente. */
 .play-controls {
   display: flex;
   align-items: center;
+  margin-left: auto;
 }
 
-/* Regroupe tous les AUTRES boutons du bandeau de jeu (sélection de niveau,
-   réglages Infini, nouveau niveau) — margin-left:auto les pousse en bloc
-   à l'extrémité droite du header, quel que soit lequel est visible pour le
-   mode courant (voir main.js: setMode()). */
 .header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
 }
 
 /* Barre d'actions de jeu (Indice/Annuler/Réinitialiser/Aimer) — retour
@@ -101,9 +98,20 @@
   padding-bottom: calc(78px + var(--ad-banner-height, 0px));
 }
 
+/* Retour utilisateur: "la grille ne [doit] pas overflow la barre d'actions
+   du haut visuellement" — le zoom tactile (voir render.js: createBoardRenderer)
+   agrandit #board par un `transform:scale()` centré sur lui-même, qui peut
+   dépasser la hauteur naturellement dispo sous le header une fois zoomé.
+   `overflow:hidden` ici ROGNE simplement tout ce qui déborde de la zone de
+   jeu réelle (qui commence juste sous .screen-header, jamais avant) plutôt
+   que de recalculer un clamp de pan/zoom en pixels dépendant de la hauteur
+   du header — plus simple et robuste qu'un calcul manuel, et couvre aussi
+   bien le haut que le bas/les côtés. .play-action-bar (position:fixed, PAS
+   un descendant de #play-view — voir index.html) n'est jamais affectée. */
 #play-view {
   flex: 1;
   width: 100%;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
