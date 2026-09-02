@@ -10,23 +10,32 @@
 // `ensureBuilt`) monte par-dessus — elle est conçue pour dominer largement
 // ce fond assourdi, pas pour jouer seule dans un silence complet.
 //
+// MOTEUR: Howler.js, pas Tone.js (voir git log pour l'historique complet du
+// grésillement). Après plusieurs rounds de corrections ciblées (latence,
+// filtres, gain staging, limiteur, compresseur, puis correction DSP de
+// plusieurs fichiers wav eux-mêmes — phase inversée, grave extrême), le
+// grésillement persistait toujours en usage prolongé sur mobile. Recherche:
+// plusieurs issues GitHub OUVERTES sur Tone.js décrivent EXACTEMENT ce
+// symptôme (grésillement qui grandit avec le temps, plusieurs Tone.Player
+// simultanés sur mobile — ex. #953, #758, #285) comme une limite connue de
+// la librairie, pas un défaut de ce mix précis. Howler.js est le choix
+// communautaire standard pour de la lecture de fichiers pré-rendus en boucle
+// (exactement notre cas ici — Tone.js reste plus adapté à de la synthèse
+// live/réactive, voir sound.js qui l'utilise encore pour ses synthés SFX).
+//
 // Toutes les pistes sont des fichiers WAV bouclables SANS perte (voir
 // public/music/ — durée exacte 24.000000s à 44.1kHz, aucun padding
 // d'encodeur contrairement à un mp3/ogg compressé, ce qui garantirait un
 // clic au raccord de boucle) démarrées TOUTES EN MÊME TEMPS dès le premier
 // clic (voir startMusic) puis JAMAIS arrêtées/redémarrées ensuite — on ne
 // fait que faire monter/descendre leur gain individuel. C'est ce qui
-// garantit qu'elles restent en phase indéfiniment (aucune dérive possible:
-// chaque `Tone.Player` boucle sur son propre buffer via le même
-// AudioContext, sans dépendre de `Tone.Transport`).
-import * as Tone from "tone";
+// garantit qu'elles restent en phase indéfiniment (chaque piste boucle sur
+// son propre buffer, en pause/reprise SIMULTANÉE avec les autres via
+// pauseMusic/resumeMusic ci-dessous — jamais arrêtée puis redémarrée à un
+// timestamp recalculé comme au temps de Tone.js, Howler gère nativement la
+// pause "en place").
+import { Howl, Howler } from "howler";
 import { isPixelTheme } from "./pixelIcons.js";
-// Contexte audio ("playback", moins sujet au grésillement) + bus de sortie
-// commun (limiteur anti-clipping) — voir audioBus.js pour le détail des
-// deux, partagés avec sound.js. Import placé ici, avant toute création de
-// node Tone dans CE fichier : le contexte doit être posé avant le premier
-// node, jamais après (voir audioBus.js).
-import { masterBus } from "./audioBus.js";
 
 // Gamme utilisée par TOUTES les couches mélodiques (voir
 // music-demos/couches: neurone-couleur.wav, prismes.wav) — exportée comme
@@ -145,7 +154,7 @@ const LAYER_ACTIVE_GAIN = {
   pyra: 0.8,
 };
 
-const FADE = 0.35; // secondes, montée/descente de gain par calque — évite tout clic
+const FADE_MS = 350; // montée/descente de gain par calque — évite tout clic
 
 // Fondu utilisé spécifiquement pour l'apparition/disparition d'une couche
 // MÉCANIQUE (setLayerActive, palier franchi/défranchi en cours de partie —
@@ -153,8 +162,8 @@ const FADE = 0.35; // secondes, montée/descente de gain par calque — évite t
 // bascule "brutale" pour ce cas précis). Volontairement PAS utilisé pour
 // l'état d'échec (enterFailure/exitFailure) ni resetLayers: la musique
 // d'erreur doit au contraire apparaître/disparaître de façon nette et
-// immédiate — c'est le signal d'alarme, il doit rester FADE (0.35s).
-const LAYER_FADE = 1.1;
+// immédiate — c'est le signal d'alarme, il doit rester FADE_MS.
+const LAYER_FADE_MS = 1100;
 
 // Retour utilisateur : "plutôt que de couper la musique qui se joue
 // actuellement, l'étouffer pour qu'elle paraisse loin" — au lieu de ramener
@@ -167,48 +176,96 @@ const FAILURE_MUFFLE_GAIN = 0.4;
 const FAILURE_MUFFLE_CUTOFF_HZ = 420;
 const NORMAL_CUTOFF_HZ = 20000; // au-delà du spectre audible: filtre inactif en pratique
 
-// Retour utilisateur: "je me demande si c'est pas dû aussi aux enceintes du
-// téléphone [...] des sonorités peut-être délicates pour ce type
-// d'enceinte" — même filtre "mobile-safe" que sound.js (voir son
-// commentaire pour le détail): un haut-parleur de téléphone (minuscule,
-// mono, débattement mécanique limité) reproduit mal, voire fait bourdonner,
-// tout ce qui descend sous ~150-200Hz. Posé en tout dernier sur le bus
-// musique (après musicBus, juste avant la sortie) — coupe ce grave-là en
-// douceur pour TOUTES les couches, y compris échec.wav (qui, elle, ne
-// passe pas par duckFilter ci-dessous, voir sa raison d'être).
-// Se connecte à `masterBus` (voir audioBus.js) plutôt qu'à sa propre
-// `.toDestination()` — c'est LUI, désormais, qui reçoit la somme finale
-// musique + effets de jeu (voir sound.js) et la protège du clipping (et,
-// depuis le round "plus radical", passe aussi par un compresseur avant le
-// limiteur — voir audioBus.js).
-// Coupure remontée de 160 à 200Hz au round "plus radical" (retour
-// utilisateur: le grésillement persistait malgré tout ce qui précède) —
-// on sacrifie un peu plus de grave (déjà peu présent/peu utile sur ce type
-// d'enceinte) pour une marge de sécurité plus large contre le bourdonnement.
-const speakerSafeHighpass = new Tone.Filter(200, "highpass").connect(masterBus);
-const musicBus = new Tone.Volume(0).connect(speakerSafeHighpass);
+// --- Chaîne de sortie Web Audio native, posée directement sur le contexte
+// interne de Howler (Howler.ctx — un AudioContext SÉPARÉ de celui de
+// Tone.js utilisé par sound.js pour ses synthés SFX ; les deux librairies ne
+// partagent pas de contexte, essayer de les faire cohabiter sur un seul
+// AudioContext est fragile — voir recherche). Chaque librairie a donc
+// désormais sa PROPRE chaîne de sécurité anti-clipping/mobile-safe
+// (compresseur + limiteur), voir audioBus.js pour l'équivalent côté Tone.js.
+//
+// Point d'accroche: `Howler.masterGain`, un GainNode que Howler crée une
+// fois en interne et connecte par défaut à `Howler.ctx.destination` (voir
+// node_modules/howler/dist/howler.js — vérifié directement dans la source,
+// c'est le point d'extension documenté par la communauté pour insérer du
+// traitement Web Audio personnalisé). On le déconnecte de la destination
+// d'origine et on le reconnecte à travers notre propre chaîne.
+const ctx = Howler.ctx;
+
+function rampParam(param, target, seconds) {
+  const now = ctx.currentTime;
+  param.cancelScheduledValues(now);
+  param.setValueAtTime(param.value, now);
+  param.linearRampToValueAtTime(target, now + seconds);
+}
 
 // Passe-bas PARTAGÉ pour base + couches mécaniques uniquement — échec.wav
 // (voir ensureBuilt) NE PASSE PAS par ce filtre: elle doit rester pleinement
 // claire/nette pendant que le reste s'étouffe derrière elle. Cutoff au repos
 // à NORMAL_CUTOFF_HZ (inaudible, filtre neutre) — voir enterFailure/
 // exitFailure pour la rampe vers/depuis FAILURE_MUFFLE_CUTOFF_HZ.
-const duckFilter = new Tone.Filter(NORMAL_CUTOFF_HZ, "lowpass").connect(musicBus);
+const duckFilter = ctx.createBiquadFilter();
+duckFilter.type = "lowpass";
+duckFilter.frequency.value = NORMAL_CUTOFF_HZ;
+duckFilter.connect(Howler.masterGain);
+
+// Retour utilisateur: "je me demande si c'est pas dû aussi aux enceintes du
+// téléphone [...] des sonorités peut-être délicates pour ce type
+// d'enceinte" — même filtre "mobile-safe" que sound.js (voir son
+// commentaire pour le détail): un haut-parleur de téléphone (minuscule,
+// mono, débattement mécanique limité) reproduit mal, voire fait bourdonner,
+// tout ce qui descend sous ~150-200Hz. Coupure remontée de 160 à 200Hz au
+// round "plus radical" (retour utilisateur: le grésillement persistait
+// malgré tout ce qui précède) — on sacrifie un peu plus de grave (déjà peu
+// présent/peu utile sur ce type d'enceinte) pour une marge de sécurité plus
+// large contre le bourdonnement.
+const speakerSafeHighpass = ctx.createBiquadFilter();
+speakerSafeHighpass.type = "highpass";
+speakerSafeHighpass.frequency.value = 200;
+
+// Compresseur PROACTIF avant le limiteur (round "plus radical" — un
+// limiteur seul ne fait qu'écrêter au dernier moment, ce qui peut encore
+// sonner dur/grésillant quand plusieurs couches culminent en même temps ;
+// un compresseur en amont réduit la dynamique en douceur AVANT d'atteindre
+// ce point, voir audioBus.js pour le même raisonnement côté Tone.js).
+const compressor = ctx.createDynamicsCompressor();
+compressor.threshold.value = -24;
+compressor.ratio.value = 4;
+compressor.attack.value = 0.003;
+compressor.release.value = 0.25;
+compressor.knee.value = 12;
+
+// Limiteur final anti-clipping — DynamicsCompressorNode natif avec un ratio
+// élevé (20, le max natif) approxime un limiteur, exactement comme
+// Tone.Limiter est lui-même construit sur un Compressor agressif.
+const limiter = ctx.createDynamicsCompressor();
+limiter.threshold.value = -1;
+limiter.ratio.value = 20;
+limiter.attack.value = 0.001;
+limiter.release.value = 0.05;
+limiter.knee.value = 0;
+
+Howler.masterGain.disconnect();
+Howler.masterGain.connect(speakerSafeHighpass);
+speakerSafeHighpass.connect(compressor);
+compressor.connect(limiter);
+limiter.connect(ctx.destination);
 
 /** Volume musique (0 à 1, linéaire) — bus SÉPARÉ de setMasterVolume dans
  * sound.js (qui reste le volume des effets de jeu: pose/retrait/victoire/
- * cibles/synapses/charges). Les deux curseurs sont donc indépendants. */
+ * cibles/synapses/charges). Les deux curseurs sont donc indépendants.
+ * Howler.volume() est le volume GLOBAL de la librairie (agit sur
+ * Howler.masterGain lui-même) — compatible avec la chaîne personnalisée
+ * ci-dessus puisque celle-ci se branche EN AVAL de masterGain. */
 export function setMusicVolume(level) {
   const clamped = Math.max(0, Math.min(1, level));
-  musicBus.volume.value = clamped <= 0 ? -Infinity : Tone.gainToDb(clamped);
+  Howler.volume(clamped);
 }
 
-let players = null; // { key -> Tone.Player }
-let gains = null; // { key -> Tone.Gain }
+let howls = null; // { key -> Howl }
 let unlocked = new Set(); // sous-ensemble courant de MECHANIC_LAYERS démuté
 let failureCount = 0; // compteur (pas booléen): plusieurs synapses/surcharges possibles à la fois
 let started = false;
-let loadPromise = null;
 
 // Ambiance (boutique "Secrets", voir storage.js/main.js): un socle de
 // couches TOUJOURS démutées, par-dessus lesquelles les déblocages normaux du
@@ -237,61 +294,113 @@ export function setMusicAmbiance(key) {
   ambianceLayers = new Set(MUSIC_AMBIANCES[key]?.layers ?? []);
 }
 
-function ensureBuilt() {
-  if (players) return;
-  players = {};
-  gains = {};
-  const urls = currentLayerUrls();
-  for (const key of Object.keys(urls)) {
-    // échec.wav se branche directement sur musicBus (jamais étouffée, voir
-    // duckFilter ci-dessus) — base + toutes les couches mécaniques passent
-    // par le passe-bas partagé, neutre hors état d'échec.
-    const gain = new Tone.Gain(key === "base" ? 1 : 0).connect(key === "echec" ? musicBus : duckFilter);
-    const player = new Tone.Player({ url: urls[key], loop: true }).connect(gain);
-    players[key] = player;
-    gains[key] = gain;
+// Reroute UNE piste pour qu'elle passe par `duckFilter` avant `masterGain`
+// au lieu du routage par défaut de Howler (_node -> masterGain direct).
+// échec.wav ne passe JAMAIS par ici (voir ensureBuilt) — elle garde le
+// routage par défaut, pour rester pleinement claire/nette pendant que le
+// reste s'étouffe derrière elle en cas d'erreur (voir enterFailure).
+// `_sounds[0]._node` (un GainNode par piste, propriété interne mais stable
+// et documentée par la communauté Howler — voir howler-plugin-effect-chain)
+// est créé de façon SYNCHRONE dès `new Howl(...)`, avant même que le buffer
+// soit décodé (vérifié directement dans howler.js: Sound.prototype.create,
+// appelé depuis Howl.init) — donc déjà disponible juste après construction,
+// pas besoin d'attendre l'événement 'load'.
+function rerouteThroughDuckFilter(howl) {
+  const sound = howl._sounds && howl._sounds[0];
+  if (sound && sound._node) {
+    sound._node.disconnect();
+    sound._node.connect(duckFilter);
   }
 }
 
-/** Précharge les 7 pistes (idempotent, peut être appelé tôt — ex. au
- * chargement de la page — pour que `startMusic` n'ait plus qu'à démarrer la
- * lecture sans latence de réseau au premier clic). Ne démarre rien tant que
- * `startMusic` n'a pas été appelée. */
-export function preloadMusic() {
-  ensureBuilt();
-  if (!loadPromise) loadPromise = Tone.loaded();
-  return loadPromise;
+function ensureBuilt() {
+  if (howls) return;
+  howls = {};
+  const urls = currentLayerUrls();
+  for (const key of Object.keys(urls)) {
+    const howl = new Howl({
+      src: [urls[key]],
+      loop: true,
+      volume: key === "base" ? 1 : 0,
+      html5: false, // Web Audio (pas <audio> HTML5) — nécessaire pour le routage manuel ci-dessous
+      preload: true,
+    });
+    // échec.wav se branche directement sur masterGain (jamais étouffée, voir
+    // duckFilter ci-dessus) — base + toutes les couches mécaniques passent
+    // par le passe-bas partagé, neutre hors état d'échec.
+    if (key !== "echec") rerouteThroughDuckFilter(howl);
+    howls[key] = howl;
+  }
 }
 
-/** Démarre la lecture des 7 pistes, parfaitement synchronisées (même
- * timestamp de départ pour toutes) — à appeler une seule fois, depuis un
- * geste utilisateur (voir `ensureStarted` dans sound.js: Tone.js exige un
- * clic avant de pouvoir jouer du son). Sans effet si déjà démarrée. */
+/** Ramène en douceur le gain d'une piste vers `target` (0 à 1) en `ms`
+ * millisecondes, comme `Tone.Param.rampTo` — contrairement à `Tone`, la
+ * méthode `Howl.fade()` NE PART PAS automatiquement de la valeur actuelle:
+ * elle saute D'ABORD instantanément à la valeur `from` fournie, puis rampe
+ * vers `to` (vérifié directement dans howler.js: `fade()` appelle
+ * `self.volume(from, id)` avant de lancer la rampe). Il faut donc toujours
+ * lire la valeur RÉELLE courante avant d'appeler `.fade()`, sous peine de
+ * saut audible. `Howl.volume()` reste fiable même EN PLEIN FONDU: Howler met
+ * à jour `sound._volume` à intervalles réguliers pendant la rampe (voir
+ * `_startFadeInterval`), ce n'est pas juste la valeur de départ ou d'arrivée. */
+function fadeLayer(key, target, ms) {
+  const howl = howls && howls[key];
+  if (!howl) return;
+  const current = howl.volume();
+  if (Math.abs(current - target) < 0.001) return; // évite un fade(0) qui ne fait rien mais spamme un timer
+  howl.fade(current, target, Math.max(1, ms));
+}
+
+/** Précharge les 11 pistes (idempotent, peut être appelé tôt — ex. au
+ * chargement de la page — pour que `startMusic` n'ait plus qu'à démarrer la
+ * lecture sans latence de réseau au premier clic). Ne démarre rien tant que
+ * `startMusic` n'a pas été appelée. Howler met en file d'attente les appels
+ * `.play()` faits avant la fin du chargement (voir startMusic) — cette
+ * fonction n'est donc pas strictement nécessaire à la lecture, mais est
+ * conservée pour préchauffer le cache réseau tôt, comme avant. */
+export function preloadMusic() {
+  ensureBuilt();
+  return Promise.all(
+    Object.values(howls).map(
+      (howl) =>
+        new Promise((resolve) => {
+          if (howl.state() === "loaded") {
+            resolve();
+            return;
+          }
+          howl.once("load", resolve);
+          howl.once("loaderror", resolve); // ne bloque jamais le démarrage sur un fichier en échec
+        }),
+    ),
+  );
+}
+
+/** Démarre la lecture des 11 pistes — à appeler une seule fois, depuis un
+ * geste utilisateur (voir `ensureStarted` dans sound.js: les navigateurs
+ * exigent un clic avant de pouvoir jouer du son ; Howler gère nativement le
+ * déverrouillage de son AudioContext au premier geste, aucune gestion
+ * manuelle nécessaire ici). Sans effet si déjà démarrée. Contrairement à
+ * l'ancien moteur Tone.js, pas besoin de calculer un timestamp de départ
+ * commun: les appels `.play()` synchrones ci-dessous suffisent à garder les
+ * pistes en phase (Howler gère la lecture "en place" au pause/reprise, voir
+ * pauseMusic/resumeMusic). */
 export async function startMusic() {
   if (started) return;
   await preloadMusic();
   started = true;
-  const when = Tone.now() + 0.05; // léger différé: laisse le temps au scheduler de tout aligner
-  for (const player of Object.values(players)) player.start(when);
+  for (const howl of Object.values(howls)) howl.play();
 }
 
 // Retour utilisateur: "on a du lag sur la musique lorsque le téléphone
 // passe en veille ou lorsqu'on verrouille/change d'onglet [...] on devrait
 // couper la musique lorsqu'on n'est plus focus" — puis "il faut aussi
 // couper la musique lorsqu'on joue une reward ou une pub d'interstice" —
-// BUG commun aux deux cas: un AudioContext qui continue de tourner pendant
-// qu'on ne l'entend plus vraiment (écran verrouillé/WebView en veille, OU
-// pub plein écran qui masque le jeu — voir ads.js) n'est plus servi en
-// temps réel par le système ; à la reprise, les 11 lecteurs (bouclés en
-// continu depuis startMusic, jamais arrêtés jusqu'ici) se retrouvent avec
-// du retard accumulé et/ou désynchronisés entre eux, d'où le lag perçu au
-// retour. Plutôt que de tenter de "rattraper" ce décalage, on ARRÊTE
-// purement les 11 lecteurs le temps de la pause et on les REDÉMARRE tous
-// ensemble au retour — exactement le même geste que startMusic ci-dessus
-// (même timestamp pour tous), ce qui les remet en phase à zéro plutôt que
-// de risquer un décalage cumulé. Les gains (couches débloquées, ambiance,
-// état d'échec en cours) ne sont PAS touchés : seule la lecture est
-// coupée/reprise, le mix reprend exactement où il en était.
+// avec Howler, `.pause()`/`.play()` suspend et reprend la lecture EN PLACE
+// nativement (contrairement à l'ancien moteur Tone.js qui devait tout
+// arrêter puis tout redémarrer à un timestamp recalculé pour éviter un
+// décalage cumulé) — plus simple et plus robuste. Les gains (couches
+// débloquées, ambiance, état d'échec en cours) ne sont PAS touchés : seule
+// la lecture est coupée/reprise, le mix reprend exactement où il en était.
 //
 // Plusieurs RAISONS de pause peuvent se chevaucher (ex: en théorie, une pub
 // qui se déclenche pile au moment où l'app passe en arrière-plan) — un
@@ -301,42 +410,27 @@ export async function startMusic() {
 // jamais tant qu'il en reste une autre en cours.
 const pauseReasons = new Set();
 
-function stopAllPlayers() {
-  if (!players) return;
-  for (const player of Object.values(players)) {
-    try {
-      player.stop();
-    } catch {
-      // Déjà arrêté (ex: jamais démarré, ou double événement) — sans effet.
-    }
-  }
+function pauseAllLayers() {
+  if (!howls) return;
+  for (const howl of Object.values(howls)) howl.pause();
 }
 
-function restartAllPlayers() {
-  if (!players) return;
-  const when = Tone.now() + 0.05;
-  for (const player of Object.values(players)) {
-    try {
-      player.start(when);
-    } catch {
-      // Déjà démarré (ex: double événement) — sans effet.
-    }
-  }
+function resumeAllLayers() {
+  if (!howls) return;
+  for (const howl of Object.values(howls)) howl.play();
 }
 
 /** Ajoute `reason` à l'ensemble des raisons actives de mise en pause — arrête
  * la lecture si c'est la première raison active (no-op sinon, une pause déjà
  * en cours ne se relance pas). Sans effet tant que le joueur n'a pas encore
- * posé son premier clic (voir `started` — Tone.js exige un geste utilisateur
- * avant de pouvoir jouer le moindre son, donc `players` peut exister sans
- * qu'aucune lecture n'ait jamais commencé). `reason` est une chaîne libre
+ * posé son premier clic (voir `started`). `reason` est une chaîne libre
  * (ex: "visibility", "ad") — voir resumeMusic ci-dessous, qui doit être
  * appelée avec la MÊME chaîne pour lever cette raison précise. */
 export function pauseMusic(reason) {
   if (!started) return;
   const wasEmpty = pauseReasons.size === 0;
   pauseReasons.add(reason);
-  if (wasEmpty) stopAllPlayers();
+  if (wasEmpty) pauseAllLayers();
 }
 
 /** Retire `reason` de l'ensemble des raisons actives — ne redémarre la
@@ -346,7 +440,7 @@ export function resumeMusic(reason) {
   if (!started) return;
   if (!pauseReasons.has(reason)) return;
   pauseReasons.delete(reason);
-  if (pauseReasons.size === 0) restartAllPlayers();
+  if (pauseReasons.size === 0) resumeAllLayers();
 }
 
 if (typeof document !== "undefined") {
@@ -358,24 +452,36 @@ if (typeof document !== "undefined") {
 
 /** Recharge les 11 pistes sur le jeu d'URLs correspondant au thème ACTUEL
  * (voir currentLayerUrls) — à appeler quand le thème PixelArt est
- * togglé en cours de session (voir main.js: btnPixelartToggle.onclick),
- * puisque `ensureBuilt` ci-dessus n'est exécutée qu'une seule fois et ne
- * relit donc jamais le thème après coup. Sans effet si la musique n'a
- * jamais été construite (le prochain `ensureBuilt` prendra le bon thème
- * directement, rien à rattraper). Les gains (couches débloquées, ambiance,
- * état d'échec) sont préservés tels quels — seul le CONTENU audio change,
- * pas le mix en cours. */
+ * togglé en cours de session (voir main.js: btnPixelartToggle.onclick).
+ * Howler ne permet pas de changer la source d'un Howl déjà construit
+ * (contrairement à `Tone.Player.load()`) — chaque piste est donc déchargée
+ * puis reconstruite avec la nouvelle URL, en restaurant son gain courant
+ * (couches débloquées, ambiance, état d'échec) pour que seul le CONTENU
+ * audio change, pas le mix en cours. Sans effet si la musique n'a jamais
+ * été construite (le prochain `ensureBuilt` prendra le bon thème
+ * directement, rien à rattraper). */
 export async function refreshMusicTheme() {
-  if (!players) return;
+  if (!howls) return;
   const urls = currentLayerUrls();
   const wasStarted = started;
-  if (wasStarted) {
-    for (const player of Object.values(players)) player.stop();
+  const currentVolumes = {};
+  for (const key of Object.keys(howls)) currentVolumes[key] = howls[key].volume();
+  for (const howl of Object.values(howls)) howl.unload();
+  howls = {};
+  for (const key of Object.keys(urls)) {
+    const howl = new Howl({
+      src: [urls[key]],
+      loop: true,
+      volume: currentVolumes[key] ?? (key === "base" ? 1 : 0),
+      html5: false,
+      preload: true,
+    });
+    if (key !== "echec") rerouteThroughDuckFilter(howl);
+    howls[key] = howl;
   }
-  await Promise.all(Object.keys(urls).map((key) => players[key].load(urls[key])));
   if (wasStarted) {
-    const when = Tone.now() + 0.05;
-    for (const player of Object.values(players)) player.start(when);
+    await preloadMusic();
+    for (const howl of Object.values(howls)) howl.play();
   }
 }
 
@@ -389,13 +495,13 @@ export function resetLayers() {
   // démuté même au reset — seules les couches HORS ambiance retombent à 0.
   unlocked = new Set(ambianceLayers);
   failureCount = 0;
-  if (!gains) return;
-  gains.base.gain.rampTo(1, FADE); // garde-fou: au cas où un niveau se termine en pleine erreur
+  if (!howls) return;
+  fadeLayer("base", 1, FADE_MS); // garde-fou: au cas où un niveau se termine en pleine erreur
   for (const key of MECHANIC_LAYERS) {
-    gains[key].gain.rampTo(ambianceLayers.has(key) ? (LAYER_ACTIVE_GAIN[key] ?? 1) : 0, FADE);
+    fadeLayer(key, ambianceLayers.has(key) ? (LAYER_ACTIVE_GAIN[key] ?? 1) : 0, FADE_MS);
   }
-  gains.echec.gain.rampTo(0, FADE);
-  duckFilter.frequency.rampTo(NORMAL_CUTOFF_HZ, FADE); // même garde-fou pour l'étouffement
+  fadeLayer("echec", 0, FADE_MS);
+  rampParam(duckFilter.frequency, NORMAL_CUTOFF_HZ, FADE_MS / 1000); // même garde-fou pour l'étouffement
 }
 
 /** Démute OU remute une couche mécanique selon `active` (no-op si déjà dans
@@ -412,8 +518,8 @@ function setLayerActive(key, active) {
   if (wasActive === active) return;
   if (active) unlocked.add(key);
   else unlocked.delete(key);
-  if (!gains || failureCount > 0) return;
-  gains[key].gain.rampTo(active ? (LAYER_ACTIVE_GAIN[key] ?? 1) : 0, LAYER_FADE);
+  if (!howls || failureCount > 0) return;
+  fadeLayer(key, active ? (LAYER_ACTIVE_GAIN[key] ?? 1) : 0, LAYER_FADE_MS);
 }
 
 /** Point d'entrée unique pour la musique par calques côté logique de jeu —
@@ -437,11 +543,11 @@ export function applyMechanicCounts(counts) {
  * — seule la PREMIÈRE fait vraiment quelque chose. */
 export function enterFailure() {
   failureCount++;
-  if (failureCount !== 1 || !gains) return;
-  gains.base.gain.rampTo(FAILURE_MUFFLE_GAIN, FADE);
-  for (const key of unlocked) gains[key].gain.rampTo(FAILURE_MUFFLE_GAIN, FADE);
-  duckFilter.frequency.rampTo(FAILURE_MUFFLE_CUTOFF_HZ, FADE);
-  gains.echec.gain.rampTo(1, FADE);
+  if (failureCount !== 1 || !howls) return;
+  fadeLayer("base", FAILURE_MUFFLE_GAIN, FADE_MS);
+  for (const key of unlocked) fadeLayer(key, FAILURE_MUFFLE_GAIN, FADE_MS);
+  rampParam(duckFilter.frequency, FAILURE_MUFFLE_CUTOFF_HZ, FADE_MS / 1000);
+  fadeLayer("echec", 1, FADE_MS);
 }
 
 /** Vrai tant qu'au moins une synapse est rompue ou qu'un neurone est en
@@ -457,9 +563,9 @@ export function isFailureActive() {
 export function exitFailure() {
   if (failureCount === 0) return; // garde-fou défensif
   failureCount--;
-  if (failureCount !== 0 || !gains) return;
-  gains.echec.gain.rampTo(0, FADE);
-  duckFilter.frequency.rampTo(NORMAL_CUTOFF_HZ, FADE);
-  gains.base.gain.rampTo(1, FADE);
-  for (const key of unlocked) gains[key].gain.rampTo(LAYER_ACTIVE_GAIN[key] ?? 1, FADE);
+  if (failureCount !== 0 || !howls) return;
+  fadeLayer("echec", 0, FADE_MS);
+  rampParam(duckFilter.frequency, NORMAL_CUTOFF_HZ, FADE_MS / 1000);
+  fadeLayer("base", 1, FADE_MS);
+  for (const key of unlocked) fadeLayer(key, LAYER_ACTIVE_GAIN[key] ?? 1, FADE_MS);
 }
