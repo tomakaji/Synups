@@ -168,16 +168,29 @@ const chime = new Tone.Synth({
 // pour signaler que quelque chose ne va pas SANS sonner comme playError
 // (une seule note, timbre/registre différents) : la pose n'est pas elle-même
 // une erreur, elle se contente d'être teintée par l'état d'échec en cours.
+// Retour utilisateur (grésillement persistant, "crache" — pas seulement une
+// question de fréquence): SEUL timbre en dents de scie de tout le jeu (tous
+// les autres sons sont en sinus/triangle, beaucoup plus doux). Une dent de
+// scie est le type d'onde le PLUS riche en harmoniques — jusqu'aux plus
+// aiguës, à peine atténuées — et ce sont justement ces harmoniques hautes
+// qui font distordre/craquer un petit haut-parleur bon marché, quelle que
+// soit la fréquence fondamentale jouée. `partialCount` (nombre d'harmoniques
+// EFFECTIVEMENT synthétisées, au lieu de la série complète par défaut d'un
+// vrai sawtooth) réduit cette richesse harmonique — garde le caractère
+// "plus rugueux que le sinus" voulu, mais coupe les harmoniques les plus
+// hautes/agressives responsables du grésillement physique de l'enceinte.
+// Volume aussi baissé d'un cran (ce son peut se répéter à chaque clic tant
+// que l'échec dure, potentiellement en rafale).
 const darkPlaceLow = new Tone.Synth({
-  oscillator: { type: "sawtooth" },
+  oscillator: { type: "sawtooth", partialCount: 6 },
   envelope: { attack: 0.015, decay: 0.3, sustain: 0, release: 0.4 },
-  volume: -14,
+  volume: -17,
 }).connect(delay);
 
 const darkPlaceHigh = new Tone.Synth({
-  oscillator: { type: "sawtooth" },
+  oscillator: { type: "sawtooth", partialCount: 6 },
   envelope: { attack: 0.015, decay: 0.3, sustain: 0, release: 0.4 },
-  volume: -16,
+  volume: -19,
 }).connect(delay);
 
 export async function playPlace() {
