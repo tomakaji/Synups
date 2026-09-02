@@ -24,6 +24,26 @@ allprojects {
     }
 }
 
+// Fix: le module capacitor-google-game-services (plugin Capacitor tiers,
+// node_modules/capacitor-google-game-services/android/build.gradle) ne
+// déclare pas de `namespace` — son build.gradle date d'avant cette
+// obligation AGP 8+, il se reposait sur l'attribut `package` de son
+// AndroidManifest.xml (package="com.capacitor.community.googlegameservices"),
+// qu'AGP 8+ ne lit plus pour ça. Sans ce correctif, la config Gradle plante
+// avec "Namespace not specified" dès qu'on essaie de builder/lancer l'app
+// (Android Studio ou npm run android:build). Namespace repris tel quel du
+// manifest du plugin. Ciblé sur CE seul module (voir plugins.withId +
+// vérif du nom) pour ne rien changer aux autres plugins/à l'app elle-même.
+// Ce fichier étant suivi par git (contrairement à node_modules, régénéré à
+// chaque `npm install`), le correctif survit à une réinstallation propre.
+subprojects { subproject ->
+    subproject.plugins.withId('com.android.library') {
+        if (subproject.name == 'capacitor-google-game-services') {
+            subproject.android.namespace = 'com.capacitor.community.googlegameservices'
+        }
+    }
+}
+
 task clean(type: Delete) {
     delete rootProject.buildDir
 }
