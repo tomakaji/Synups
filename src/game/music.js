@@ -113,9 +113,8 @@ const MECHANIC_THRESHOLDS = {
   pyra: { count: "pyraActive", min: 1 },
 };
 
-// Gain cible (au lieu de 1) quand une couche est débloquée — "neurone" est
-// montée de 10% (retour utilisateur), toutes les autres non listées
-// restent à 1 (aucun effet, valeur par défaut ci-dessous).
+// Gain cible (au lieu de 1) quand une couche est débloquée — toutes les
+// couches non listées restent à 1 (aucun effet, valeur par défaut ci-dessous).
 // Retour utilisateur (grésillement/saturation): "les deux pistes des
 // neurones colorés saturent, surtout la deuxième [...] elles sont plutôt
 // fortes de toute façon" — neuroneCouleur/neuroneCouleurLayer2 sont deux
@@ -125,8 +124,21 @@ const MECHANIC_THRESHOLDS = {
 // d'où la saturation. Layer2 baissée plus fort que la couche 1 (rapportée
 // comme la plus touchée). prismes/pyra également baissées un cran, plus
 // légèrement (pas rapportées comme saturées, juste "un peu" en trop).
+// Retour utilisateur (round "neurone sans couleur, 1ère couche, son
+// grave qui rebondit et grésille"): `neurone` était montée à +10% à
+// l'origine parce que neurone.wav semblait faible — en réalité le fichier
+// avait deux défauts qui MASQUAIENT son vrai niveau perçu plutôt que d'en
+// justifier le gain: ses deux canaux étaient quasi en opposition de phase
+// (L ≈ -R, annulation partielle et irrégulière une fois sommé en mono —
+// exactement ce qui produisait le "rebond" instable signalé, un
+// haut-parleur de téléphone étant mono) et 91% de son énergie vivait sous
+// 100Hz, une zone qu'un tel haut-parleur ne peut de toute façon pas
+// reproduire proprement. Le fichier a été corrigé à la source (phase
+// réalignée, grave profond remplacé par ses harmoniques — même technique
+// qu'un exciter de basse, garde le côté "rebondissant" en le déplaçant
+// dans une zone audible/propre, voir l'historique de neurone.wav) : son
+// niveau perçu réel remonte de lui-même, plus besoin du boost de +10%.
 const LAYER_ACTIVE_GAIN = {
-  neurone: 1.1,
   neuroneCouleur: 0.7,
   neuroneCouleurLayer2: 0.5,
   prismes: 0.8,
