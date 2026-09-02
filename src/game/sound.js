@@ -63,6 +63,22 @@ export function setMasterVolume(level) {
   Tone.getDestination().volume.value = clamped <= 0 ? -Infinity : Tone.gainToDb(clamped);
 }
 
+// Retour utilisateur: "je me demande si c'est pas dû aussi aux enceintes du
+// téléphone [...] des sonorités peut-être délicates pour ce type
+// d'enceinte" — hypothèse tout à fait plausible et complémentaire au
+// correctif de contexte audio (voir music.js): un haut-parleur de
+// téléphone est minuscule, mono, avec un débattement mécanique très
+// limité — il ne reproduit PAS proprement les fréquences graves (en
+// dessous d'environ 150-200Hz selon les modèles), et une tentative de le
+// faire produit typiquement un bourdonnement/grésillement PHYSIQUE (le
+// haut-parleur qui "crache"), distinct d'un décrochage logiciel. Filtre
+// passe-haut partagé, posé en tout dernier sur le bus commun (après reverb,
+// juste avant la sortie) — coupe en douceur ce grave que ces enceintes ne
+// peuvent de toute façon pas rendre proprement, pratique standard de
+// mixage "mobile-safe". Affecte tout ce qui sort de ce fichier (synths de
+// jeu ET la reverb qui les prolonge).
+const speakerSafeHighpass = new Tone.Filter(160, "highpass").toDestination();
+
 // Bus commun : un peu de reverb + un léger delay pour une sensation
 // d'espace/onde, plutôt qu'un son sec qui claque.
 // Retour utilisateur (grésillement mobile — voir aussi music.js: le
@@ -72,7 +88,7 @@ export function setMasterVolume(level) {
 // traitée en continu tant qu'elle n'est pas éteinte). 4.5s ramené à 2.5s:
 // toujours "un peu de reverb" perceptible, mais une queue nettement plus
 // courte à calculer en continu, pour laisser plus de marge au CPU mobile.
-const reverb = new Tone.Reverb({ decay: 2.5, wet: 0.4 }).toDestination();
+const reverb = new Tone.Reverb({ decay: 2.5, wet: 0.4 }).connect(speakerSafeHighpass);
 const delay = new Tone.FeedbackDelay({ delayTime: 0.3, feedback: 0.22, wet: 0.16 }).connect(reverb);
 
 const tone = new Tone.Synth({
@@ -163,9 +179,16 @@ export async function playPlace() {
     // nextPlacementNote() plus bas, qu'on n'appelle PAS ici: currentBlock/
     // posInBlock restent inchangés, donc la suite normale reprend
     // exactement où elle en était une fois l'échec résolu.
+    // Retour utilisateur (enceintes téléphone): G2 (~98Hz) tombait sous le
+    // passe-haut "mobile-safe" ajouté ci-dessus (speakerSafeHighpass) et se
+    // serait retrouvé étouffé/absent sur un haut-parleur de téléphone.
+    // Remonté d'une octave (G3/C#4) : garde le même intervalle dissonant
+    // (tritone) et le même caractère "grave/sombre" RELATIF au reste de la
+    // palette, tout en restant au-dessus du filtre — donc audible et
+    // propre plutôt que filtré ou source de bourdonnement.
     const now = Tone.now();
-    darkPlaceLow.triggerAttackRelease("G2", "8n", now);
-    darkPlaceHigh.triggerAttackRelease("C#3", "8n", now);
+    darkPlaceLow.triggerAttackRelease("G3", "8n", now);
+    darkPlaceHigh.triggerAttackRelease("C#4", "8n", now);
     return;
   }
   // Voir nextPlacementNote() plus haut: avance dans la suite de notes du

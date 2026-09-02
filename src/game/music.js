@@ -156,7 +156,17 @@ const FAILURE_MUFFLE_GAIN = 0.4;
 const FAILURE_MUFFLE_CUTOFF_HZ = 420;
 const NORMAL_CUTOFF_HZ = 20000; // au-delà du spectre audible: filtre inactif en pratique
 
-const musicBus = new Tone.Volume(0).toDestination();
+// Retour utilisateur: "je me demande si c'est pas dû aussi aux enceintes du
+// téléphone [...] des sonorités peut-être délicates pour ce type
+// d'enceinte" — même filtre "mobile-safe" que sound.js (voir son
+// commentaire pour le détail): un haut-parleur de téléphone (minuscule,
+// mono, débattement mécanique limité) reproduit mal, voire fait bourdonner,
+// tout ce qui descend sous ~150-200Hz. Posé en tout dernier sur le bus
+// musique (après musicBus, juste avant la sortie) — coupe ce grave-là en
+// douceur pour TOUTES les couches, y compris échec.wav (qui, elle, ne
+// passe pas par duckFilter ci-dessous, voir sa raison d'être).
+const speakerSafeHighpass = new Tone.Filter(160, "highpass").toDestination();
+const musicBus = new Tone.Volume(0).connect(speakerSafeHighpass);
 
 // Passe-bas PARTAGÉ pour base + couches mécaniques uniquement — échec.wav
 // (voir ensureBuilt) NE PASSE PAS par ce filtre: elle doit rester pleinement
