@@ -21,28 +21,12 @@
 // AudioContext, sans dépendre de `Tone.Transport`).
 import * as Tone from "tone";
 import { isPixelTheme } from "./pixelIcons.js";
-
-// Retour utilisateur: "le son grésille assez vite sur téléphone, et si je
-// laisse tourner un peu, ça grésille de plus en plus" — Tone.js démarre par
-// défaut sur un contexte audio en latence "interactive" (le plus petit
-// buffer possible, pensé pour un jeu de rythme où chaque frappe doit sonner
-// quasi instantanément). Or cette musique tourne EN CONTINU dès le premier
-// clic et n'est plus jamais interrompue de toute la session (voir
-// startMusic plus bas) : 11 pistes bouclées EN MÊME TEMPS, plus le passe-bas
-// partagé et la reverb/delay ci-dessous — un buffer aussi petit laisse très
-// peu de marge au thread audio pour absorber la moindre pause (le
-// ramasse-miettes JS, un pic de rendu à l'écran, et surtout le throttling
-// thermique progressif d'un CPU mobile sous charge soutenue: le processeur
-// ralentit au fil des minutes, ce qui explique le "de plus en plus" — un
-// buffer confortable au départ finit par ne plus suivre). Un contexte dédié
-// en latence "playback" (buffer nettement plus généreux) absorbe ces
-// à-coups sans craquer, au prix d'une latence supplémentaire de quelques
-// dizaines de ms au déclenchement d'un son — inaudible pour de la musique de
-// fond et des synths doux (voir sound.js), on n'est pas sur un jeu de rythme.
-// DOIT être posé ici, tout en haut du tout premier fichier qui touche Tone
-// (music.js — sound.js l'importe, donc s'évalue après lui) : un contexte ne
-// peut plus être changé une fois des nodes déjà créés dessus.
-Tone.setContext(new Tone.Context({ latencyHint: "playback" }));
+// Contexte audio ("playback", moins sujet au grésillement) + bus de sortie
+// commun (limiteur anti-clipping) — voir audioBus.js pour le détail des
+// deux, partagés avec sound.js. Import placé ici, avant toute création de
+// node Tone dans CE fichier : le contexte doit être posé avant le premier
+// node, jamais après (voir audioBus.js).
+import { masterBus } from "./audioBus.js";
 
 // Gamme utilisée par TOUTES les couches mélodiques (voir
 // music-demos/couches: neurone-couleur.wav, prismes.wav) — exportée comme
@@ -180,7 +164,10 @@ const NORMAL_CUTOFF_HZ = 20000; // au-delà du spectre audible: filtre inactif e
 // musique (après musicBus, juste avant la sortie) — coupe ce grave-là en
 // douceur pour TOUTES les couches, y compris échec.wav (qui, elle, ne
 // passe pas par duckFilter ci-dessous, voir sa raison d'être).
-const speakerSafeHighpass = new Tone.Filter(160, "highpass").toDestination();
+// Se connecte à `masterBus` (voir audioBus.js) plutôt qu'à sa propre
+// `.toDestination()` — c'est LUI, désormais, qui reçoit la somme finale
+// musique + effets de jeu (voir sound.js) et la protège du clipping.
+const speakerSafeHighpass = new Tone.Filter(160, "highpass").connect(masterBus);
 const musicBus = new Tone.Volume(0).connect(speakerSafeHighpass);
 
 // Passe-bas PARTAGÉ pour base + couches mécaniques uniquement — échec.wav
@@ -272,20 +259,29 @@ export async function startMusic() {
 
 // Retour utilisateur: "on a du lag sur la musique lorsque le téléphone
 // passe en veille ou lorsqu'on verrouille/change d'onglet [...] on devrait
-// couper la musique lorsqu'on n'est plus focus" — BUG: un AudioContext qui
-// continue de tourner en arrière-plan (écran verrouillé, WebView mise en
-// veille par l'OS) n'est plus servi en temps réel par le système ; à la
-// reprise, les 11 lecteurs (bouclés en continu depuis startMusic, jamais
-// arrêtés jusqu'ici) se retrouvent avec du retard accumulé et/ou désynchro-
-// nisés entre eux, d'où le lag perçu au réveil. Plutôt que de tenter de
-// "rattraper" ce décalage, on ARRÊTE purement les 11 lecteurs dès que la
-// page devient invisible et on les REDÉMARRE tous ensemble à son retour —
-// exactement le même geste que startMusic ci-dessus (même timestamp pour
-// tous), ce qui les remet en phase à zéro plutôt que de risquer un décalage
-// cumulé. Les gains (couches débloquées, ambiance, état d'échec en cours)
-// ne sont PAS touchés ici : seule la lecture est coupée/reprise, le mix
-// reprend exactement où il en était.
-let pausedForVisibility = false;
+// couper la musique lorsqu'on n'est plus focus" — puis "il faut aussi
+// couper la musique lorsqu'on joue une reward ou une pub d'interstice" —
+// BUG commun aux deux cas: un AudioContext qui continue de tourner pendant
+// qu'on ne l'entend plus vraiment (écran verrouillé/WebView en veille, OU
+// pub plein écran qui masque le jeu — voir ads.js) n'est plus servi en
+// temps réel par le système ; à la reprise, les 11 lecteurs (bouclés en
+// continu depuis startMusic, jamais arrêtés jusqu'ici) se retrouvent avec
+// du retard accumulé et/ou désynchronisés entre eux, d'où le lag perçu au
+// retour. Plutôt que de tenter de "rattraper" ce décalage, on ARRÊTE
+// purement les 11 lecteurs le temps de la pause et on les REDÉMARRE tous
+// ensemble au retour — exactement le même geste que startMusic ci-dessus
+// (même timestamp pour tous), ce qui les remet en phase à zéro plutôt que
+// de risquer un décalage cumulé. Les gains (couches débloquées, ambiance,
+// état d'échec en cours) ne sont PAS touchés : seule la lecture est
+// coupée/reprise, le mix reprend exactement où il en était.
+//
+// Plusieurs RAISONS de pause peuvent se chevaucher (ex: en théorie, une pub
+// qui se déclenche pile au moment où l'app passe en arrière-plan) — un
+// ensemble de raisons actives (comme `failureCount` plus haut, qui gère la
+// même situation pour l'état d'échec) plutôt qu'un simple booléen: on ne
+// redémarre la lecture que lorsque la DERNIÈRE raison active disparaît,
+// jamais tant qu'il en reste une autre en cours.
+const pauseReasons = new Set();
 
 function stopAllPlayers() {
   if (!players) return;
@@ -310,22 +306,35 @@ function restartAllPlayers() {
   }
 }
 
+/** Ajoute `reason` à l'ensemble des raisons actives de mise en pause — arrête
+ * la lecture si c'est la première raison active (no-op sinon, une pause déjà
+ * en cours ne se relance pas). Sans effet tant que le joueur n'a pas encore
+ * posé son premier clic (voir `started` — Tone.js exige un geste utilisateur
+ * avant de pouvoir jouer le moindre son, donc `players` peut exister sans
+ * qu'aucune lecture n'ait jamais commencé). `reason` est une chaîne libre
+ * (ex: "visibility", "ad") — voir resumeMusic ci-dessous, qui doit être
+ * appelée avec la MÊME chaîne pour lever cette raison précise. */
+export function pauseMusic(reason) {
+  if (!started) return;
+  const wasEmpty = pauseReasons.size === 0;
+  pauseReasons.add(reason);
+  if (wasEmpty) stopAllPlayers();
+}
+
+/** Retire `reason` de l'ensemble des raisons actives — ne redémarre la
+ * lecture que si c'était la DERNIÈRE raison encore active (no-op sinon: une
+ * autre pause, ex. l'app toujours en arrière-plan, reste en cours). */
+export function resumeMusic(reason) {
+  if (!started) return;
+  if (!pauseReasons.has(reason)) return;
+  pauseReasons.delete(reason);
+  if (pauseReasons.size === 0) restartAllPlayers();
+}
+
 if (typeof document !== "undefined") {
   document.addEventListener("visibilitychange", () => {
-    // Rien à mettre en pause tant que le joueur n'a pas encore posé son
-    // premier clic (voir `started` — Tone.js exige un geste utilisateur
-    // avant de pouvoir jouer le moindre son, donc `players` peut exister
-    // sans qu'aucune lecture n'ait jamais commencé).
-    if (!started) return;
-    if (document.hidden) {
-      if (pausedForVisibility) return;
-      pausedForVisibility = true;
-      stopAllPlayers();
-    } else {
-      if (!pausedForVisibility) return;
-      pausedForVisibility = false;
-      restartAllPlayers();
-    }
+    if (document.hidden) pauseMusic("visibility");
+    else resumeMusic("visibility");
   });
 }
 

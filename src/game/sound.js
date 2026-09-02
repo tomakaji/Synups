@@ -3,6 +3,11 @@
 // rester cohérent avec le thème cérébral/neuronal du jeu.
 import * as Tone from "tone";
 import { isFailureActive } from "./music.js";
+// Bus de sortie commun (limiteur anti-clipping) — voir audioBus.js, partagé
+// avec music.js: le contexte "playback" qui y est posé s'applique déjà à ce
+// fichier de toute façon (sound.js importe music.js juste au-dessus, donc
+// s'évalue après lui — voir l'ordre d'évaluation des modules ES).
+import { masterBus } from "./audioBus.js";
 
 // Multiplicateur d'amplitude (paramètre `velocity` de Tone.Synth, 1 =
 // niveau normal) appliqué aux SFX d'action qui mènent à une erreur — retour
@@ -77,7 +82,10 @@ export function setMasterVolume(level) {
 // peuvent de toute façon pas rendre proprement, pratique standard de
 // mixage "mobile-safe". Affecte tout ce qui sort de ce fichier (synths de
 // jeu ET la reverb qui les prolonge).
-const speakerSafeHighpass = new Tone.Filter(160, "highpass").toDestination();
+// Se connecte à `masterBus` (voir audioBus.js) plutôt qu'à sa propre
+// `.toDestination()` — c'est LUI, désormais, qui reçoit la somme finale
+// effets de jeu + musique (voir music.js) et la protège du clipping.
+const speakerSafeHighpass = new Tone.Filter(160, "highpass").connect(masterBus);
 
 // Bus commun : un peu de reverb + un léger delay pour une sensation
 // d'espace/onde, plutôt qu'un son sec qui claque.

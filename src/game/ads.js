@@ -28,11 +28,20 @@ import { Capacitor } from "@capacitor/core";
 import {
   AdMob,
   RewardAdPluginEvents,
+  InterstitialAdPluginEvents,
   BannerAdPluginEvents,
   BannerAdPosition,
   BannerAdSize,
   AdmobConsentStatus,
 } from "@capacitor-community/admob";
+// Retour utilisateur: "il faut aussi couper la musique lorsqu'on joue une
+// reward ou une pub d'interstice" — une pub plein écran (native, PAS une
+// vue de cette WebView) masque le jeu sans forcément déclencher
+// document.visibilitychange (voir music.js: ce n'est pas garanti selon la
+// plateforme/le SDK), donc le mécanisme de pause déjà en place pour la
+// mise en veille (même fichier) ne suffit pas seul ici — raison de pause
+// dédiée ("ad"), voir showRewardedAd/showInterstitialAd plus bas.
+import { pauseMusic, resumeMusic } from "./music.js";
 
 // Round 21 (retour utilisateur: "pub-récompense pour recharger les indices" +
 // "publicités courtes (pas des reward ads) tous les 5 niveaux du mode
@@ -269,6 +278,12 @@ export async function showRewardedAd() {
     return { earned: false, reason: "unavailable" };
   }
 
+  // Voir music.js: pauseMusic/resumeMusic — posée AVANT showRewardVideoAd()
+  // (pas seulement à l'événement "affichée") pour ne rien laisser passer
+  // pendant le court instant de chargement/transition natif. `finish`
+  // ci-dessous, seul point de sortie de cette pub (quelle que soit
+  // l'issue), lève systématiquement cette même raison.
+  pauseMusic("ad");
   return new Promise((resolve) => {
     let settled = false;
     const listeners = [];
@@ -276,6 +291,7 @@ export async function showRewardedAd() {
       if (settled) return;
       settled = true;
       listeners.forEach((l) => l.remove());
+      resumeMusic("ad");
       // La pub qu'on vient de montrer est consommée dans tous les cas
       // (récompensée ou non) — on relance immédiatement le chargement de
       // la suivante pour le prochain clic, sans bloquer la résolution de
@@ -305,7 +321,28 @@ export async function showRewardedAd() {
 export function showInterstitialAd() {
   if (!Capacitor.isNativePlatform() || !interstitialReady) return;
   interstitialReady = false;
-  AdMob.showInterstitial().catch(() => {});
+
+  // Voir music.js: pauseMusic/resumeMusic — même raisonnement que
+  // showRewardedAd ci-dessus (posée avant l'appel natif). Contrairement au
+  // rewarded, cette fonction était jusqu'ici "fire and forget" (aucun
+  // listener) : Dismissed/FailedToShow sont désormais écoutés UNIQUEMENT
+  // pour savoir quand relever la pause, jamais pour bloquer main.js (qui
+  // continue de l'appeler sans attendre, voir son commentaire ci-dessus).
+  pauseMusic("ad");
+  let settled = false;
+  const listeners = [];
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    listeners.forEach((l) => l.remove());
+    resumeMusic("ad");
+  };
+  Promise.all([
+    AdMob.addListener(InterstitialAdPluginEvents.Dismissed, finish),
+    AdMob.addListener(InterstitialAdPluginEvents.FailedToShow, finish),
+  ]).then((handles) => listeners.push(...handles));
+
+  AdMob.showInterstitial().catch(() => finish());
   // Consommée dans tous les cas (affichée ou échec d'affichage): recharge
   // immédiatement pour le prochain palier de 5 niveaux.
   prepareInterstitial();
