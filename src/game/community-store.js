@@ -403,7 +403,24 @@ export function markPlayed(id) {
 export function detectMechanics(cells) {
   const found = new Set();
   for (const row of cells) {
-    const tokens = Array.isArray(row) ? row : String(row).trim().split(/\s+/);
+    // Retour utilisateur: "la popup pour le neurone couleur arrive au
+    // niveau 4 alors que le neurone couleur arrive seulement au niveau 9" —
+    // BUG CORRIGÉ: cette tokenisation ignorait la même règle que le VRAI
+    // parseur du jeu (voir grid.js: LightUpGrid constructor) — une rangée
+    // compacte SANS espace (un caractère = une case, ex "1..1") était quand
+    // même passée à split(/\s+/), qui ne coupe rien faute d'espace et
+    // renvoie la ligne ENTIÈRE comme un seul "token" (ex "1..1", longueur 4,
+    // commence par un chiffre) — testé plus bas contre /^\d/ + length > 1,
+    // exactement le motif d'une charge colorée ("2r") : "color" était donc
+    // ajouté à tort dès qu'un niveau simple contenait une charge à 2
+    // chiffres ou plus consécutifs, bien avant l'apparition réelle de la
+    // couleur. Un niveau compact n'a jamais de token à 2 caractères, donc
+    // aucune ambiguïté possible à séparer caractère par caractère.
+    const tokens = Array.isArray(row)
+      ? row
+      : String(row).includes(" ")
+      ? String(row).trim().split(/\s+/)
+      : String(row).trim().split("");
     for (const token of tokens) {
       if (token === "0") found.add("forbidden");
       else if (token === "/" || token === "\\") found.add("mirror");
