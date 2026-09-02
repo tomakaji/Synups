@@ -148,6 +148,24 @@ export async function saveProgressToCloud() {
   }
 }
 
+/** Retour utilisateur: "par défaut, on récupère le pseudo fourni par Google
+ * Play via le profil joueur" — best-effort, comme le reste du module: une
+ * absence de nom (pas connecté, refus, App ID placeholder) renvoie juste
+ * null, jamais d'exception. N'écrit rien elle-même: c'est à l'appelant
+ * (main.js) de décider si ce nom doit remplacer un pseudo existant ou
+ * seulement préremplir un pseudo encore vide (voir maybeAdoptPlayGamesPseudo
+ * dans main.js). */
+export async function getPlayerDisplayName() {
+  if (!isAndroidNative() || !signedIn) return null;
+  try {
+    const { player } = await GoogleGameServices.getCurrentPlayer();
+    const name = player?.displayName?.trim();
+    return name || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Récupère la progression depuis le cloud et l'applique en LOCAL — action
  * DESTRUCTIVE pour la progression locale actuelle (voir applyProgressSnapshot),
  * donc toujours déclenchée par un geste explicite avec confirmation côté UI
