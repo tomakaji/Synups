@@ -190,7 +190,23 @@ const NORMAL_CUTOFF_HZ = 20000; // au-delà du spectre audible: filtre inactif e
 // c'est le point d'extension documenté par la communauté pour insérer du
 // traitement Web Audio personnalisé). On le déconnecte de la destination
 // d'origine et on le reconnecte à travers notre propre chaîne.
-const ctx = Howler.ctx;
+//
+// IMPORTANT: `Howler.ctx`/`Howler.masterGain` sont créés PARESSEUSEMENT par
+// Howler (voir howler.js: `setupAudioContext()`, appelée depuis `Howl.init`
+// ou depuis `Howler.volume()` — jamais au chargement du module lui-même).
+// Construire cette chaîne au niveau module, comme un premier essai l'avait
+// fait, plantait donc au chargement (`Cannot read properties of null
+// (reading 'createBiquadFilter')`) puisque `Howler.ctx` valait encore
+// `null` à ce moment. Toute la chaîne est donc construite PARESSEUSEMENT
+// ci-dessous, dans `ensureOutputChain()`, appelée depuis `ensureBuilt()`
+// juste après la création du premier `Howl` (qui garantit que `Howler.ctx`
+// existe déjà, voir son `init()`).
+let ctx = null;
+let duckFilter = null;
+let speakerSafeHighpass = null;
+let compressor = null;
+let limiter = null;
+let outputChainBuilt = false;
 
 function rampParam(param, target, seconds) {
   const now = ctx.currentTime;
@@ -199,57 +215,71 @@ function rampParam(param, target, seconds) {
   param.linearRampToValueAtTime(target, now + seconds);
 }
 
-// Passe-bas PARTAGÉ pour base + couches mécaniques uniquement — échec.wav
-// (voir ensureBuilt) NE PASSE PAS par ce filtre: elle doit rester pleinement
-// claire/nette pendant que le reste s'étouffe derrière elle. Cutoff au repos
-// à NORMAL_CUTOFF_HZ (inaudible, filtre neutre) — voir enterFailure/
-// exitFailure pour la rampe vers/depuis FAILURE_MUFFLE_CUTOFF_HZ.
-const duckFilter = ctx.createBiquadFilter();
-duckFilter.type = "lowpass";
-duckFilter.frequency.value = NORMAL_CUTOFF_HZ;
-duckFilter.connect(Howler.masterGain);
+function ensureOutputChain() {
+  if (outputChainBuilt) return;
+  // Force la création de Howler.ctx/Howler.masterGain si ce n'est pas déjà
+  // fait — `Howler.volume()` (API publique documentée) appelle en interne
+  // `setupAudioContext()` quand `self.ctx` est encore `null`, exactement
+  // comme le ferait la construction d'un premier `Howl` (voir plus haut) :
+  // pas besoin de construire un Howl factice pour forcer cette création.
+  Howler.volume();
+  ctx = Howler.ctx;
+  if (!ctx || !Howler.masterGain) return; // ne devrait plus jamais arriver après l'appel ci-dessus
+  outputChainBuilt = true;
 
-// Retour utilisateur: "je me demande si c'est pas dû aussi aux enceintes du
-// téléphone [...] des sonorités peut-être délicates pour ce type
-// d'enceinte" — même filtre "mobile-safe" que sound.js (voir son
-// commentaire pour le détail): un haut-parleur de téléphone (minuscule,
-// mono, débattement mécanique limité) reproduit mal, voire fait bourdonner,
-// tout ce qui descend sous ~150-200Hz. Coupure remontée de 160 à 200Hz au
-// round "plus radical" (retour utilisateur: le grésillement persistait
-// malgré tout ce qui précède) — on sacrifie un peu plus de grave (déjà peu
-// présent/peu utile sur ce type d'enceinte) pour une marge de sécurité plus
-// large contre le bourdonnement.
-const speakerSafeHighpass = ctx.createBiquadFilter();
-speakerSafeHighpass.type = "highpass";
-speakerSafeHighpass.frequency.value = 200;
+  // Passe-bas PARTAGÉ pour base + couches mécaniques uniquement — échec.wav
+  // (voir ensureBuilt) NE PASSE PAS par ce filtre: elle doit rester
+  // pleinement claire/nette pendant que le reste s'étouffe derrière elle.
+  // Cutoff au repos à NORMAL_CUTOFF_HZ (inaudible, filtre neutre) — voir
+  // enterFailure/exitFailure pour la rampe vers/depuis
+  // FAILURE_MUFFLE_CUTOFF_HZ.
+  duckFilter = ctx.createBiquadFilter();
+  duckFilter.type = "lowpass";
+  duckFilter.frequency.value = NORMAL_CUTOFF_HZ;
+  duckFilter.connect(Howler.masterGain);
 
-// Compresseur PROACTIF avant le limiteur (round "plus radical" — un
-// limiteur seul ne fait qu'écrêter au dernier moment, ce qui peut encore
-// sonner dur/grésillant quand plusieurs couches culminent en même temps ;
-// un compresseur en amont réduit la dynamique en douceur AVANT d'atteindre
-// ce point, voir audioBus.js pour le même raisonnement côté Tone.js).
-const compressor = ctx.createDynamicsCompressor();
-compressor.threshold.value = -24;
-compressor.ratio.value = 4;
-compressor.attack.value = 0.003;
-compressor.release.value = 0.25;
-compressor.knee.value = 12;
+  // Retour utilisateur: "je me demande si c'est pas dû aussi aux enceintes
+  // du téléphone [...] des sonorités peut-être délicates pour ce type
+  // d'enceinte" — même filtre "mobile-safe" que sound.js (voir son
+  // commentaire pour le détail): un haut-parleur de téléphone (minuscule,
+  // mono, débattement mécanique limité) reproduit mal, voire fait
+  // bourdonner, tout ce qui descend sous ~150-200Hz. Coupure remontée de
+  // 160 à 200Hz au round "plus radical" (retour utilisateur: le
+  // grésillement persistait malgré tout ce qui précède) — on sacrifie un
+  // peu plus de grave (déjà peu présent/peu utile sur ce type d'enceinte)
+  // pour une marge de sécurité plus large contre le bourdonnement.
+  speakerSafeHighpass = ctx.createBiquadFilter();
+  speakerSafeHighpass.type = "highpass";
+  speakerSafeHighpass.frequency.value = 200;
 
-// Limiteur final anti-clipping — DynamicsCompressorNode natif avec un ratio
-// élevé (20, le max natif) approxime un limiteur, exactement comme
-// Tone.Limiter est lui-même construit sur un Compressor agressif.
-const limiter = ctx.createDynamicsCompressor();
-limiter.threshold.value = -1;
-limiter.ratio.value = 20;
-limiter.attack.value = 0.001;
-limiter.release.value = 0.05;
-limiter.knee.value = 0;
+  // Compresseur PROACTIF avant le limiteur (round "plus radical" — un
+  // limiteur seul ne fait qu'écrêter au dernier moment, ce qui peut encore
+  // sonner dur/grésillant quand plusieurs couches culminent en même temps ;
+  // un compresseur en amont réduit la dynamique en douceur AVANT d'atteindre
+  // ce point, voir audioBus.js pour le même raisonnement côté Tone.js).
+  compressor = ctx.createDynamicsCompressor();
+  compressor.threshold.value = -24;
+  compressor.ratio.value = 4;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.25;
+  compressor.knee.value = 12;
 
-Howler.masterGain.disconnect();
-Howler.masterGain.connect(speakerSafeHighpass);
-speakerSafeHighpass.connect(compressor);
-compressor.connect(limiter);
-limiter.connect(ctx.destination);
+  // Limiteur final anti-clipping — DynamicsCompressorNode natif avec un
+  // ratio élevé (20, le max natif) approxime un limiteur, exactement comme
+  // Tone.Limiter est lui-même construit sur un Compressor agressif.
+  limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -1;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.001;
+  limiter.release.value = 0.05;
+  limiter.knee.value = 0;
+
+  Howler.masterGain.disconnect();
+  Howler.masterGain.connect(speakerSafeHighpass);
+  speakerSafeHighpass.connect(compressor);
+  compressor.connect(limiter);
+  limiter.connect(ctx.destination);
+}
 
 /** Volume musique (0 à 1, linéaire) — bus SÉPARÉ de setMasterVolume dans
  * sound.js (qui reste le volume des effets de jeu: pose/retrait/victoire/
@@ -315,6 +345,12 @@ function rerouteThroughDuckFilter(howl) {
 
 function ensureBuilt() {
   if (howls) return;
+  // Le premier `new Howl(...)` ci-dessous déclenche déjà, en interne, la
+  // création paresseuse de Howler.ctx/Howler.masterGain (voir Howl.init) —
+  // mais on la force explicitement AVANT la boucle via `ensureOutputChain`,
+  // pour que `duckFilter` existe dès la première itération (voir
+  // `rerouteThroughDuckFilter`, appelée dans cette même boucle).
+  ensureOutputChain();
   howls = {};
   const urls = currentLayerUrls();
   for (const key of Object.keys(urls)) {
