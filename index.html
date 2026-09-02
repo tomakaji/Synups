@@ -463,11 +463,13 @@
           <div id="sommation-grid" class="som-grid"></div>
         </div>
 
+        <!-- Round "mode bonus" (retour utilisateur): bouton "Générer" retiré
+             — redondant avec le second tap sur un générateur déjà
+             sélectionné (voir sommation.js: onDragEnd/spawnFromSelected),
+             qui fait exactement la même chose. Ce panneau reste seul pour
+             afficher le coût + la répartition de chances une fois un
+             générateur sélectionné (voir sommation.js: render()). -->
         <div id="som-spawn-info" class="som-spawn-info"></div>
-
-        <div class="som-actions">
-          <button id="som-spawn-btn" class="options-btn" disabled>Sélectionne un générateur</button>
-        </div>
       </section>
 
       <!-- ================= COMMUNAUTÉ (fil, tout local) ================= -->

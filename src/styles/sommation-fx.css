@@ -213,11 +213,19 @@
 
 /* Objectif: cellule spéciale 2x2, toujours en haut à gauche de la grille
    (voir sommation.js: OBJ_R0/OBJ_C0/isReserved) — intégrée au plateau
-   plutôt que décrite dans une barre séparée (retour utilisateur). */
+   plutôt que décrite dans une barre séparée (retour utilisateur).
+   Retour utilisateur (round ultérieur): le contour reprenait EXACTEMENT
+   `var(--accent)`, la même couleur que .som-selected (voir plus haut) sur
+   un générateur réellement sélectionné/actionnable — donnait l'impression
+   trompeuse que la case objectif était elle aussi "sélectionnée", alors
+   qu'elle n'a jamais été interactive (cursor: default, aucun tap ne fait
+   rien ici). Contour neutre désormais (même famille que .som-cell de base,
+   juste plus marqué vu la taille de la zone), le léger lavis radial en
+   fond suffit à la distinguer visuellement du reste de la grille. */
 .som-objective {
   grid-column: span 2;
   grid-row: span 2;
-  border: 1.5px solid var(--accent);
+  border: 1.5px solid rgba(160, 178, 230, 0.4);
   border-radius: 12px;
   background: radial-gradient(circle, rgba(110, 231, 255, 0.06), transparent 70%);
   padding: 6px;
@@ -351,11 +359,16 @@
 
 .som-spawn-info {
   width: min(360px, 90vw);
-  /* Retour utilisateur: "un peu de marge en bas... c'est trop collé au
-     bouton générer" — marge basse ajoutée avant .som-actions. */
+  /* Retour utilisateur: "un peu de marge en bas" — le bouton "Générer" qui
+     suivait directement a été retiré depuis (redondant, voir sommation.js),
+     ce panneau est maintenant le dernier élément de l'écran ; la marge
+     basse reste utile au-dessus de la zone sûre du bas d'écran. */
   margin: 6px auto 16px;
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: 4px;
   min-height: 1.4em;
 }
 
@@ -424,26 +437,14 @@
   font-weight: 600;
 }
 
-.som-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
-}
-
-/* Voir .som-progress-wrap.hidden plus haut: même correctif nécessaire ici. */
-.som-actions.hidden {
-  display: none;
-}
-
-.som-actions .options-btn {
-  flex: 1;
-  min-width: 140px;
-}
-
-.som-actions .options-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
+/* Rappel du coût + du geste (retape le générateur), affiché au-dessus du
+   camembert — voir sommation.js: spawnCostHint(). Remplace le texte qui
+   vivait sur le bouton "Générer" (retiré, redondant avec le second tap sur
+   le générateur déjà sélectionné — retour utilisateur). */
+.som-spawn-hint {
+  font-size: 0.82rem;
+  color: var(--muted, #9aa4b8);
+  text-align: center;
+  margin-bottom: 6px;
 }
 

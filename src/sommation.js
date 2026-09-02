@@ -34,10 +34,12 @@
 // Pendant un glisser, la case survolée affiche un aperçu textuel + une
 // bordure verte/rouge (valide/invalide) — voir predictDrop(), qui rejoue en
 // lecture seule exactement la même logique que handleDrop().
-// Un tap SANS déplacement sur un générateur le sélectionne pour le bouton
-// "Générer" (qui affiche aussi la répartition de chances de spawn) — un
+// Un tap SANS déplacement sur un générateur le sélectionne (affiche le
+// panneau coût + répartition de chances de spawn, #som-spawn-info) — un
 // SECOND tap sur ce même générateur déjà sélectionné déclenche directement
-// l'action, pour spammer facilement (retour utilisateur). Tout le reste
+// l'action, pour spammer facilement (retour utilisateur) — c'est le SEUL
+// moyen de générer depuis le retrait du bouton "Générer", redondant avec ce
+// geste (autre retour utilisateur, round ultérieur). Tout le reste
 // est un vrai geste de glisser, y compris nourrir une case verrouillée
 // active (plus de tap-déblocage, voir doDropOnLock).
 import { hexFor, colorFor } from "./game/colors.js";
@@ -63,7 +65,8 @@ import { showRewardedAd } from "./game/ads.js";
 import { hapticLight, hapticWarning, hapticSuccess } from "./game/haptics.js";
 import { trackEvent } from "./game/analytics.js";
 // Sons: un son NEUF, court et étouffé, dédié à la génération (spammable via
-// le bouton "Générer" — voir spawnFromSelected) ; les autres actions
+// le double-tap sur un générateur déjà sélectionné — voir spawnFromSelected)
+// ; les autres actions
 // réutilisent des sons déjà existants du jeu principal, de façon symbolique
 // (retour utilisateur: "reprendre des sons du jeu... pour rappeler le jeu
 // de base") — voir game/sound.js pour le détail de chaque timbre.
@@ -646,7 +649,6 @@ export function initSommation(pointsApi) {
   const progressLabelEl = document.getElementById("som-badge-progress-label");
   const nextRewardTeaserEl = document.getElementById("som-next-reward-teaser");
   const spawnInfoEl = document.getElementById("som-spawn-info");
-  const spawnBtn = document.getElementById("som-spawn-btn");
   // Modale "plus assez de points" — retour utilisateur: "on ouvre une
   // modale qui propose de regarder une pub... afin de regagner des points".
   // Round 20: branchée sur une vraie rewarded ad (voir game/ads.js) au lieu
@@ -876,6 +878,15 @@ export function initSommation(pointsApi) {
       <div class="som-spawn-pie" style="background: conic-gradient(${stops})"></div>
       <div class="som-spawn-legend">${legend}</div>
     </div>`;
+  }
+
+  /** Ligne de coût + rappel du geste, affichée au-dessus du camembert une
+   * fois un générateur sélectionné — remplace le texte qui vivait sur le
+   * bouton "Générer" (retiré, voir render(): ce bouton faisait exactement
+   * la même chose qu'un second tap sur le générateur déjà sélectionné, une
+   * redondance retirée sur retour utilisateur). */
+  function spawnCostHint(cost) {
+    return `<div class="som-spawn-hint">Retape le générateur pour lancer (-${cost} points)</div>`;
   }
 
   function letterForChannels(ch) {
@@ -1340,18 +1351,20 @@ export function initSommation(pointsApi) {
 
     if (!moved) {
       // Simple tap (pas de vrai glisser): un générateur pas encore
-      // sélectionné se sélectionne (affiche le bouton "Générer" + son
-      // coût) — un second tap sur ce MÊME générateur DÉJÀ sélectionné
-      // déclenche directement l'action (retour utilisateur: "le simple fait
-      // de cliquer à nouveau dessus va faire l'action, plus simple pour
-      // spammer comme ça").
+      // sélectionné se sélectionne (affiche le panneau coût + probas,
+      // #som-spawn-info) — un second tap sur ce MÊME générateur DÉJÀ
+      // sélectionné déclenche directement l'action (retour utilisateur: "le
+      // simple fait de cliquer à nouveau dessus va faire l'action, plus
+      // simple pour spammer comme ça" — c'est d'ailleurs devenu le SEUL
+      // chemin pour générer depuis que le bouton "Générer" a été retiré,
+      // redondant avec ce geste).
       const cell = board[r]?.[c];
       if (cell?.type === "gen") {
         if (selectedGen && selectedGen.r === r && selectedGen.c === c) {
           // Round 24: hapticLight() ici — ce second tap déclenche l'action
-          // au même titre qu'un clic sur som-spawn-btn (déjà couvert par le
-          // listener délégué global de main.js pour LUI), mais CE chemin-ci
-          // passe par une case (<div>), jamais un <button> — sans cet appel
+          // en passant par une case (<div>), jamais un <button> (le bouton
+          // "Générer" qui déclenchait le retour haptique via le listener
+          // délégué global de main.js a été retiré depuis) — sans cet appel
           // explicite, le double-tap pour spammer resterait sans retour.
           hapticLight();
           spawnFromSelected();
@@ -1611,16 +1624,12 @@ export function initSommation(pointsApi) {
     if (selectedGen && board[selectedGen.r]?.[selectedGen.c]?.type === "gen") {
       const gen = board[selectedGen.r][selectedGen.c];
       const cost = genCost(gen.level);
-      // Le bouton reste ACTIF même sans assez de points (retour
-      // utilisateur: cliquer alors ouvre la modale pub — voir
-      // spawnFromSelected/openAdModal), plutôt que désactivé/muet.
-      spawnBtn.disabled = false;
-      spawnBtn.textContent = `Générer (-${cost} points)`;
-      if (spawnInfoEl) spawnInfoEl.innerHTML = spawnRatiosChart(gen);
+      // Retape le générateur pour lancer la génération même sans assez de
+      // points (retour utilisateur: ça ouvre la modale pub — voir
+      // spawnFromSelected/openAdModal) — ce panneau reste purement informatif.
+      if (spawnInfoEl) spawnInfoEl.innerHTML = spawnCostHint(cost) + spawnRatiosChart(gen);
     } else {
       selectedGen = null;
-      spawnBtn.disabled = true;
-      spawnBtn.textContent = "Sélectionne un générateur";
       if (spawnInfoEl) spawnInfoEl.innerHTML = "";
     }
 
@@ -1634,7 +1643,6 @@ export function initSommation(pointsApi) {
     writeBoardState({ board, lockedCells: Array.from(lockedCells), lockFill, objectiveIndex, objectiveState, selectedGen });
   }
 
-  spawnBtn.onclick = spawnFromSelected;
   if (debugPointsBtn) {
     debugPointsBtn.onclick = () => {
       pointsApi.addPoints(500);
