@@ -1174,6 +1174,16 @@ const btnInfiniteNext = document.getElementById("btn-infinite-next");
 const infiniteFeaturesEl = document.getElementById("infinite-features");
 const btnInfiniteGenerate = document.getElementById("btn-infinite-generate");
 const infiniteStatusEl = document.getElementById("infinite-status");
+// Voir runGeneration(): panneau entier grisé pendant une génération (pas
+// seulement le bouton) — voir mode-infinite.css: .infinite-config.is-generating.
+const infiniteConfigPanelEl = document.querySelector(".infinite-config");
+// Retour utilisateur: "le chargement peut être long donc ce serait bien
+// d'avoir un état de loading joli et simple" — un spinner CSS (voir
+// mode-infinite.css: .infinite-spinner) plutôt qu'un simple texte qui
+// change, pour qu'une génération de plusieurs secondes (paliers élevés,
+// voir generator.js: DEFAULT_MAX_TIME_MS_BY_TIER) se lise clairement comme
+// "en cours" et pas comme un gel de l'appli.
+const INFINITE_SPINNER_HTML = '<span class="infinite-spinner" aria-hidden="true"></span>';
 
 let infiniteDifficulty = 1;
 // Cochées par défaut: seules les features déjà implémentées (voir
@@ -1524,30 +1534,50 @@ async function runGeneration({ intoBoard }) {
   btnInfiniteNext.disabled = true;
   const statusTarget = intoBoard ? infiniteLevelLabelEl : infiniteStatusEl;
   const previousLabel = statusTarget.textContent;
-  statusTarget.textContent = intoBoard ? "∞ · génération…" : "Génération en cours…";
+  if (intoBoard) {
+    statusTarget.textContent = "∞ · génération…";
+  } else {
+    // Voir mode-infinite.css: .infinite-status--loading/.infinite-spinner —
+    // spinner + grisage du panneau de réglages plutôt qu'un simple texte
+    // qui change, pour qu'une génération longue (paliers élevés) se lise
+    // clairement comme "en cours" plutôt que comme un gel de l'appli.
+    infiniteConfigPanelEl?.classList.add("is-generating");
+    statusTarget.classList.add("infinite-status--loading");
+    statusTarget.innerHTML = `${INFINITE_SPINNER_HTML}<span>Génération en cours…</span>`;
+  }
 
   try {
     const result = await requestLevel(config);
     if (!result) {
-      statusTarget.textContent = intoBoard
-        ? previousLabel
-        : "Échec de génération avec ces réglages — réessaie (ou change les réglages).";
+      if (intoBoard) {
+        statusTarget.textContent = previousLabel;
+      } else {
+        statusTarget.classList.remove("infinite-status--loading");
+        statusTarget.textContent = "Échec de génération avec ces réglages — réessaie (ou change les réglages).";
+      }
       return;
     }
     revealPlayAfterGeneration();
     loadInfiniteLevel(result);
+    infiniteStatusEl.classList.remove("infinite-status--loading");
     infiniteStatusEl.textContent = "";
     // Le résultat servi ici ne venait PAS du buffer (sinon on serait déjà
     // sorti plus haut) : on lance quand même un remplissage pour préparer
     // les prochains "Niveau suivant" pendant que le joueur résout celui-ci.
     ensureLevelBuffer(config);
   } catch (err) {
-    statusTarget.textContent = "Erreur du générateur — réessaie.";
+    if (intoBoard) {
+      statusTarget.textContent = "Erreur du générateur — réessaie.";
+    } else {
+      statusTarget.classList.remove("infinite-status--loading");
+      statusTarget.textContent = "Erreur du générateur — réessaie.";
+    }
     console.error(err);
   } finally {
     infiniteRequestInFlight = false;
     btnInfiniteGenerate.disabled = false;
     btnInfiniteNext.disabled = false;
+    infiniteConfigPanelEl?.classList.remove("is-generating");
   }
 }
 

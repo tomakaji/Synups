@@ -236,3 +236,49 @@
   min-height: 1.2em;
 }
 
+/* Retour utilisateur: "le chargement peut être long donc ce serait bien
+   d'avoir un état de loading joli et simple" — la génération d'un niveau
+   Infini (voir infiniteClient.js/generator.js) peut prendre plusieurs
+   secondes sur les paliers élevés, surtout sans niveau déjà préparé dans le
+   buffer. `.infinite-status--loading` bascule le texte seul en une ligne
+   spinner + texte, centrée. */
+.infinite-status--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Reste discret pendant que le générateur cherche activement un niveau
+   plutôt que de disparaître/geler le panneau: le reste de l'écran (étoiles
+   de difficulté, mécaniques) se grise en même temps (voir
+   .infinite-config.is-generating ci-dessous) pour que tout le panneau se
+   lise comme "occupé", pas seulement le bouton. */
+.infinite-spinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid rgba(110, 231, 255, 0.25);
+  border-top-color: var(--accent);
+  animation: infinite-spinner-spin 0.8s linear infinite;
+}
+
+@keyframes infinite-spinner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Grise + désactive les réglages (étoiles/mécaniques) pendant qu'une
+   génération est en cours (voir main.js: runGeneration) — jusqu'ici seul le
+   bouton "Générer" lui-même se désactivait, ce qui laissait le reste du
+   panneau manipulable pour un résultat qui ne serait de toute façon plus
+   pris en compte (la config est figée au moment du clic, voir
+   runGeneration: `const config = infiniteConfig()`). */
+.infinite-config.is-generating #infinite-difficulty,
+.infinite-config.is-generating #infinite-features {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
