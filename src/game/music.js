@@ -129,10 +129,25 @@ const MECHANIC_THRESHOLDS = {
   pyra: { count: "pyraActive", min: 1 },
 };
 
-// Gain cible (au lieu de 1) quand une couche est débloquée — seule
-// "neurone" est montée de 10% (retour utilisateur), toutes les autres
+// Gain cible (au lieu de 1) quand une couche est débloquée — "neurone" est
+// montée de 10% (retour utilisateur), toutes les autres non listées
 // restent à 1 (aucun effet, valeur par défaut ci-dessous).
-const LAYER_ACTIVE_GAIN = { neurone: 1.1 };
+// Retour utilisateur (grésillement/saturation): "les deux pistes des
+// neurones colorés saturent, surtout la deuxième [...] elles sont plutôt
+// fortes de toute façon" — neuroneCouleur/neuroneCouleurLayer2 sont deux
+// pistes DÉJÀ fortes qui peuvent aussi jouer EN MÊME TEMPS que "neurone"/
+// "neuroneLayer2" (les paliers de déblocage ne s'excluent pas, voir
+// MECHANIC_THRESHOLDS) — leur somme dépassait visiblement 0dB en sortie,
+// d'où la saturation. Layer2 baissée plus fort que la couche 1 (rapportée
+// comme la plus touchée). prismes/pyra également baissées un cran, plus
+// légèrement (pas rapportées comme saturées, juste "un peu" en trop).
+const LAYER_ACTIVE_GAIN = {
+  neurone: 1.1,
+  neuroneCouleur: 0.7,
+  neuroneCouleurLayer2: 0.5,
+  prismes: 0.8,
+  pyra: 0.8,
+};
 
 const FADE = 0.35; // secondes, montée/descente de gain par calque — évite tout clic
 
@@ -253,6 +268,65 @@ export async function startMusic() {
   started = true;
   const when = Tone.now() + 0.05; // léger différé: laisse le temps au scheduler de tout aligner
   for (const player of Object.values(players)) player.start(when);
+}
+
+// Retour utilisateur: "on a du lag sur la musique lorsque le téléphone
+// passe en veille ou lorsqu'on verrouille/change d'onglet [...] on devrait
+// couper la musique lorsqu'on n'est plus focus" — BUG: un AudioContext qui
+// continue de tourner en arrière-plan (écran verrouillé, WebView mise en
+// veille par l'OS) n'est plus servi en temps réel par le système ; à la
+// reprise, les 11 lecteurs (bouclés en continu depuis startMusic, jamais
+// arrêtés jusqu'ici) se retrouvent avec du retard accumulé et/ou désynchro-
+// nisés entre eux, d'où le lag perçu au réveil. Plutôt que de tenter de
+// "rattraper" ce décalage, on ARRÊTE purement les 11 lecteurs dès que la
+// page devient invisible et on les REDÉMARRE tous ensemble à son retour —
+// exactement le même geste que startMusic ci-dessus (même timestamp pour
+// tous), ce qui les remet en phase à zéro plutôt que de risquer un décalage
+// cumulé. Les gains (couches débloquées, ambiance, état d'échec en cours)
+// ne sont PAS touchés ici : seule la lecture est coupée/reprise, le mix
+// reprend exactement où il en était.
+let pausedForVisibility = false;
+
+function stopAllPlayers() {
+  if (!players) return;
+  for (const player of Object.values(players)) {
+    try {
+      player.stop();
+    } catch {
+      // Déjà arrêté (ex: jamais démarré, ou double événement) — sans effet.
+    }
+  }
+}
+
+function restartAllPlayers() {
+  if (!players) return;
+  const when = Tone.now() + 0.05;
+  for (const player of Object.values(players)) {
+    try {
+      player.start(when);
+    } catch {
+      // Déjà démarré (ex: double événement) — sans effet.
+    }
+  }
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    // Rien à mettre en pause tant que le joueur n'a pas encore posé son
+    // premier clic (voir `started` — Tone.js exige un geste utilisateur
+    // avant de pouvoir jouer le moindre son, donc `players` peut exister
+    // sans qu'aucune lecture n'ait jamais commencé).
+    if (!started) return;
+    if (document.hidden) {
+      if (pausedForVisibility) return;
+      pausedForVisibility = true;
+      stopAllPlayers();
+    } else {
+      if (!pausedForVisibility) return;
+      pausedForVisibility = false;
+      restartAllPlayers();
+    }
+  });
 }
 
 /** Recharge les 11 pistes sur le jeu d'URLs correspondant au thème ACTUEL
