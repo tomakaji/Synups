@@ -427,7 +427,21 @@ export function prismIcon(cell) {
  * ponctuels liés à UN clic, pas un état dérivé qui se réaffiche à chaque
  * frame).
  */
-export function createBoardRenderer(boardEl) {
+export function createBoardRenderer(boardEl, options = {}) {
+  // Retour utilisateur (round suivant, plusieurs bugs de zoom tactile
+  // rapportés): "on ne peut pas déplacer la grille zoomée en cliquant dans
+  // le vide autour d'elle, seulement en touchant la grille elle-même" — les
+  // gestes (pincement/glissement) étaient posés directement sur `boardEl`,
+  // qui RÉTRÉCIT visuellement autour de son centre une fois dézoomé/déplacé:
+  // un doigt posé dans l'espace resté vide (désormais hors de la boîte de
+  // `boardEl`) ne déclenche alors plus aucun pointerdown dessus. `panSurfaceEl`
+  // (optionnel — reste `boardEl` par défaut pour un appelant qui ne le
+  // fournit pas) est un conteneur plus large, de la taille de toute la zone
+  // de jeu disponible, qui reste LUI immobile (jamais transformé) : les
+  // gestes s'y posent sur toute cette zone, tandis que c'est toujours
+  // `boardEl` qui reçoit le `transform` visuel. Voir main.js/editor.js pour
+  // le wrapper concret passé (`#play-view`/`.editor-board-wrap`).
+  const panSurfaceEl = options.panSurfaceEl || boardEl;
   let grid = null;
   let cellEls = [];
   let laserEls = [];
@@ -470,16 +484,41 @@ export function createBoardRenderer(boardEl) {
     const naturalH = boardEl.offsetHeight || 1;
     const maxPanX = (naturalW * zoom) / 2;
     const maxPanY = (naturalH * zoom) / 2;
-    panX = Math.min(maxPanX, Math.max(-maxPanX, nextPanX));
-    panY = Math.min(maxPanY, Math.max(-maxPanY, nextPanY));
+    // Retour utilisateur: "lorsqu'on est en état de dézoom maximum, la
+    // grille doit toujours être centrée comme à l'origine" — BUG CORRIGÉ: un
+    // pincement qui REZOOME vers 1 (dézoom max) ne repassait jamais par le
+    // geste à 1 doigt qui remet panX/panY à 0 (voir pointermove plus bas) —
+    // un pan acquis PENDANT un zoom précédent pouvait donc subsister
+    // exactement à zoom=1 (juste re-clampé, jamais annulé), laissant la
+    // grille visuellement décentrée alors même qu'elle n'était plus zoomée.
+    // "Dézoomé au max" DOIT toujours correspondre à la position d'origine.
+    if (zoom <= MIN_ZOOM) {
+      panX = 0;
+      panY = 0;
+    } else {
+      panX = Math.min(maxPanX, Math.max(-maxPanX, nextPanX));
+      panY = Math.min(maxPanY, Math.max(-maxPanY, nextPanY));
+    }
     boardEl.style.transformOrigin = "center center";
     boardEl.style.transform = zoom === 1 && panX === 0 && panY === 0 ? "" : `translate(${panX}px, ${panY}px) scale(${zoom})`;
-    // Au repos (zoom normal), on laisse le navigateur gérer le tactile
-    // normalement (ex: scroll vertical natif de .editor-board-wrap) — voir
-    // aussi le pointerdown à 2 doigts plus bas, qui le bascule à "none" dès
-    // le début d'un pincement même en partant de zoom 1.
-    boardEl.style.touchAction = zoom > 1 ? "none" : "";
   }
+
+  // Retour utilisateur: "le zoom tactile se bloque très vite [...] il faut
+  // recommencer la procédure de zoom pour zoomer davantage" — BUG CORRIGÉ:
+  // la version précédente ne posait `touch-action:none` qu'APRÈS coup (dans
+  // le pointerdown ci-dessous, au moment même où le 2e doigt se pose, et
+  // remise à "" une fois tous les doigts relâchés à zoom=1). Changer
+  // touch-action EN COURS DE GESTE — alors que le 1er doigt est déjà posé
+  // avec l'ancienne valeur — est un cas mal défini pour les navigateurs, qui
+  // répondent souvent en annulant un des deux pointeurs (pointercancel)
+  // en plein pincement: exactement le symptôme observé (zoom qui se fige
+  // presque aussitôt, un nouveau geste étant alors nécessaire). Posé UNE
+  // SEULE FOIS, en dehors de tout geste, sur `panSurfaceEl` (l'élément qui
+  // reçoit VRAIMENT les doigts, voir plus haut) — jamais modifié ensuite.
+  // `pan-y` (jamais `none`) exclut déjà structurellement le pincement natif
+  // du navigateur (pas dans la liste des gestes autorisés) tout en gardant
+  // le scroll vertical natif possible au repos (ex: .editor-board-wrap).
+  panSurfaceEl.style.touchAction = "pan-y";
 
   /** Réinitialise zoom/pan — appelé explicitement par l'appelant (voir
    * l'API retournée plus bas) quand un VRAI changement de niveau a lieu,
@@ -503,7 +542,7 @@ export function createBoardRenderer(boardEl) {
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
 
-  boardEl.addEventListener("pointerdown", (e) => {
+  panSurfaceEl.addEventListener("pointerdown", (e) => {
     if (e.pointerType !== "touch") return; // souris/stylet: comportement inchangé
     activeTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     didPanOrZoom = false;
@@ -512,14 +551,13 @@ export function createBoardRenderer(boardEl) {
       pinchStartDist = touchPointDist(a, b);
       pinchStartZoom = zoom;
       panStart = null; // un pincement à 2 doigts prend le dessus sur un pan à 1 doigt en cours
-      boardEl.style.touchAction = "none";
     } else if (activeTouchPointers.size === 1 && zoom > 1) {
       const p = activeTouchPointers.get(e.pointerId);
       panStart = { x: p.x, y: p.y, panX, panY };
     }
   });
 
-  boardEl.addEventListener("pointermove", (e) => {
+  panSurfaceEl.addEventListener("pointermove", (e) => {
     if (!activeTouchPointers.has(e.pointerId)) return;
     activeTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
@@ -546,7 +584,6 @@ export function createBoardRenderer(boardEl) {
     if (activeTouchPointers.size < 2) pinchStartDist = 0;
     if (activeTouchPointers.size === 0) {
       panStart = null;
-      if (zoom <= 1) boardEl.style.touchAction = "";
       if (!didPanOrZoom) {
         // Double-tap (deux taps rapprochés, sans déplacement notable):
         // réinitialise le zoom, geste habituel sur mobile.
@@ -563,8 +600,8 @@ export function createBoardRenderer(boardEl) {
       }
     }
   }
-  boardEl.addEventListener("pointerup", endTouchPointer);
-  boardEl.addEventListener("pointercancel", endTouchPointer);
+  panSurfaceEl.addEventListener("pointerup", endTouchPointer);
+  panSurfaceEl.addEventListener("pointercancel", endTouchPointer);
 
   // Un clic de pose de lumière ne doit jamais se déclencher à la fin d'un
   // pincement/glissement — écoute en phase de capture pour intercepter le
