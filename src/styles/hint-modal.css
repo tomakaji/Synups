@@ -62,6 +62,23 @@
   100% { transform: scale(1.8); opacity: 0; }
 }
 
+/* Variante "retrait" du halo d'indice (voir main.js: findWrongPlacedCell,
+   showHintAt) — cas d'une grille remplie d'erreurs où l'indice ne peut plus
+   POSER de prochaine impulsion (toutes les cases-solution restantes sont
+   déjà illuminées par une erreur) et retire à la place une impulsion mal
+   placée. Même animation que .cell--hint, mais en rouge/corail plutôt qu'en
+   doré, pour qu'un joueur ne confonde jamais "l'indice vient d'en poser une
+   ici" avec "l'indice vient d'en retirer une ici". */
+.cell--hint-remove::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  border: 3px solid #ff6b6b;
+  pointer-events: none;
+  animation: cell-hint-sonar 2.4s ease-out 1;
+}
+
 /* ---------- Modale générique (pour l'instant: "plus d'indices") ---------- */
 .modal {
   position: fixed;

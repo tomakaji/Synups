@@ -551,36 +551,72 @@ function renderHintUI() {
  * Set alimenté au fil de toggleLight, itéré dans son ordre d'insertion) —
  * une approximation raisonnable de "la prochaine ampoule que le solveur
  * trouverait", sans dupliquer ici toute la logique de propagation
- * pas-à-pas de propagate()/pickBranchCell(). */
+ * pas-à-pas de propagate()/pickBranchCell().
+ *
+ * Retour utilisateur ("les indices ne fonctionnent pas si on a rempli une
+ * grille avec des erreurs"): une case-solution pas encore posée peut malgré
+ * tout être IMPOSSIBLE à poser MAINTENANT si une lumière mal placée
+ * ailleurs l'illumine déjà (règle du jeu: pas de pose sur une case
+ * illuminée, voir grid.js: toggleLight). Sans le filtre `canPlaceLightAt`
+ * ci-dessous, l'indice proposait quand même cette case, la dépensait, puis
+ * `handleCellClick` échouait silencieusement (son d'erreur, rien de posé) —
+ * indice consommé pour rien. On ne propose donc plus qu'une case
+ * RÉELLEMENT posable tout de suite ; si aucune ne l'est, `findWrongPlacedCell`
+ * prend le relais (voir btnHint.onclick). */
 function findNextHintCell() {
   if (!currentLevel || !grid) return null;
   const solution = findSolution(currentLevel);
   if (!solution) return null;
   const placed = new Set(grid.getPlacedLights().map(([r, c]) => `${r},${c}`));
   for (const [r, c] of solution) {
-    if (!placed.has(`${r},${c}`)) return [r, c];
+    if (!placed.has(`${r},${c}`) && grid.canPlaceLightAt(r, c)) return [r, c];
   }
-  return null; // grille déjà correcte: rien à indiquer
+  return null; // grille déjà correcte, ou plus aucune case-solution posable
 }
 
-/** Pose la mise en valeur "halo sonar doré" (voir style.css:
- * .cell--hint/@keyframes cell-hint-sonar) sur une case pendant
- * HINT_HIGHLIGHT_MS, puis la retire — jamais persistante. Purement
- * cosmétique: la lumière elle-même est déjà posée par handleCellClick()
- * avant cet appel (voir btnHint.onclick), ce halo ne fait que signaler
- * "c'est l'indice qui vient de la poser ici". */
-function showHintAt(r, c) {
+/** Cas de repli quand `findNextHintCell` ne peut rien proposer: repère une
+ * impulsion posée par le joueur qui n'appartient PAS à la solution (une
+ * erreur), pour la retirer plutôt que d'en poser une nouvelle — c'est
+ * généralement CE type de lumière mal placée qui, en illuminant une case-
+ * solution voisine, bloque la suite (voir findNextHintCell ci-dessus). La
+ * retirer débloque la grille pour qu'un prochain indice puisse à nouveau
+ * proposer une pose normale. Retourne `null` si la grille est déjà
+ * entièrement correcte (rien à retirer). */
+function findWrongPlacedCell() {
+  if (!currentLevel || !grid) return null;
+  const solution = findSolution(currentLevel);
+  if (!solution) return null;
+  const solutionSet = new Set(solution.map(([r, c]) => `${r},${c}`));
+  for (const [r, c] of grid.getPlacedLights()) {
+    if (!solutionSet.has(`${r},${c}`)) return [r, c];
+  }
+  return null;
+}
+
+/** Pose la mise en valeur "halo sonar" (voir hint-modal.css:
+ * .cell--hint/.cell--hint-remove/@keyframes cell-hint-sonar) sur une case
+ * pendant HINT_HIGHLIGHT_MS, puis la retire — jamais persistante. Purement
+ * cosmétique: la lumière elle-même est déjà posée/retirée par
+ * handleCellClick() avant cet appel (voir btnHint.onclick).
+ * `remove` (round "grille pleine d'erreurs"): bascule sur le halo rouge
+ * `.cell--hint-remove` plutôt que le halo doré `.cell--hint`, pour
+ * distinguer sans ambiguïté "l'indice vient de RETIRER une impulsion
+ * erronée ici" de son sens habituel "l'indice vient d'en POSER une ici". */
+function showHintAt(r, c, { remove = false } = {}) {
   const el = renderer.cellElementAt(r, c);
   if (!el) return;
   if (hintHighlightTimeout) clearTimeout(hintHighlightTimeout);
-  boardEl.querySelectorAll(".cell--hint").forEach((n) => n.classList.remove("cell--hint"));
+  boardEl
+    .querySelectorAll(".cell--hint, .cell--hint-remove")
+    .forEach((n) => n.classList.remove("cell--hint", "cell--hint-remove"));
   // Reflow forcé (même technique que awardInfinitePoints ci-dessus): permet
   // de relancer l'animation même si un indice précédent vient d'être
   // utilisé sur la MÊME case juste avant.
   void el.offsetWidth;
-  el.classList.add("cell--hint");
+  const cls = remove ? "cell--hint-remove" : "cell--hint";
+  el.classList.add(cls);
   hintHighlightTimeout = setTimeout(() => {
-    el.classList.remove("cell--hint");
+    el.classList.remove(cls);
     hintHighlightTimeout = null;
   }, HINT_HIGHLIGHT_MS);
 }
@@ -611,17 +647,33 @@ btnHint.onclick = () => {
     return;
   }
   const next = findNextHintCell();
-  if (!next) return;
+  if (next) {
+    hintStock--;
+    renderHintUI();
+    // Un indice POSE directement la lumière (retour utilisateur: "l'indice
+    // doit placer la lumière, pas juste indiquer la position") — on rejoue
+    // exactement le chemin d'un clic joueur (son, historique Annuler, anim.
+    // neurone miroir, détection de victoire), pour que le résultat soit
+    // strictement indiscernable d'un coup joué à la main, puis on ajoute le
+    // halo doré par-dessus pour signaler que c'était un indice.
+    handleCellClick(next[0], next[1]);
+    showHintAt(next[0], next[1]);
+    return;
+  }
+  // Retour utilisateur: "les indices ne fonctionnent pas si on a rempli une
+  // grille avec des erreurs, puisqu'il ne peut pas proposer le prochain
+  // mouvement dans ce cas" — plus aucune case-solution n'est posable tout
+  // de suite (voir findNextHintCell), typiquement parce qu'une ou plusieurs
+  // impulsions mal placées illuminent les cases qu'il faudrait pouvoir
+  // poser. Repli: retirer une impulsion erronée plutôt que d'en poser une
+  // (mêmes garanties que ci-dessus: on rejoue un vrai clic joueur via
+  // handleCellClick, qui la retire puisqu'elle porte déjà une lumière).
+  const wrong = findWrongPlacedCell();
+  if (!wrong) return; // grille déjà entièrement correcte: rien à faire
   hintStock--;
   renderHintUI();
-  // Un indice POSE directement la lumière (retour utilisateur: "l'indice
-  // doit placer la lumière, pas juste indiquer la position") — on rejoue
-  // exactement le chemin d'un clic joueur (son, historique Annuler, anim.
-  // neurone miroir, détection de victoire), pour que le résultat soit
-  // strictement indiscernable d'un coup joué à la main, puis on ajoute le
-  // halo doré par-dessus pour signaler que c'était un indice.
-  handleCellClick(next[0], next[1]);
-  showHintAt(next[0], next[1]);
+  handleCellClick(wrong[0], wrong[1]);
+  showHintAt(wrong[0], wrong[1], { remove: true });
 };
 
 document.querySelectorAll("[data-hint-modal-close]").forEach((el) => (el.onclick = closeHintModal));

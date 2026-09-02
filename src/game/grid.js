@@ -328,6 +328,23 @@ export class LightUpGrid {
     return this.lights.size - this._mirrorDuplicateOf.size;
   }
 
+  /** Vrai si une lumière POURRAIT être posée en (r,c) dans l'état ACTUEL du
+   * plateau (case vide, pas déjà porteuse d'une lumière, pas déjà
+   * illuminée par une autre) — sans muter quoi que ce soit, contrairement à
+   * `toggleLight`. Reprend seulement les deux premières conditions de
+   * `toggleLight` (pas la chaîne de neurone miroir [expérimental], cas plus
+   * rare qu'il n'est pas utile de dupliquer ici) : suffisant pour un appelant
+   * qui veut juste savoir si un clic à cet endroit a une chance d'aboutir
+   * avant de le tenter pour de vrai (voir main.js: findNextHintCell, qui
+   * s'en sert pour ne jamais proposer un indice sur une case-solution
+   * devenue inatteignable parce qu'une lumière mal placée l'illumine déjà). */
+  canPlaceLightAt(r, c) {
+    const cell = this.cellAt(r, c);
+    if (!cell || cell.type !== CellType.EMPTY) return false;
+    if (this.lights.has(this.key(r, c))) return false;
+    return !cell._illuminated;
+  }
+
   /** Relie symétriquement deux clés dans `_mirrorLinks` (graphe en étoile
    * centré sur l'origine: seule `_collectLinkedGroup` depuis l'origine a
    * besoin d'être fiable, les duplicatas n'étant plus interactifs). */
