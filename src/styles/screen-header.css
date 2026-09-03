@@ -1,7 +1,42 @@
 /* ---------- En-tête commun aux écrans secondaires (Retour + titre) ---------- */
 
+/* Retour utilisateur: "je veux que tous les .screen-header [...] soient
+   toujours fixés à leur place [...] lorsqu'on scroll [...] la partie du
+   haut ne bouge jamais" — position:fixed (même principe que .play-action-bar
+   plus bas dans ce fichier, symétrique en haut plutôt qu'en bas), sorti du
+   flux sur les 8 écrans secondaires qui en ont un. Chaque écran concerné
+   réserve l'espace équivalent en padding-top (voir la règle
+   `.screen:not(.screen--title)` plus bas) pour que son contenu ne se
+   retrouve jamais caché dessous — même stratégie que #view-play qui réserve
+   déjà l'espace de .play-action-bar en bas.
+   left:50%/transform/max-width reproduisent le conteneur centré de #app
+   (voir base.css: max-width 720px) puisque le header, désormais fixed, n'est
+   plus visuellement contraint par la boîte de #app — sans ça il s'étirerait
+   sur toute la largeur du viewport (bord à bord) au lieu de rester aligné
+   avec le contenu en dessous sur un écran large (web/dev ; sans effet sur
+   mobile où le viewport est de toute façon plus étroit que 720px).
+   Padding gauche/droite recalculés pour reproduire EXACTEMENT le même
+   inset visuel qu'avant (20px = 16px de #app + 4px d'origine ; 66px = 16px
+   de #app + 50px d'origine réservés pour le bouton mute, voir commentaire
+   plus bas) puisque le header ne bénéficie plus du padding horizontal de
+   #app une fois détaché de son flux.
+   padding-top ajoute env(safe-area-inset-top): contrairement à avant (où le
+   header restait à ~24px du HAUT RÉEL de l'écran grâce au padding-top de
+   #app), le header touche maintenant vraiment le bord haut physique — sur
+   un appareil à encoche/pilule, il pourrait sinon passer sous la zone
+   système. --screen-header-height (voir base.css) NE compte PAS cet inset:
+   la hauteur totale RENDUE l'inclut en plus, et .screen doit réserver la
+   MÊME formule pour rester synchronisé (voir plus bas). */
 .screen-header {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
   width: 100%;
+  max-width: 720px;
+  z-index: 40;
+  box-sizing: border-box;
+  height: calc(var(--screen-header-height) + env(safe-area-inset-top, 0px));
   display: flex;
   align-items: center;
   gap: 14px;
@@ -9,7 +44,33 @@
      de l'écran (voir .global-mute-btn) — sans cette réserve, le contenu du
      header (surtout .header-actions, poussé à droite) passe dessous et s'y
      superpose sur les écrans étroits (retour utilisateur). */
-  padding: 18px 50px 18px 4px;
+  padding-top: calc(18px + env(safe-area-inset-top, 0px));
+  padding-right: 66px;
+  padding-bottom: 18px;
+  padding-left: 20px;
+  /* Fond opaque + léger liseré: le header recouvre maintenant le contenu
+     qui défile en dessous (position:fixed), donc plus question de rester
+     transparent sur le dégradé de <body> — #171c2a est exactement la
+     couleur du dégradé au centre-haut de l'écran (voir base.css: body,
+     radial-gradient(circle at 50% 0% ...)), donc se fond avec le contenu
+     juste en dessous plutôt que de créer une bande visuellement décalée. */
+  background: #171c2a;
+  border-bottom: 1px solid var(--cell-border);
+}
+
+/* Réserve, sur chaque écran secondaire (tous sauf l'écran titre, qui n'a pas
+   de .screen-header), exactement l'espace que .screen-header occupait
+   auparavant dans le flux normal — sans ça son contenu se retrouverait
+   caché sous le header désormais position:fixed. Cible `.screen` plutôt
+   qu'un id par écran: un seul point d'entrée pour les 8 écrans concernés,
+   qui reste correct automatiquement si un futur écran ajoute son propre
+   .screen-header. Compatible avec les écrans qui ont déjà leurs propres
+   margin-top négatifs (#view-play/#view-community/#view-editor/
+   #view-sommation, voir leurs fichiers CSS respectifs) : ces marges
+   annulent seulement le padding-top de #app, sur une propriété différente
+   de ce padding-top-ci, donc les deux s'additionnent sans conflit. */
+.screen:not(.screen--title) {
+  padding-top: calc(var(--screen-header-height) + env(safe-area-inset-top, 0px));
 }
 
 .screen-title {

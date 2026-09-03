@@ -28,6 +28,14 @@
      screen-header.css (#view-play) et sommation.css (#view-sommation) pour
      réserver exactement cet espace, jamais une valeur devinée. */
   --ad-banner-height: 0px;
+  /* Retour utilisateur: "je veux que la partie du haut ne bouge jamais [au
+     scroll]" — hauteur FIXE du contenu de .screen-header (18px de padding
+     vertical *2 + 44px de .icon-btn, constant sur les 8 écrans qui en ont
+     un, voir screen-header.css), posée ici pour être partagée par le header
+     lui-même (qui devient position:fixed) ET par chaque .screen (qui doit
+     réserver exactement cet espace en padding-top pour ne pas se retrouver
+     caché dessous une fois le header sorti du flux normal). */
+  --screen-header-height: 80px;
 }
 
 * {
