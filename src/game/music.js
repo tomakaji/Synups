@@ -308,15 +308,52 @@ function ensureOutputChain() {
   limiter.connect(ctx.destination);
 }
 
+// Fondu manuel du volume GLOBAL (Howler.volume(), pas un Howl individuel —
+// aucune méthode "Howler.fade()" native n'existe, contrairement à
+// Howl.prototype.fade() par piste) — rappelle `Howler.volume()` à chaque
+// tick pour que `Howler._volume` (son état interne) reste cohérent tout du
+// long du fondu, pas seulement mis à jour au début/à la fin.
+let volumeFadeHandle = null;
+
+function stopVolumeFade() {
+  if (volumeFadeHandle) {
+    clearInterval(volumeFadeHandle);
+    volumeFadeHandle = null;
+  }
+}
+
 /** Volume musique (0 à 1, linéaire) — bus SÉPARÉ de setMasterVolume dans
  * sound.js (qui reste le volume des effets de jeu: pose/retrait/victoire/
  * cibles/synapses/charges). Les deux curseurs sont donc indépendants.
  * Howler.volume() est le volume GLOBAL de la librairie (agit sur
  * Howler.masterGain lui-même) — compatible avec la chaîne personnalisée
- * ci-dessus puisque celle-ci se branche EN AVAL de masterGain. */
-export function setMusicVolume(level) {
+ * ci-dessus puisque celle-ci se branche EN AVAL de masterGain.
+ *
+ * `fadeMs` (optionnel): au lieu d'un saut instantané, ramène le volume du
+ * niveau ACTUEL vers `level` en `fadeMs` millisecondes — retour
+ * utilisateur: "appliquer cette logique [le fondu rapide déjà utilisé au
+ * retour de pause] aussi sur le bouton couper le son/remettre le son", un
+ * saut instantané y provoquant le même petit crachat qu'une reprise brutale
+ * après pause (voir resumeAllLayers plus haut). Sans `fadeMs`: comportement
+ * inchangé, saut instantané — utilisé par le curseur de volume, où une
+ * glissade progressive du doigt n'a pas ce problème de saut net, et où un
+ * fondu ajouterait au contraire un temps de retard perceptible et
+ * indésirable pendant le glissement. */
+export function setMusicVolume(level, fadeMs) {
   const clamped = Math.max(0, Math.min(1, level));
-  Howler.volume(clamped);
+  stopVolumeFade();
+  if (!fadeMs) {
+    Howler.volume(clamped);
+    return;
+  }
+  const from = Howler.volume();
+  if (Math.abs(from - clamped) < 0.001) return;
+  const start = Date.now();
+  volumeFadeHandle = setInterval(() => {
+    const t = Math.min(1, (Date.now() - start) / fadeMs);
+    Howler.volume(from + (clamped - from) * t);
+    if (t >= 1) stopVolumeFade();
+  }, 16);
 }
 
 let howls = null; // { key -> Howl }
@@ -473,30 +510,65 @@ export async function startMusic() {
 // jamais tant qu'il en reste une autre en cours.
 const pauseReasons = new Set();
 
-function pauseAllLayers() {
-  if (!howls) return;
-  for (const howl of Object.values(howls)) howl.pause();
-}
-
 // Retour utilisateur: "lorsqu'on revient d'une pause/unfocus [...] j'aimerais
 // qu'on le réactive en transition de volume rapide [...] car je pense que la
-// brutalité du retour du son fait un petit crachat sur les enceintes" —
-// reprendre une piste directement à son volume cible (Howl.play() seul) crée
-// un saut BRUTAL silence -> signal, qui produit un déclic/crachat au niveau
-// du haut-parleur (discontinuité physique de pression, indépendante du
-// contenu de la piste elle-même). Fondu RAPIDE (bien plus court que FADE_MS/
-// LAYER_FADE_MS, pensés pour des transitions musicales perceptibles) plutôt
-// qu'une simple reprise instantanée: assez court pour ne pas sembler
-// hésitant, assez long pour lisser ce saut.
-const RESUME_FADE_MS = 180;
+// brutalité du retour du son fait un petit crachat sur les enceintes" — puis
+// "on peut appliquer le fondu inverse lorsqu'on coupe la musique" — reprendre
+// OU couper une piste directement (Howl.play()/pause() seuls) crée un saut
+// BRUTAL silence <-> signal, qui produit un déclic/crachat au niveau du
+// haut-parleur (discontinuité physique de pression, indépendante du contenu
+// de la piste elle-même). Fondu RAPIDE dans les deux sens (bien plus court
+// que FADE_MS/LAYER_FADE_MS, pensés pour des transitions musicales
+// perceptibles): assez court pour ne pas sembler hésitant, assez long pour
+// lisser ce saut.
+const TRANSPORT_FADE_MS = 180;
+
+// key -> { timer, target } pour les couches en cours de fondu de COUPURE
+// (voir pauseAllLayers) — permet à resumeAllLayers() d'annuler proprement un
+// fondu de coupure encore en vol si la reprise arrive avant qu'il ne se
+// termine (aller-retour pause/resume rapide, ex. notification qui reprend
+// le focus presque aussitôt).
+const pendingPauseFades = new Map();
+
+function pauseAllLayers() {
+  if (!howls) return;
+  for (const [key, howl] of Object.entries(howls)) {
+    const pending = pendingPauseFades.get(key);
+    if (pending) clearTimeout(pending.timer);
+    const target = pending ? pending.target : howl.volume(); // volume cible réel, même si un fondu de coupure précédent était déjà en cours
+    if (target <= 0) {
+      pendingPauseFades.delete(key);
+      howl.pause();
+      continue;
+    }
+    howl.fade(howl.volume(), 0, TRANSPORT_FADE_MS);
+    const timer = setTimeout(() => {
+      pendingPauseFades.delete(key);
+      howl.pause();
+      howl.volume(target); // remis en silence (déjà en pause, donc sans saut audible) pour que resumeAllLayers reparte du bon niveau
+    }, TRANSPORT_FADE_MS);
+    pendingPauseFades.set(key, { timer, target });
+  }
+}
 
 function resumeAllLayers() {
   if (!howls) return;
-  for (const howl of Object.values(howls)) {
+  for (const [key, howl] of Object.entries(howls)) {
+    const pending = pendingPauseFades.get(key);
+    if (pending) {
+      // La piste n'a jamais été réellement mise en pause (fondu de coupure
+      // annulé avant la fin) — pas besoin de play(), juste remonter au
+      // volume cible mémorisé depuis le volume ACTUEL (probablement déjà en
+      // cours de descente, pas forcément encore à target).
+      clearTimeout(pending.timer);
+      pendingPauseFades.delete(key);
+      howl.fade(howl.volume(), pending.target, TRANSPORT_FADE_MS);
+      continue;
+    }
     const target = howl.volume(); // volume cible déjà correct (couches débloquées, ambiance, échec) — pause/resume n'y touche pas
     howl.volume(0);
     howl.play();
-    if (target > 0) howl.fade(0, target, RESUME_FADE_MS);
+    if (target > 0) howl.fade(0, target, TRANSPORT_FADE_MS);
   }
 }
 

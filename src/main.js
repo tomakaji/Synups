@@ -815,10 +815,20 @@ const btnGlobalMute = document.getElementById("btn-global-mute");
 const settings = loadSettings();
 btnMusicToggle.classList.toggle("muted", settings.musicMuted);
 
-function applyVolumes() {
+// Retour utilisateur: "on peut appliquer le fondu inverse lorsqu'on coupe la
+// musique [...] applique cette logique aussi sur le bouton couper le
+// son/remettre le son" — même fondu rapide que celui déjà utilisé au
+// retour de pause/perte de focus (voir music.js: TRANSPORT_FADE_MS), pour
+// que couper/rétablir le son via ce bouton n'ait pas non plus le petit
+// crachat d'un saut de volume instantané. Volontairement PAS appliqué au
+// curseur de volume (glissement du doigt, déjà progressif par nature — un
+// fondu y ajouterait juste un temps de retard perceptible et inutile).
+const MUTE_FADE_MS = 180;
+
+function applyVolumes({ fade = false } = {}) {
   const level = Number(settings.volume) / 100;
   setMasterVolume(settings.muted ? 0 : level);
-  setMusicVolume(settings.muted || settings.musicMuted ? 0 : level);
+  setMusicVolume(settings.muted || settings.musicMuted ? 0 : level, fade ? MUTE_FADE_MS : undefined);
   volumeSlider.value = settings.muted ? "0" : String(settings.volume);
   btnSoundToggle.classList.toggle("muted", settings.muted);
   btnGlobalMute.classList.toggle("muted", settings.muted);
@@ -830,7 +840,7 @@ function applyVolumes() {
 function setMuted(value) {
   settings.muted = value;
   saveSettings(settings);
-  applyVolumes();
+  applyVolumes({ fade: true });
 }
 
 volumeSlider.addEventListener("input", () => {
