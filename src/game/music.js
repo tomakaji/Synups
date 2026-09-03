@@ -40,10 +40,14 @@ import { isPixelTheme } from "./pixelIcons.js";
 // Gamme utilisée par TOUTES les couches mélodiques (voir
 // music-demos/couches: neurone-couleur.wav, prismes.wav) — exportée comme
 // référence de tonalité pour toute synthèse/extension future de ces
-// couches. sound.js ne s'en sert plus pour la note de pose (voir
-// `nextPlacementNote`, qui cite directement la mélodie de neurone-couleur.wav
-// plutôt qu'un tirage dans cette gamme).
-export const MUSIC_SCALE = ["A3", "C4", "D4", "E4", "G4"];
+// couches. sound.js s'en sert pour tirer la note du son de pose
+// (nextPlacementNote, tirage aléatoire uniforme dans cette gamme).
+// Transposée une octave au-dessus (A4-G5 au lieu de A3-G4) à la demande de
+// l'utilisateur — cette transposition n'affecte QUE cette note de pose:
+// aucune des pistes wav pré-rendues (neurone-couleur.wav, prismes.wav...)
+// n'est concernée, ce sont des fichiers audio séparés, indépendants de
+// cette constante JS.
+export const MUSIC_SCALE = ["A4", "C5", "D5", "E5", "G5"];
 
 // Round 13 (thème PixelArt, 6e volet — musique): les mêmes 11 pistes
 // existent en DEUX versions — le rendu "lisse" d'origine (public/music/) et
