@@ -1478,12 +1478,14 @@ export function initSommation(pointsApi) {
       // comprendre au joueur qu'il doit cliquer dessus pour générer des
       // lumières et qu'elles coûtent une étoile à chaque fois" — coin
       // libre (haut-droite, voir .som-badge/.som-badge-lvl ci-dessous pour
-      // les deux autres coins déjà pris) affichant "-1★" UNIQUEMENT une
+      // les deux autres coins déjà pris) affichant "1★" UNIQUEMENT une
       // fois le générateur sélectionné, au moment précis où l'info est
-      // utile (avant, il n'y a rien à payer). Combiné à l'anneau qui
-      // pulse en boucle sur la case (voir sommation.css:
-      // .som-cell.som-selected), qui elle invite au SECOND tap.
-      const costBadge = isSelected ? `<span class="som-badge-cost">-${starLabel(genCost(cell.level))}</span>` : "";
+      // utile (avant, il n'y a rien à payer). Pas de "-" devant (retour
+      // utilisateur): le badge lui-même EST déjà la pilule "coût", inutile
+      // de le préciser une deuxième fois. Combiné à l'anneau qui pulse en
+      // boucle sur la case (voir sommation.css: .som-cell.som-selected),
+      // qui elle invite au SECOND tap.
+      const costBadge = isSelected ? `<span class="som-badge-cost">${starLabel(genCost(cell.level))}</span>` : "";
       return `${neuronSvg(cell.color, 22, atMax)}${badge}<span class="som-badge som-badge-lvl">${lvlLabel(cell.level, MAX_GEN_LEVEL)}</span>${costBadge}`;
     }
     if (cell.type === "light") {

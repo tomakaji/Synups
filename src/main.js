@@ -338,6 +338,30 @@ const menuPointsBadgeEl = document.getElementById("menu-points-badge");
 // à jour aussi, quelle que soit l'écran d'où provient la dépense/le gain.
 const sommationPointsEl = document.getElementById("sommation-points");
 
+// Retour utilisateur: "lorsqu'on change la valeur des etoiles affichées dans
+// le header, ce compteur emet une animation qui signifie un changement [...]
+// une animation lorsqu'on perd des etoiles [...] et une lorsqu'on en gagne"
+// — mémorise la dernière valeur RENDUE pour détecter un delta à chaque appel
+// de renderPointsEverywhere(), point de passage UNIQUE des trois mutateurs de
+// solde (award/spend/add, voir plus bas): centralise ainsi le déclenchement
+// de l'animation une seule fois plutôt que de le dupliquer à chaque site
+// d'appel (et de risquer d'oublier un futur nouveau mutateur). Initialisée
+// AVANT le tout premier appel de renderPointsEverywhere() (voir plus bas) pour
+// que ce rendu initial (chargement de page) n'anime rien.
+let lastRenderedPoints = infinitePoints;
+
+// Retire puis rajoute la classe d'animation pour pouvoir la relancer même si
+// une précédente est encore en cours (un simple ajout ne rejouerait pas le
+// keyframe si la classe est déjà présente) — le reflow forcé entre les deux
+// garantit que le navigateur voit bien les deux mutations comme séparées
+// plutôt que de les fusionner dans la même frame.
+function triggerPointsAnim(el, cls) {
+  if (!el) return;
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
+
 function renderPointsEverywhere() {
   // Retour utilisateur: "points" -> "Étoile(s)" (icône étoile bleue, plus
   // d'abréviation "pt") — innerHTML (pas textContent) car starLabel()
@@ -350,8 +374,20 @@ function renderPointsEverywhere() {
   // la place du solde de points, qui n'a plus de sens ici (voir
   // enterRememberDirect ci-dessous: le clic ouvre quand même Remember, qui
   // affiche alors son propre état "terminé" — voir sommation.js: onShow()).
-  menuPointsBadgeEl.innerHTML = isPixelArtUnlocked() ? "Terminé" : label;
+  const showTermine = isPixelArtUnlocked();
+  menuPointsBadgeEl.innerHTML = showTermine ? "Terminé" : label;
   if (sommationPointsEl) sommationPointsEl.innerHTML = label;
+
+  const delta = infinitePoints - lastRenderedPoints;
+  lastRenderedPoints = infinitePoints;
+  if (delta !== 0) {
+    const cls = delta > 0 ? "points-gain" : "points-loss";
+    triggerPointsAnim(infinitePointsEl, cls);
+    triggerPointsAnim(sommationPointsEl, cls);
+    // Rien à animer si "Terminé" est affiché à la place du solde (voir plus
+    // haut) — la classe n'aurait aucun effet visible sur ce texte.
+    if (!showTermine) triggerPointsAnim(menuPointsBadgeEl, cls);
+  }
 }
 
 function awardInfinitePoints(tier) {
@@ -359,14 +395,6 @@ function awardInfinitePoints(tier) {
   infinitePoints += gain;
   savePoints(infinitePoints);
   renderPointsEverywhere();
-  // Retire puis rajoute la classe d'animation pour pouvoir la relancer même
-  // si un gain précédent est encore en cours (un simple ajout ne rejouerait
-  // pas le keyframe si la classe est déjà présente) — le reflow forcé entre
-  // les deux garantit que le navigateur voit bien les deux mutations comme
-  // séparées plutôt que de les fusionner dans la même frame.
-  infinitePointsEl.classList.remove("points-gain");
-  void infinitePointsEl.offsetWidth;
-  infinitePointsEl.classList.add("points-gain");
 }
 
 // API générique (montant explicite plutôt que par palier) exposée à

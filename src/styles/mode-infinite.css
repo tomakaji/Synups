@@ -55,8 +55,24 @@
   display: none;
 }
 
-.infinite-points.points-gain {
+/* Retour utilisateur: "lorsqu'on change la valeur des etoiles affichées dans
+   le header, ce compteur emet une animation qui signifie un changement [...]
+   une animation lorsqu'on perd des etoiles [...] et une lorsqu'on en gagne"
+   — généralisé depuis .infinite-points.points-gain (round précédent, scopé à
+   #infinite-points uniquement): .points-gain/.points-loss doivent aussi
+   pouvoir animer #sommation-points (header Remember) et #menu-points-badge
+   (carte du menu), qui ne portent PAS la classe .infinite-points (voir
+   main.js: renderPointsEverywhere, déclenchement centralisé sur les trois). */
+.points-gain {
   animation: points-pulse 0.5s ease-out;
+}
+
+/* Miroir de .points-gain ci-dessus (mêmes timing/structure de keyframe) mais
+   inversé: rétrécit au lieu de grossir, flashe en rouge --error (déjà utilisé
+   ailleurs pour les échecs, voir .som-fx-obj-fail) au lieu du doré du gain —
+   signal opposé, immédiatement distinguable au premier coup d'œil. */
+.points-loss {
+  animation: points-pulse-loss 0.5s ease-out;
 }
 
 /* Retour utilisateur: "retire le bloc qui indique la difficulté et montre le
@@ -110,6 +126,21 @@
   35% {
     transform: scale(1.18);
     color: #ffe08a;
+  }
+  100% {
+    transform: scale(1);
+    color: var(--accent);
+  }
+}
+
+@keyframes points-pulse-loss {
+  0% {
+    transform: scale(1);
+    color: var(--accent);
+  }
+  35% {
+    transform: scale(0.85);
+    color: var(--error);
   }
   100% {
     transform: scale(1);

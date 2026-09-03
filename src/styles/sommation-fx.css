@@ -132,13 +132,18 @@
 
 /* Retour utilisateur: "que le jeu, visuellement, parvienne à faire
    comprendre au joueur qu'il doit cliquer dessus pour générer des lumières
-   et qu'elles coûtent une étoile à chaque fois" — badge "-1★" posé dans le
+   et qu'elles coûtent une étoile à chaque fois" — badge "1★" posé dans le
    SEUL coin encore libre de la case (haut-droite, voir .som-badge/
    .som-badge-lvl ci-dessus pour les deux autres), affiché UNIQUEMENT une
    fois le générateur sélectionné (voir sommation.js: cellHtml, isSelected)
    — l'info n'a de sens qu'à ce moment précis. Même habillage pilule que
    .profile-avatar-price (Mon profil) pour rester cohérent avec le seul
-   autre endroit du jeu où un coût en Étoiles est affiché sur une vignette. */
+   autre endroit du jeu où un coût en Étoiles est affiché sur une vignette.
+   Round suivant (retour utilisateur): "1★" plutôt que "-1★" (le badge est
+   déjà lui-même le signal "ça coûte"), et l'icône/le chiffre rapprochés
+   (voir .currency-icon ci-dessous: annule le margin-right de 3px global,
+   pensé pour un texte qui SUIT l'icône — ici il n'y a que le chiffre juste
+   après, une pilule aussi compacte que .profile-avatar-price). */
 .som-badge-cost {
   position: absolute;
   top: 2px;
@@ -152,6 +157,14 @@
   color: #06222b;
   font-size: 0.52rem;
   font-weight: 800;
+}
+
+/* .currency-icon (base.css) part du principe qu'un texte SUIT l'icône
+   (margin-right: 3px) — ici la pilule ne contient que le chiffre juste
+   après, donc annulée pour un rapprochement icône/chiffre (retour
+   utilisateur, voir commentaire ci-dessus). */
+.som-badge-cost .currency-icon {
+  margin-right: 0;
 }
 
 /* Rendu "flagrant" des lumières (retour utilisateur) — voir sommation.js:
