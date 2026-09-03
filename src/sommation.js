@@ -1342,6 +1342,32 @@ export function initSommation(pointsApi) {
     }
   }
 
+  // Simple tap (pas de vrai glisser) sur une case: un générateur pas encore
+  // sélectionné se sélectionne (affiche le panneau coût + probas,
+  // #som-spawn-info) — un second tap sur ce MÊME générateur DÉJÀ sélectionné
+  // déclenche directement l'action (retour utilisateur: "le simple fait de
+  // cliquer à nouveau dessus va faire l'action, plus simple pour spammer
+  // comme ça" — c'est d'ailleurs devenu le SEUL chemin pour générer depuis
+  // que le bouton "Générer" a été retiré, redondant avec ce geste). Extrait
+  // dans sa propre fonction (round suivant, voir onDragEnd ci-dessous) pour
+  // être également rejouée quand un "glisser" retombe sur SA PROPRE case.
+  function handleGeneratorTap(r, c) {
+    const cell = board[r]?.[c];
+    if (cell?.type !== "gen") return;
+    if (selectedGen && selectedGen.r === r && selectedGen.c === c) {
+      // Round 24: hapticLight() ici — ce second tap déclenche l'action en
+      // passant par une case (<div>), jamais un <button> (le bouton
+      // "Générer" qui déclenchait le retour haptique via le listener
+      // délégué global de main.js a été retiré depuis) — sans cet appel
+      // explicite, le double-tap pour spammer resterait sans retour.
+      hapticLight();
+      spawnFromSelected();
+    } else {
+      selectedGen = { r, c };
+      render();
+    }
+  }
+
   function onDragEnd(e) {
     if (!drag || e.pointerId !== drag.pointerId) return;
     const { r, c, moved, ghostEl, sourceEl } = drag;
@@ -1353,31 +1379,28 @@ export function initSommation(pointsApi) {
     if (ghostEl) ghostEl.remove();
 
     if (!moved) {
-      // Simple tap (pas de vrai glisser): un générateur pas encore
-      // sélectionné se sélectionne (affiche le panneau coût + probas,
-      // #som-spawn-info) — un second tap sur ce MÊME générateur DÉJÀ
-      // sélectionné déclenche directement l'action (retour utilisateur: "le
-      // simple fait de cliquer à nouveau dessus va faire l'action, plus
-      // simple pour spammer comme ça" — c'est d'ailleurs devenu le SEUL
-      // chemin pour générer depuis que le bouton "Générer" a été retiré,
-      // redondant avec ce geste).
-      const cell = board[r]?.[c];
-      if (cell?.type === "gen") {
-        if (selectedGen && selectedGen.r === r && selectedGen.c === c) {
-          // Round 24: hapticLight() ici — ce second tap déclenche l'action
-          // en passant par une case (<div>), jamais un <button> (le bouton
-          // "Générer" qui déclenchait le retour haptique via le listener
-          // délégué global de main.js a été retiré depuis) — sans cet appel
-          // explicite, le double-tap pour spammer resterait sans retour.
-          hapticLight();
-          spawnFromSelected();
-        } else {
-          selectedGen = { r, c };
-          render();
-        }
-      }
+      handleGeneratorTap(r, c);
     } else {
       const target = findDropTargetAt(e.clientX, e.clientY);
+      // Retour utilisateur: "on ne peut plus visionner la reward add [...]
+      // quand on essaye de generer sans avoir d'étoiles [...] rien du tout
+      // ne se passe" — BUG CORRIGÉ: un double-tap rapide pour spammer un
+      // générateur (voir handleGeneratorTap ci-dessus) dépasse facilement
+      // DRAG_THRESHOLD à cause du léger tremblement naturel du doigt, SANS
+      // jamais vraiment quitter la case de départ — `moved` passait quand
+      // même à `true`, et handleDrop() (voir plus bas) retourne
+      // SILENCIEUSEMENT dès que la cible est la case source elle-même (son
+      // tout premier test: `target.r === src.r && target.c === src.c`) —
+      // ni sélection, ni génération, ni modale pub, pour un geste pourtant
+      // identique à un tap immobile. Un "glisser" qui retombe sur SA PROPRE
+      // case est donc désormais traité exactement comme un tap immobile
+      // plutôt que comme un glisser-déposer sur soi-même (qui n'a de toute
+      // façon aucun sens : rien à fusionner/échanger avec soi-même).
+      if (target && target.r === r && target.c === c) {
+        handleGeneratorTap(r, c);
+        drag = null;
+        return;
+      }
       const srcCell = board[r]?.[c];
       // Retour utilisateur round 9: "si on met un générateur dans l'objectif
       // pour le recycler, préviens avec une modale de confirmation... pour
