@@ -213,6 +213,43 @@ function computeMirrorReachable(grid) {
   return reachable;
 }
 
+/**
+ * PERF (round mobile) : vrai si au moins une case du plateau porte une
+ * cible de couleur (`cell.target`, voir grid.js parseCellToken) — calculé
+ * une seule fois par résolution (statique, comme `computeMirrorReachable`)
+ * pour éviter un `recompute()` complet (traçage de laser + diffusion de
+ * couleur, la partie la plus chère de `recompute()`) à chaque feuille de
+ * l'arbre de recherche sur un plateau qui n'a de toute façon AUCUNE cible à
+ * vérifier.
+ *
+ * `isWon()` (voir grid.js) ne lit `cell._colorMatch` QUE pour une case
+ * `cell.target` truthy — sur un plateau sans aucune cible, cette branche
+ * n'est donc jamais empruntée, et tout ce qu'`isWon()` lit réellement
+ * (`_illuminated`, `_state` des indices/interdictions/Pyra) est déjà tenu à
+ * jour par le chemin "léger" (`_computeClueStates()` +
+ * `_computeIlluminationOnly()`, voir `toggleLight({full:false})`) — aucun
+ * recompute supplémentaire n'est donc nécessaire du tout à la feuille dans
+ * ce cas, pas même la version allégée : rien n'a changé depuis le dernier
+ * toggle. Un plateau AVEC au moins une cible garde le `recompute()` complet
+ * (seul chemin qui calcule `_litColor`/`_colorMatch`), inchangé.
+ */
+function boardHasColorTargets(grid) {
+  return grid.cells.some((row) => row.some((cell) => !!cell.target));
+}
+
+/** Rafraîchit l'état de `grid` juste avant `isWon()` à une feuille de
+ * recherche — voir `boardHasColorTargets` pour le détail du raisonnement.
+ * Centralisé ici (contrairement à `propagate`/`search`, volontairement
+ * dupliqués entre countSolutions/enumerateSolutions/findSolution/
+ * analyzeSolve/analyzeAndCount, voir le commentaire d'analyzeSolve) car
+ * c'est une décision purement locale et sans état, aucun risque de couplage
+ * entre les cinq fonctions de recherche à la faire partager. */
+function refreshForLeafCheck(grid, hasColorTargets) {
+  if (hasColorTargets) grid.recompute();
+  // Sinon: rien à faire, voir boardHasColorTargets — _illuminated/_state
+  // sont déjà à jour depuis le dernier toggleLight({full:false}).
+}
+
 /** Toutes les cases EMPTY ni allumées, ni exclues: ce qui reste à décider. */
 function getUndecided(grid, excluded) {
   const result = [];
@@ -260,15 +297,25 @@ function mutuallyVisible(grid, [r1, c1], [r2, c2]) {
  * combinaison jointe n'est possible (contradiction), ou
  * `{ ok:true, forcedLit, forcedDark }` avec les cases qui prennent la même
  * valeur dans TOUTES les combinaisons valides (donc certaines).
+ *
+ * PERF (round mobile, voir historique) : prend `infoA`/`infoB` déjà
+ * calculés (`{ r, c, needed, free, risky }`, voir leur construction dans
+ * `propagate`) plutôt que `[r, c, number]` brut — auparavant recalculés
+ * (litNeighborCount/freeUndecidedNeighbors/hasRiskyExcludedNeighbor, 3
+ * balayages de voisins chacun) à CHAQUE PAIRE (i,j), alors que ces valeurs
+ * ne dépendent que d'un seul indice à la fois et sont donc identiques pour
+ * les n-1 autres paires qui impliquent ce même indice, tant que rien n'a
+ * changé sur la grille — précisément le cas pour toute la durée d'un même
+ * balayage Stage 2 (voir le commentaire dans `propagate`: la boucle sort
+ * dès qu'une paire force quelque chose, avant qu'aucune autre paire n'ait pu
+ * lire un état périmé). Un profil CPU (--prof) sur une génération 2★ toutes
+ * features a mesuré `litNeighborCount`+`freeUndecidedNeighbors` à eux seuls
+ * ~19% du temps JS total — cette seule redondance en repartait pour une part
+ * significative (n indices → jusqu'à n-1 recalculs identiques chacun).
  */
-function pairDeductions(grid, clueA, clueB, excluded, mirrorReachable) {
-  const [ar, ac, aNumber] = clueA;
-  const [br, bc, bNumber] = clueB;
-
-  const neededA = aNumber - litNeighborCount(grid, ar, ac);
-  const neededB = bNumber - litNeighborCount(grid, br, bc);
-  const freeA = freeUndecidedNeighbors(grid, ar, ac, excluded);
-  const freeB = freeUndecidedNeighbors(grid, br, bc, excluded);
+function pairDeductions(grid, infoA, infoB) {
+  const { needed: neededA, free: freeA, risky: riskyA } = infoA;
+  const { needed: neededB, free: freeB, risky: riskyB } = infoB;
   if (freeA.length === 0 || freeB.length === 0) return null;
   if (neededA < 0 || neededB < 0) return { ok: false };
 
@@ -278,8 +325,7 @@ function pairDeductions(grid, clueA, clueB, excluded, mirrorReachable) {
   // (une case "exclue" peut encore s'allumer plus tard), ni donc à aucune
   // déduction qui en dépend — on s'abstient plutôt que de risquer une
   // fausse certitude.
-  if (hasRiskyExcludedNeighbor(grid, ar, ac, excluded, mirrorReachable)) return null;
-  if (hasRiskyExcludedNeighbor(grid, br, bc, excluded, mirrorReachable)) return null;
+  if (riskyA || riskyB) return null;
 
   if (neededA > freeA.length || neededB > freeB.length) {
     return { ok: false };
@@ -516,9 +562,19 @@ function propagate(grid, excluded, mirrorReachable, stats) {
         if (cell.type === CellType.CLUE) clues.push([r, c, cell.number]);
       }
     }
+    // PERF (voir le commentaire de pairDeductions) : needed/free/risky ne
+    // dépendent que d'UN SEUL indice (pas de la paire) et rien ne change la
+    // grille/`excluded` tant qu'aucune paire n'a rien forcé dans CE balayage
+    // — calculés une seule fois par indice ici plutôt qu'une fois par paire
+    // (i,j) qui l'implique.
+    const clueInfo = clues.map(([r, c, number]) => ({
+      needed: number - litNeighborCount(grid, r, c),
+      free: freeUndecidedNeighbors(grid, r, c, excluded),
+      risky: hasRiskyExcludedNeighbor(grid, r, c, excluded, mirrorReachable),
+    }));
     outer: for (let i = 0; i < clues.length; i++) {
       for (let j = i + 1; j < clues.length; j++) {
-        const result = pairDeductions(grid, clues[i], clues[j], excluded, mirrorReachable);
+        const result = pairDeductions(grid, clueInfo[i], clueInfo[j]);
         if (!result) continue;
         if (!result.ok) {
           undo();
@@ -669,6 +725,7 @@ export function countSolutions(level, cap = 2, maxNodes = 2_000_000, options = {
   const grid = new LightUpGrid(level);
   const excluded = new Set();
   const mirrorReachable = computeMirrorReachable(grid);
+  const hasColorTargets = boardHasColorTargets(grid);
   let count = 0;
   let nodes = 0;
 
@@ -682,7 +739,7 @@ export function countSolutions(level, cap = 2, maxNodes = 2_000_000, options = {
     const undecided = getUndecided(grid, excluded);
 
     if (undecided.length === 0) {
-      grid.recompute(); // léger pendant la descente (voir toggleLight{full:false}): isWon() a besoin de l'illumination à jour
+      refreshForLeafCheck(grid, hasColorTargets);
       if (grid.isWon(options)) count++;
     } else {
       const [r, c] = pickBranchCell(grid, undecided, excluded);
@@ -725,6 +782,7 @@ export function enumerateSolutions(level, cap = 5, maxNodes = 3_000_000, options
   const grid = new LightUpGrid(level);
   const excluded = new Set();
   const mirrorReachable = computeMirrorReachable(grid);
+  const hasColorTargets = boardHasColorTargets(grid);
   const found = [];
   let nodes = 0;
 
@@ -755,7 +813,7 @@ export function enumerateSolutions(level, cap = 5, maxNodes = 3_000_000, options
     const undecided = getUndecided(grid, excluded);
 
     if (undecided.length === 0) {
-      grid.recompute(); // léger pendant la descente (voir toggleLight{full:false}): isWon() a besoin de l'illumination à jour
+      refreshForLeafCheck(grid, hasColorTargets);
       if (grid.isWon(winOptions)) found.push(currentLights());
     } else {
       // pickBranchCell incrémental: la cellule de branchement a déjà été
@@ -833,6 +891,7 @@ export function findSolution(level, maxNodes = 2_000_000) {
   const grid = new LightUpGrid(level);
   const excluded = new Set();
   const mirrorReachable = computeMirrorReachable(grid);
+  const hasColorTargets = boardHasColorTargets(grid);
   let nodes = 0;
   let solution = null;
 
@@ -854,7 +913,7 @@ export function findSolution(level, maxNodes = 2_000_000) {
       const undecided = getUndecided(grid, excluded);
 
       if (undecided.length === 0) {
-        grid.recompute(); // léger pendant la descente (voir toggleLight{full:false}): isWon() a besoin de l'illumination à jour
+        refreshForLeafCheck(grid, hasColorTargets);
         if (grid.isWon()) {
           solution = currentLights();
           found = true;
@@ -936,6 +995,7 @@ export function analyzeSolve(level, maxNodes = 2_000_000) {
   const grid = new LightUpGrid(level);
   const excluded = new Set();
   const mirrorReachable = computeMirrorReachable(grid);
+  const hasColorTargets = boardHasColorTargets(grid);
   const stats = { stage2Used: false, stage2Count: 0, branchCount: 0, stage15Used: false };
   let nodes = 0;
   let solution = null;
@@ -954,7 +1014,7 @@ export function analyzeSolve(level, maxNodes = 2_000_000) {
       const undecided = getUndecided(grid, excluded);
 
       if (undecided.length === 0) {
-        grid.recompute(); // léger pendant la descente (voir toggleLight{full:false}): isWon() a besoin de l'illumination à jour
+        refreshForLeafCheck(grid, hasColorTargets);
         if (grid.isWon()) {
           solution = currentLights();
           found = true;
@@ -1042,6 +1102,7 @@ export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = 
   const grid = new LightUpGrid(level);
   const excluded = new Set();
   const mirrorReachable = computeMirrorReachable(grid);
+  const hasColorTargets = boardHasColorTargets(grid);
   const stats = { stage2Used: false, stage2Count: 0, branchCount: 0, stage15Used: false };
   let frozen = false; // true dès qu'une 1re solution a été trouvée: stats figées
   let firstSolution = null;
@@ -1078,7 +1139,7 @@ export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = 
     const undecided = getUndecided(grid, excluded);
 
     if (undecided.length === 0) {
-      grid.recompute(); // léger pendant la descente (voir toggleLight{full:false}): isWon() a besoin de l'illumination à jour
+      refreshForLeafCheck(grid, hasColorTargets);
       if (grid.isWon(winOptions)) {
         count++;
         if (!frozen) {

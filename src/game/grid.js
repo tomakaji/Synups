@@ -264,15 +264,6 @@ export class LightUpGrid {
     //   reset en tête de toggleLight).
     this._lastMirrorLinks = [];
     this._lastMirrorFailure = null;
-    // Voir toggleLight({full}) / _recomputeAfterToggle: le mode "léger"
-    // (utilisé par le solveur pendant sa recherche, voir solver.js) saute le
-    // traçage de laser et la diffusion d'illumination — sûr UNIQUEMENT parce
-    // que ni l'un ni l'autre n'influence le calcul lui-même, sauf pour le
-    // Neurone miroir [expérimental] : `_computeMirrorDuplicates` lit
-    // `target._illuminated` pour juger une case cible légale, qui deviendrait
-    // périmée sans un recompute() complet. Calculé une seule fois ici (la
-    // géométrie de la grille ne change jamais) plutôt qu'à chaque appel.
-    this._hasMirrorNeuron = this.cells.some((row) => row.some((cell) => cell.type === CellType.MIRROR_NEURON));
     this.recompute();
   }
 
@@ -764,18 +755,36 @@ export class LightUpGrid {
 
   /**
    * Choisit, après un `toggleLight`, entre un `recompute()` complet et le
-   * sous-ensemble "moyen" (`_computeClueStates()` + `_computeIlluminationOnly()`)
-   * — voir le commentaire du constructeur : jamais allégé si la grille
-   * contient un Neurone miroir [expérimental] (`_computeMirrorDuplicates` a
-   * besoin d'un `_illuminated` exact, déjà garanti ici, MAIS aussi de
-   * `_litColor` pour d'autres cas limites non audités — on préfère s'abstenir
-   * plutôt que risquer une régression sur une mécanique aussi délicate).
+   * sous-ensemble "moyen" (`_computeClueStates()` + `_computeIlluminationOnly()`).
    * `full=true` (comportement par défaut de `toggleLight`, tous les
    * appelants existants — jeu, éditeur — inchangés) redemande toujours la
    * version complète.
+   *
+   * PERF (round mobile, voir historique) : une version antérieure forçait
+   * aussi la version complète dès que la grille contenait un Neurone miroir
+   * [expérimental] (`this._hasMirrorNeuron`, retiré), par précaution
+   * "`_computeMirrorDuplicates` a peut-être besoin de `_litColor`, cas
+   * limites non audités". Coûteux pour rien : `{full:false}` n'est utilisé
+   * QUE par solver.js pendant sa recherche (`propagate`/branchement, voir
+   * son commentaire d'en-tête) — audité en entier, il ne lit jamais
+   * `_litColor`/`_hits`/`_mirrorColor`/laser (seuls `cell.type`,
+   * `cell.number`, `cell._state` et `_illuminated`/`hasLight` sont lus
+   * pendant la descente), et sa propre lecture de couleur (`isWon()` pour un
+   * niveau à cible colorée) n'arrive QU'aux feuilles de recherche, qui
+   * appellent déjà explicitement un `recompute()` complet juste avant (voir
+   * `countSolutions`/`enumerateSolutions`/`findSolution`/`analyzeSolve`).
+   * `_computeMirrorDuplicates` (appelé par `toggleLight` avant même ce choix,
+   * donc sur l'état du recompute PRÉCÉDENT, complet ou non) ne lit que
+   * `target._illuminated`, déjà tenu à jour par le chemin "moyen" via
+   * `_computeIlluminationOnly()` — jamais de couleur/laser. Un plateau à
+   * Neurone miroir sans cette exception peut donc utiliser le chemin léger
+   * pendant TOUTE la descente du solveur, comme n'importe quel autre —
+   * significatif car Neurone miroir se combine souvent avec Couleur (aucune
+   * dépendance entre les deux, voir FEATURES), dont le traçage de laser est
+   * justement la partie la plus chère d'un `recompute()` complet.
    */
   _recomputeAfterToggle(full) {
-    if (full || this._hasMirrorNeuron) this.recompute();
+    if (full) this.recompute();
     else {
       this._computeClueStates();
       this._computeIlluminationOnly();
