@@ -1216,6 +1216,17 @@ refreshPlayGamesStatus().then(() => {
 const navStaticEl = document.getElementById("nav-static");
 const navInfiniteEl = document.getElementById("nav-infinite");
 const navDailyEl = document.getElementById("nav-daily");
+// Retour utilisateur: "le titre '⚡ Défi Quotidien' [...] n'est pas aligné a
+// gauche alors qu'il devrait" — voir setMode() plus bas: .play-controls
+// (screen-header.css) est poussé à l'extrémité droite du header par défaut
+// (margin-left:auto), pensé pour les modes où .header-actions affiche un
+// bouton à gauche (sélection de niveau en Histoire, réglages en Infini) —
+// titre à droite, bouton à gauche. En mode Défi Quotidien, AUCUN bouton
+// n'est affiché dans .header-actions (ni sélection de niveau, ni réglages,
+// ni "nouveau niveau" — une seule grille par jour, voir setMode), donc rien
+// ne justifie de pousser le titre à droite: il doit rester juste après le
+// bouton Retour, comme un .screen-title classique.
+const playControlsEl = document.querySelector(".play-controls");
 const infiniteLevelLabelEl = document.getElementById("infinite-level-label");
 const infiniteBadgeEl = document.getElementById("infinite-badge");
 // Retour utilisateur: "+1/+3/+5 en fonction de la difficulté choisie en
@@ -2467,6 +2478,7 @@ function setMode(next) {
     btnInfiniteSettings.classList.add("hidden");
     btnInfiniteNext.classList.add("hidden");
     btnCommunityLike.classList.add("hidden");
+    playControlsEl.classList.remove("play-controls--left");
     playView.classList.remove("hidden");
     return;
   }
@@ -2479,13 +2491,18 @@ function setMode(next) {
     btnInfiniteSettings.classList.add("hidden");
     btnInfiniteNext.classList.add("hidden");
     btnCommunityLike.classList.remove("hidden");
+    playControlsEl.classList.remove("play-controls--left");
     playView.classList.remove("hidden");
     return;
   }
   if (next === "daily") {
     // Défi Quotidien: une seule grille par jour — ni sélection de niveau
     // (btnLevelGrid), ni "nouveau niveau" (btnInfiniteNext), ni "aimer"
-    // (réservé aux grilles Communauté).
+    // (réservé aux grilles Communauté). .header-actions se retrouve donc
+    // entièrement vide dans ce mode: rien ne justifie de garder le titre
+    // poussé à droite (voir playControlsEl ci-dessus) — .play-controls--left
+    // annule ce margin-left:auto pour que "⚡ Défi Quotidien" reste juste
+    // après le bouton Retour (retour utilisateur).
     navStaticEl.classList.add("hidden");
     navInfiniteEl.classList.add("hidden");
     navCommunityEl.classList.add("hidden");
@@ -2494,6 +2511,7 @@ function setMode(next) {
     btnInfiniteSettings.classList.add("hidden");
     btnInfiniteNext.classList.add("hidden");
     btnCommunityLike.classList.add("hidden");
+    playControlsEl.classList.add("play-controls--left");
     playView.classList.remove("hidden");
     return;
   }
@@ -2506,6 +2524,7 @@ function setMode(next) {
   btnInfiniteSettings.classList.remove("hidden");
   btnInfiniteNext.classList.remove("hidden");
   btnCommunityLike.classList.add("hidden");
+  playControlsEl.classList.remove("play-controls--left");
   playView.classList.remove("hidden");
 }
 

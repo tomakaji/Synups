@@ -109,6 +109,20 @@
   margin-left: auto;
 }
 
+/* Retour utilisateur: "le titre '⚡ Défi Quotidien' [...] n'est pas aligné a
+   gauche alors qu'il devrait" — le margin-left:auto ci-dessus suppose que
+   .header-actions affiche un bouton à gauche (sélection de niveau en
+   Histoire, réglages en Infini), pour un équilibre "bouton à gauche / titre
+   à droite". En mode Défi Quotidien, .header-actions est entièrement vide
+   (voir main.js: setMode, aucun bouton n'y est affiché), donc rien ne
+   justifie de pousser le titre à droite: cette classe (basculée par
+   setMode) annule le margin-left:auto pour que le titre reste juste après
+   le bouton Retour, comme un .screen-title classique sur les écrans
+   secondaires. */
+.play-controls.play-controls--left {
+  margin-left: 0;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
