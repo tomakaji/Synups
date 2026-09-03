@@ -166,7 +166,20 @@ export const FEATURES = {
   // d'être piochée sur LE MÊME essai qui obtient déjà Couleur, seule façon
   // gratuite d'augmenter sa fréquence sans budget de recherche dédié.
   pyra: { label: "Pyra", weight: 3, implemented: true, requires: "color", pickProbability: 0.92 },
-  mirrorNeuron: { label: "Neurone miroir [expérimental]", weight: 5, implemented: false },
+  // Câblé au générateur (placeMirrorNeurons/mirrorNeuronGenuinelyUsed/
+  // pruneUnusedMirrorNeurons, voir leurs commentaires) — `implemented: true`
+  // active désormais la feature en mode Infini, exactement comme Miroir/Pyra
+  // avant elle (voir main.js: infiniteEnabledFeatures, déjà entièrement
+  // câblé côté UI/tuto pour cette clé, aucun changement nécessaire là-bas).
+  // Aucune dépendance à `color` (contrairement à Miroir/Pyra) : un neurone
+  // miroir réagit à N'IMPORTE QUELLE lumière, jamais seulement aux lasers
+  // colorés (voir grid.js) — il a donc un effet réel même seul. Le libellé
+  // "[expérimental]" est volontairement CONSERVÉ pour l'instant: cette
+  // intégration n'a pu être vérifiée que par lecture statique + scripts Node
+  // autonomes (aucun navigateur disponible dans cet environnement pour un
+  // vrai test de jeu, voir historique) — à retirer une fois confirmé solide
+  // en conditions réelles.
+  mirrorNeuron: { label: "Neurone miroir [expérimental]", weight: 5, implemented: true },
 };
 
 /**
@@ -494,6 +507,22 @@ const PYRA_MIN_FREE_NEIGHBORS = 3;
 // réglage en avait de nouveau besoin.
 const MIRROR_BUDGET_MULTIPLIER = 1;
 
+// Neurone miroir [expérimental] : nombre de neurones posés PAR ESSAI quand la
+// feature est piochée (voir FEATURES.mirrorNeuron) — volontairement un
+// COMPTE fixe, comme PYRA_MAX_CANDIDATES, pas une densité par case comme
+// MIRROR_DENSITY: un neurone contraint TOUTE sa ligne ET TOUTE sa colonne
+// (aucune ligne de vue requise, voir grid.js), donc en poser plusieurs
+// multiplie vite les réactions en chaîne et le risque qu'une case cible de
+// duplication tombe hors-grille/illégale (voir placeMirrorNeurons) — ce qui
+// ne casse jamais la CORRECTION de la génération (resolveAndDeriveClues/
+// repairToUnique échouent proprement sur une forme dégénérée et l'essai est
+// simplement retenté avec un nouveau seed, voir generateLevel) mais fait
+// grimper le taux d'essais gâchés. Fixé à 1 comme point de départ prudent
+// (poids déjà le plus élevé de FEATURES, voir son commentaire) — à ajuster
+// plus tard si mesuré trop rare une fois du recul pris sur des parties
+// réelles, comme MIRROR_DENSITY/PYRA_MAX_CANDIDATES avant lui.
+const MIRROR_NEURON_COUNT = 1;
+
 // Budget global d'une génération (Phase F du doc), CLÉS = ÉTOILES affichées
 // (voir SOLVER_TIER_FOR_STARS) : le premier des deux atteint arrête la
 // boucle et on sert le meilleur candidat rencontré. Cette boucle est un
@@ -617,8 +646,17 @@ function pickFeatureSubset(rand, enabledKeys, budget) {
  * La légitimité ("au moins un miroir réellement traversé par un laser") est
  * vérifiée a posteriori dans `tryGenerate` (voir `mirrorGenuinelyUsed`), pas
  * ici : à ce stade, aucune charge n'a encore de couleur.
+ *
+ * `mirrorNeuronCount` (0 si la feature Neurone miroir n'est pas demandée
+ * pour cet essai) : nombre de neurones miroirs (voir `placeMirrorNeurons`)
+ * posés sur des cases vides biaisées vers le centre du plateau. Contrairement
+ * au Miroir dévieur, aucune dépendance à la couleur — un neurone réagit à
+ * N'IMPORTE QUELLE lumière (voir grid.js) — donc rien à coordonner avec la
+ * Phase 2 ici ; la légitimité ("au moins un neurone réellement traversé
+ * lors de la résolution") est elle aussi vérifiée a posteriori dans
+ * `tryGenerate` (voir `mirrorNeuronGenuinelyUsed`).
  */
-function buildInitialLayout({ rows, cols, clueDensity, cornerVoid, mirrorDensity, rand }) {
+function buildInitialLayout({ rows, cols, clueDensity, cornerVoid, mirrorDensity, mirrorNeuronCount, rand }) {
   const layout = [];
   for (let r = 0; r < rows; r++) {
     const row = [];
@@ -634,6 +672,12 @@ function buildInitialLayout({ rows, cols, clueDensity, cornerVoid, mirrorDensity
   // décidées, y compris celles de lignes/colonnes pas encore visitées au
   // moment où une case donnée serait remplie dans un unique passage.
   if (mirrorDensity > 0) placeAlignedMirrors(layout, rows, cols, mirrorDensity, rand);
+  // Voir placeMirrorNeurons : posé APRÈS le Miroir dévieur (les deux ne
+  // touchent que des cases encore "." donc l'ordre entre eux n'a pas
+  // d'importance en soi) mais AVANT relaxIsolatedCells/mergeSmallIslands,
+  // pour que ces deux passes traitent déjà les neurones comme des obstacles
+  // fixes (voir isFixedObstacleToken) au moment de choisir quoi rouvrir.
+  if (mirrorNeuronCount > 0) placeMirrorNeurons(layout, rows, cols, mirrorNeuronCount, rand);
   // Voir relaxIsolatedCells : le remplissage ci-dessus tire chaque case
   // indépendamment, ce qui peut par pur hasard entourer une case vide sur
   // ses 4 côtés — cette passe répare les cas vraiment inutiles et plafonne
@@ -722,7 +766,7 @@ function mergeSmallIslands(layout, rows, cols, rand, threshold) {
       const boundary = [];
       for (const [r, c] of comp) {
         for (const [nr, nc] of orthogonalNeighbors(r, c, rows, cols)) {
-          if (layout[nr][nc] !== "." && !isMirrorToken(layout[nr][nc])) boundary.push([nr, nc]);
+          if (layout[nr][nc] !== "." && !isFixedObstacleToken(layout[nr][nc])) boundary.push([nr, nc]);
         }
       }
       if (boundary.length === 0) continue; // rien à faire pour celle-ci (ex: cernée de miroirs): essaie la suivante
@@ -767,6 +811,64 @@ function placeAlignedMirrors(layout, rows, cols, mirrorDensity, rand) {
       if (!alignedWithClueCandidate(layout, r, c, rows, cols)) continue;
       if (rand() < mirrorDensity) layout[r][c] = rand() < 0.5 ? "/" : "\\";
     }
+}
+
+/** Distance (Manhattan, par axe) de (r,c) au bord le plus proche du plateau
+ * — voir `placeMirrorNeurons` : un neurone miroir duplique une lumière en
+ * symétrie centrale PAR RAPPORT À LUI-MÊME (même distance, direction
+ * opposée, voir grid.js `_computeMirrorDuplicates`), donc plus une case est
+ * proche d'un bord, moins elle a de place de l'autre côté pour que cette
+ * duplication reste légale — une case posée en plein bord rejetterait quasi
+ * systématiquement toute lumière de sa ligne/colonne (case cible hors
+ * grille), ce qui revient à interdire toute lumière sur toute cette
+ * ligne/colonne. Score, pas simple filtre : préfère les cases centrales
+ * sans les exiger absolument (utile sur les petits plateaux 1★, où peu de
+ * cases atteindraient une marge confortable en valeur absolue). */
+function centralityScore(r, c, rows, cols) {
+  return Math.min(r, rows - 1 - r) + Math.min(c, cols - 1 - c);
+}
+
+/**
+ * Pose au plus `count` neurones miroirs sur des cases "." (jamais "W",
+ * comme `placeAlignedMirrors` — laisse les candidats indice disponibles),
+ * biaisées vers le centre du plateau (voir `centralityScore`) plutôt qu'un
+ * tirage uniforme. Contrairement au Miroir dévieur (aligné avec un
+ * candidat indice pour maximiser les chances d'être traversé par un
+ * laser COLORÉ), l'alignement avec un futur indice n'est PAS ce qui compte
+ * ici : un neurone réagit à N'IMPORTE QUELLE lumière de sa ligne/colonne,
+ * sans ligne de vue ni dépendance à la couleur (voir grid.js) — ce qui
+ * compte est la place disponible DE PART ET D'AUTRE DE SA PROPRE POSITION
+ * pour que ses futures duplications aient une réelle chance d'être légales.
+ *
+ * Tirés parmi le tiers le plus central des cases éligibles (mélangé, pour
+ * ne pas toujours retomber pile au centre géométrique d'un essai à
+ * l'autre) plutôt que les `count` cases strictement les plus centrales :
+ * garde un peu de variété de placement entre essais/seeds. Une pose qui se
+ * révèle malgré tout trop contraignante une fois les indices dérivés (case
+ * cible de duplication systématiquement illégale) n'est PAS un problème de
+ * correction — voir `resolveAndDeriveClues`/`repairToUnique`, qui échouent
+ * déjà proprement (retour `false`/`null`, retry avec un nouveau seed dans
+ * `generateLevel`) sur toute forme dégénérée — seulement un facteur de
+ * fréquence de succès, ce que ce biais central cherche justement à
+ * améliorer.
+ */
+function placeMirrorNeurons(layout, rows, cols, count, rand) {
+  if (count <= 0) return;
+  const candidates = [];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (layout[r][c] !== ".") continue;
+      candidates.push([r, c, centralityScore(r, c, rows, cols)]);
+    }
+  if (candidates.length === 0) return;
+  candidates.sort((a, b) => b[2] - a[2]);
+  const poolSize = Math.max(count, Math.ceil(candidates.length / 3));
+  const pool = candidates.slice(0, poolSize);
+  shuffle(pool, rand);
+  for (let i = 0; i < Math.min(count, pool.length); i++) {
+    const [r, c] = pool[i];
+    layout[r][c] = "M";
+  }
 }
 
 /**
@@ -1036,14 +1138,41 @@ function isMirrorToken(t) {
   return t === "/" || t === "\\";
 }
 
+/** Vrai si `t` est un token de neurone miroir ("M") — voir grid.js: comme le
+ * Miroir dévieur, une case FIXE du niveau posée dans `buildInitialLayout`
+ * (jamais dérivée en indice, jamais rouverte) — mais avec une mécanique
+ * différente (duplique TOUTE lumière de sa ligne/colonne, sans ligne de vue
+ * ni dépendance à la couleur, voir `placeMirrorNeurons`), qui a ses propres
+ * fonctions dédiées (`mirrorNeuronGenuinelyUsed`, `pruneUnusedMirrorNeurons`)
+ * plutôt que de partager celles du Miroir dévieur (`mirrorGenuinelyUsed`,
+ * `pruneUnusedMirrors`, `alignedWithMirror` — celles-ci lisent `_mirrorColor`,
+ * une notion qui n'existe pas pour un neurone miroir). Voir
+ * `isFixedObstacleToken` pour les usages GÉNÉRIQUES ("ne jamais toucher un
+ * obstacle fixe") qui, eux, doivent couvrir les deux mécaniques à la fois. */
+function isMirrorNeuronToken(t) {
+  return t === "M";
+}
+
+/** Réunion des deux types de case fixe du niveau (posées une fois pour
+ * toutes dans `buildInitialLayout`, jamais dérivées ni rouvertes ensuite) —
+ * voir `isMirrorToken`/`isMirrorNeuronToken`. Utilisé aux quelques endroits
+ * où la distinction entre les deux mécaniques n'a pas d'importance (fusion
+ * d'îlots, réparation de case isolée, dérivation d'indice) ; les usages
+ * SPÉCIFIQUES au Miroir dévieur (nettoyage de nécessité, biais de coloriage)
+ * continuent d'utiliser `isMirrorToken` seul. */
+function isFixedObstacleToken(t) {
+  return isMirrorToken(t) || isMirrorNeuronToken(t);
+}
+
 /** Vrai si `t` est un token d'indice DÉJÀ dérivé (numéro "1"-"4" ou case
  * interdite "0") — c'est-à-dire ni vide, ni void, ni "W" (candidat pas
- * encore résolu), ni miroir (voir `isMirrorToken`, un miroir n'est jamais un
- * indice). Utilisé après `resolveAndDeriveClues`, quand les cases indice ne
- * portent plus "W" mais leur vraie valeur — voir `wouldCreateDeadIsolation`,
- * le pendant de `hasClueNeighbor` pour cette phase-là. */
+ * encore résolu), ni case fixe du niveau (`isFixedObstacleToken`: miroir
+ * dévieur OU neurone miroir, aucun des deux n'est jamais un indice). Utilisé
+ * après `resolveAndDeriveClues`, quand les cases indice ne portent plus "W"
+ * mais leur vraie valeur — voir `wouldCreateDeadIsolation`, le pendant de
+ * `hasClueNeighbor` pour cette phase-là. */
 function isClueToken(t) {
-  return t !== "X" && t !== "." && t !== "W" && !isMirrorToken(t);
+  return t !== "X" && t !== "." && t !== "W" && !isFixedObstacleToken(t);
 }
 
 /**
@@ -1080,11 +1209,12 @@ function relaxIsolatedCells(layout, rows, cols, rand) {
   if (isolated.length === 0) return;
 
   const reconnect = (r, c) => {
-    // Jamais un miroir dans le pool: contrairement à "W"/"X" (candidats sans
-    // conséquence à rouvrir ici), un miroir a été placé intentionnellement
-    // (voir buildInitialLayout) — le rouvrir le détruirait silencieusement.
+    // Jamais une case fixe (miroir dévieur OU neurone miroir) dans le pool:
+    // contrairement à "W"/"X" (candidats sans conséquence à rouvrir ici),
+    // ces deux-là ont été posées intentionnellement (voir buildInitialLayout)
+    // — les rouvrir les détruirait silencieusement.
     const opaque = orthogonalNeighbors(r, c, rows, cols).filter(
-      ([nr, nc]) => layout[nr][nc] !== "." && !isMirrorToken(layout[nr][nc])
+      ([nr, nc]) => layout[nr][nc] !== "." && !isFixedObstacleToken(layout[nr][nc])
     );
     if (opaque.length === 0) return; // plus aucun voisin réparable (ex: entouré uniquement de miroirs) : rien à faire
     // Préfère rouvrir un voisin "W" plutôt qu'un "X" de coin, pour garder le
@@ -1176,12 +1306,13 @@ function resolveAndDeriveClues(layout, rows, cols, useForbidden, pyraCandidates 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const token = layout[r][c];
-      // Miroir: jamais dérivé en indice (voir isMirrorToken) — un miroir ne
-      // compte aucune lumière adjacente, c'est une case fixe du niveau, pas
-      // une charge. Sans cette exclusion, cette boucle écraserait
-      // silencieusement chaque miroir placé par un chiffre/VOID dérivé de
-      // son compte de lumières, comme n'importe quelle charge classique.
-      if (token === "X" || token === "." || isMirrorToken(token)) continue;
+      // Case fixe (miroir dévieur OU neurone miroir): jamais dérivée en
+      // indice (voir isFixedObstacleToken) — aucune des deux ne compte de
+      // lumière adjacente, ce sont des cases fixes du niveau, pas des
+      // charges. Sans cette exclusion, cette boucle écraserait
+      // silencieusement chacune d'elles par un chiffre/VOID dérivé de son
+      // compte de lumières, comme n'importe quelle charge classique.
+      if (token === "X" || token === "." || isFixedObstacleToken(token)) continue;
       let count = 0;
       for (const [dr, dc] of DIRECTIONS) {
         const nCell = grid.cellAt(r + dr, c + dc);
@@ -1619,6 +1750,66 @@ function pruneUnusedMirrors(layout, rows, cols, solution, nodeBudget, deadline) 
     // Indice de solution: `solution` (le paramètre reçu, mesuré une seule
     // fois avant cette boucle) — un seul miroir décoratif de moins à
     // chaque itération, le reste du plateau est inchangé.
+    const verify = analyzeAndCount(finalLevel, 2, nodeBudget, { hint: solution });
+    const stillUnique = verify && verify.exhausted && verify.count === 1;
+    if (!stillUnique) layout[r][c] = prevToken; // nécessaire malgré tout: on le remet
+  }
+}
+
+/**
+ * Vrai si AU MOINS UN neurone miroir du plateau a réellement dupliqué une
+ * lumière dans la solution gagnante `solution` — pendant de
+ * `mirrorGenuinelyUsed` pour le Neurone miroir (même philosophie: la
+ * feature ne doit jamais rester purement décorative). Contrairement au
+ * Miroir dévieur (qui exige une simulation complète, `buildGridWithLights`,
+ * pour lire `_mirrorColor`, une notion qui dépend de la couleur), un
+ * neurone réagit à N'IMPORTE QUELLE lumière — une vérification purement
+ * GÉOMÉTRIQUE suffit donc ici: `solution` (produite par le VRAI solveur via
+ * `toggleLight`, voir `tryGenerate`/`stripToTargetTier`) contient déjà
+ * TOUTES les lumières de la solution gagnante, origines ET duplicatas
+ * confondus — un neurone partage la ligne ou la colonne d'au moins une
+ * lumière du plateau si et seulement s'il a dupliqué quelque chose pour
+ * produire CETTE solution précise : toute lumière posée sur sa ligne/colonne
+ * DOIT avoir un duplicata légal, sans quoi le mouvement qui l'a posée aurait
+ * été intégralement rejeté (voir grid.js `toggleLight`/
+ * `_computeMirrorDuplicates`, "tout ou rien").
+ */
+function mirrorNeuronGenuinelyUsed(layout, rows, cols, solution) {
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (!isMirrorNeuronToken(layout[r][c])) continue;
+      if (solution.some(([lr, lc]) => lr === r || lc === c)) return true;
+    }
+  return false;
+}
+
+/**
+ * Nettoie EN PLACE les neurones miroirs purement décoratifs (aucune lumière
+ * de la solution gagnante sur leur ligne/colonne, voir
+ * `mirrorNeuronGenuinelyUsed`) — même politique et même remède que
+ * `pruneUnusedMirrors` (voir son commentaire pour le détail du raisonnement,
+ * identique ici): convertir en VOID ("X"), re-vérifier par un solve complet,
+ * et REVENIR au neurone d'origine si l'unicité casse — un neurone "non
+ * traversé par le gagnant" peut malgré tout être ce qui invalide une
+ * solution alternative (une lumière de CETTE alternative-là, elle, tombe
+ * peut-être bien sur sa ligne/colonne), donc son retrait n'est jamais
+ * automatiquement sûr. Un neurone à la fois, jamais un lot entier, pour
+ * qu'un retrait qui casse ne masque pas la sûreté d'un autre déjà appliqué
+ * avec succès.
+ */
+function pruneUnusedMirrorNeurons(layout, rows, cols, solution, nodeBudget, deadline) {
+  const candidates = [];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (!isMirrorNeuronToken(layout[r][c])) continue;
+      const used = solution.some(([lr, lc]) => lr === r || lc === c);
+      if (!used) candidates.push([r, c]);
+    }
+  for (const [r, c] of candidates) {
+    if (deadline != null && Date.now() > deadline) return;
+    const prevToken = layout[r][c];
+    layout[r][c] = "X";
+    const finalLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
     const verify = analyzeAndCount(finalLevel, 2, nodeBudget, { hint: solution });
     const stillUnique = verify && verify.exhausted && verify.count === 1;
     if (!stillUnique) layout[r][c] = prevToken; // nécessaire malgré tout: on le remet
@@ -2071,6 +2262,7 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
   // miroir sans aucune charge colorée ne dévierait jamais rien.
   const wantsMirror = featureSubset.includes("mirror");
   const wantsPyra = featureSubset.includes("pyra");
+  const wantsMirrorNeuron = featureSubset.includes("mirrorNeuron");
 
   const layout = buildInitialLayout({
     rows,
@@ -2078,6 +2270,7 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
     clueDensity,
     cornerVoid,
     mirrorDensity: wantsMirror ? MIRROR_DENSITY : 0,
+    mirrorNeuronCount: wantsMirrorNeuron ? MIRROR_NEURON_COUNT : 0,
     rand,
   });
   // Voir PYRA_MAX_CANDIDATES: choisi une seule fois ici, APRÈS
@@ -2133,6 +2326,21 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
   // jamais nettoyé par aucune passe précédente.
   if (wantsMirror) pruneUnusedMirrors(layout, rows, cols, finalAnalysis.solution, preset.nodeBudget, deadline);
 
+  // Phase Neurone miroir [expérimental] : même politique que le Miroir
+  // dévieur ci-dessus — déjà posé dans buildInitialLayout, déjà pleinement
+  // simulé par repairToUnique/stripToTargetTier (toggleLight applique la
+  // duplication INCONDITIONNELLEMENT, voir grid.js — contrairement au
+  // Miroir dévieur, aucune dépendance à `colorApplied` ici: un neurone
+  // réagit à n'importe quelle lumière, pas seulement à un laser coloré).
+  // Utilise `finalAnalysis.solution` (APRÈS Couleur, si obtenue) plutôt que
+  // `analysis.solution`: le retrait/coloriage de charges de la Phase 2 peut
+  // déplacer la solution gagnante retenue, exactement comme pour
+  // `mirrorApplied` ci-dessus.
+  const mirrorNeuronApplied =
+    wantsMirrorNeuron && mirrorNeuronGenuinelyUsed(layout, rows, cols, finalAnalysis.solution);
+  if (wantsMirrorNeuron)
+    pruneUnusedMirrorNeurons(layout, rows, cols, finalAnalysis.solution, preset.nodeBudget, deadline);
+
   // Phase Pyra : chaque "Y" déjà présent dans `layout` a été validé au
   // moment même de sa dérivation (voir `resolveAndDeriveClues`), donc
   // contrairement au Miroir, aucune vérification a posteriori contre
@@ -2150,6 +2358,7 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
   const actualFeatureSubset = featureSubset.filter((k) => {
     if (k === "color") return colorApplied;
     if (k === "mirror") return mirrorApplied;
+    if (k === "mirrorNeuron") return mirrorNeuronApplied;
     if (k === "pyra") return pyraApplied;
     return true;
   });
@@ -2168,10 +2377,20 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
  * `preferMirror` (même principe, voir Phase 3 Miroir) — la présence d'un
  * miroir RÉELLEMENT utilisé à palier ET couleur égaux, puis `preferPyra`
  * (même principe, voir Phase Pyra) — la présence d'au moins une case Pyra
- * survivante à palier/couleur/miroir égaux, puis (à tout le reste égal,
- * imparfait) un `branchCount` qui pousse dans la direction demandée.
+ * survivante à palier/couleur/miroir égaux, puis `preferMirrorNeuron`
+ * (même principe, voir Phase Neurone miroir) — la présence d'un neurone
+ * miroir RÉELLEMENT utilisé à tout le reste égal, puis (à tout le reste
+ * égal, imparfait) un `branchCount` qui pousse dans la direction demandée.
  */
-export function isBetterCandidate(a, b, requestedTier, preferColor = false, preferMirror = false, preferPyra = false) {
+export function isBetterCandidate(
+  a,
+  b,
+  requestedTier,
+  preferColor = false,
+  preferMirror = false,
+  preferPyra = false,
+  preferMirrorNeuron = false
+) {
   if (!a) return true;
   const aUnique = a.solutionCount === 1;
   const bUnique = b.solutionCount === 1;
@@ -2210,6 +2429,12 @@ export function isBetterCandidate(a, b, requestedTier, preferColor = false, pref
     }
   }
 
+  if (preferMirrorNeuron) {
+    const aMirrorNeuron = a.featureSubset?.includes("mirrorNeuron") ?? false;
+    const bMirrorNeuron = b.featureSubset?.includes("mirrorNeuron") ?? false;
+    if (aMirrorNeuron !== bMirrorNeuron) return bMirrorNeuron;
+  }
+
   if (a.measuredTier != null && b.measuredTier != null && a.measuredTier === b.measuredTier) {
     const aBranch = a.branchCount ?? 0;
     const bBranch = b.branchCount ?? 0;
@@ -2245,6 +2470,7 @@ export function generateLevel({
   const colorRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("color");
   const mirrorRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("mirror");
   const pyraRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("pyra");
+  const mirrorNeuronRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("mirrorNeuron");
   const defaultBudget = getGenerationBudget(stars);
   // Voir COLOR_BUDGET_MULTIPLIER: viser À LA FOIS le bon palier ET une
   // couleur nécessaire est un objectif combiné plus dur qu'un seul des deux
@@ -2323,7 +2549,10 @@ export function generateLevel({
       best = candidate;
       break;
     }
-    if (isBetterCandidate(best, candidate, solverTarget, colorRequested, mirrorRequested, pyraRequested)) best = candidate;
+    if (
+      isBetterCandidate(best, candidate, solverTarget, colorRequested, mirrorRequested, pyraRequested, mirrorNeuronRequested)
+    )
+      best = candidate;
   }
 
   if (!best) return null; // n'arrive que si même le fallback échoue à générer une forme jouable
