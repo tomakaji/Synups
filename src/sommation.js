@@ -43,6 +43,9 @@
 // est un vrai geste de glisser, y compris nourrir une case verrouillée
 // active (plus de tap-déblocage, voir doDropOnLock).
 import { hexFor, colorFor } from "./game/colors.js";
+// Renommage joueur (retour utilisateur): "points" -> "Étoile(s)" (icône
+// étoile bleue) — voir game/currencyIcons.js.
+import { starLabel } from "./game/currencyIcons.js";
 // Bouton "Mon profil" de l'écran "terminé" (voir onShow ci-dessous, round
 // 19) — réutilise loadProfile + pointsApi.buildBadgeFrame (round 22, voir
 // JSDoc d'initSommation), exactement comme la bannière équivalente du menu
@@ -886,7 +889,7 @@ export function initSommation(pointsApi) {
    * la même chose qu'un second tap sur le générateur déjà sélectionné, une
    * redondance retirée sur retour utilisateur). */
   function spawnCostHint(cost) {
-    return `<div class="som-spawn-hint">Retape le générateur pour lancer (-${cost} points)</div>`;
+    return `<div class="som-spawn-hint">Retape le générateur pour lancer (-${starLabel(cost)})</div>`;
   }
 
   function letterForChannels(ch) {
@@ -1574,11 +1577,12 @@ export function initSommation(pointsApi) {
     playPendingFx();
 
     // Retour utilisateur: "afficher le nombre de points possédés par le
-    // joueur en haut" — même format que les autres totaux de points du jeu
-    // (voir "N pt" pour Infini/Remember). Solde PARTAGÉ (voir pointsApi) —
-    // main.js le tient déjà à jour ailleurs (renderPointsEverywhere), ceci
-    // reste une écriture de secours pour rester correct dès ce render().
-    if (pointsEl) pointsEl.textContent = `${pointsApi.getPoints()} pt`;
+    // joueur en haut" — même format que les autres totaux du jeu (voir
+    // starLabel() pour Infini/Remember, icône étoile bleue). Solde PARTAGÉ
+    // (voir pointsApi) — main.js le tient déjà à jour ailleurs
+    // (renderPointsEverywhere), ceci reste une écriture de secours pour
+    // rester correct dès ce render().
+    if (pointsEl) pointsEl.innerHTML = starLabel(pointsApi.getPoints());
 
     if (progressFillEl || progressLabelEl) {
       // Barre + texte "x/y" en haut — retour utilisateur round 8: "la barre

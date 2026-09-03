@@ -214,11 +214,14 @@ export function avatarUnlockLabel(avatar) {
     case "story":
       return `Débloqué au niveau ${avatar.unlock.level} de l'Histoire`;
     case "purchase":
-      return `S'achète ${avatar.unlock.cost} points`;
+      // Retour utilisateur: "points" -> "Étoiles" (icône étoile bleue).
+      return `S'achète ${avatar.unlock.cost} Étoiles`;
     case "pixelart":
       return "Débloqué à la 5e récompense de Remember";
     case "star":
-      return `S'achète ${avatar.unlock.cost} étoiles (Défi Quotidien)`;
+      // Retour utilisateur: "étoiles" (Défi Quotidien) -> "Énergie" (icône
+      // éclair jaune) — kind/unlock.type "star" reste inchangé en interne.
+      return `S'achète ${avatar.unlock.cost} Énergie (Défi Quotidien)`;
     default:
       return "Verrouillé";
   }

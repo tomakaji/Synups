@@ -83,8 +83,13 @@
              JS ne le révèle (et ne joue l'animation) QUE s'il découvre que
              ce n'est pas le cas — jamais l'inverse. -->
         <button id="btn-daily-challenge" class="daily-challenge-fab hidden" type="button" title="Défi Quotidien">
-          <svg viewBox="0 0 24 24" class="daily-challenge-fab-star" fill="currentColor" stroke="none">
-            <path d="M12 2.5l2.9 6.2 6.6.6-5 4.5 1.5 6.7L12 17l-6 3.5 1.5-6.7-5-4.5 6.6-.6z"></path>
+          <!-- Retour utilisateur (renommage monnaie): l'ancienne monnaie
+               "étoiles" du Défi Quotidien s'appelle désormais "Énergie" —
+               icône éclair (au lieu d'étoile) à la même place, même couleur
+               jaune (voir floating-controls.css: .daily-challenge-fab-bolt,
+               ex-.daily-challenge-fab-star). -->
+          <svg viewBox="0 0 24 24" class="daily-challenge-fab-bolt" fill="currentColor" stroke="none">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
           </svg>
           <span class="daily-challenge-fab-label">Défi quotidien</span>
           <span id="daily-challenge-fab-badge" class="daily-challenge-fab-badge hidden"></span>
@@ -139,7 +144,7 @@
               </svg>
               <span class="menu-card-label">Remember</span>
             </span>
-            <span id="menu-points-badge" class="menu-card-sub menu-card-points">0 pt</span>
+            <span id="menu-points-badge" class="menu-card-sub menu-card-points">0</span>
           </button>
 
           <button id="menu-options" class="menu-card menu-card--options">
@@ -212,7 +217,7 @@
             <span id="nav-infinite" class="nav-group hidden">
               <span id="infinite-level-label">∞</span>
               <span id="infinite-badge" class="infinite-badge hidden" title="Ce niveau n'a pas de solution unique confirmée — plusieurs façons de le résoudre existent peut-être">variante multiple</span>
-              <span id="infinite-points" class="infinite-points" title="Points gagnés en mode Infini">0 pt</span>
+              <span id="infinite-points" class="infinite-points" title="Étoiles gagnées en mode Infini">0</span>
             </span>
             <span id="nav-community" class="nav-group hidden">
               <span id="community-level-title" class="community-level-title"></span>
@@ -222,7 +227,7 @@
                  loadDailyChallengeLevel(). Pas de bouton "sélection de
                  niveau"/"suivant" ici: une seule grille par jour. -->
             <span id="nav-daily" class="nav-group hidden">
-              <span class="nav-daily-label">★ Défi Quotidien</span>
+              <span class="nav-daily-label">⚡ Défi Quotidien</span>
             </span>
           </div>
         </header>
@@ -402,7 +407,7 @@
           <div class="options-section">
             <span class="options-label">Données</span>
             <button id="btn-reset-save" class="options-btn options-btn--danger">Réinitialiser le jeu</button>
-            <p class="options-hint">Efface la progression Histoire, les points et les réglages. Impossible à annuler.</p>
+            <p class="options-hint">Efface la progression Histoire, les étoiles/l'Énergie et les réglages. Impossible à annuler.</p>
           </div>
         </div>
       </section>
@@ -414,11 +419,11 @@
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
           <h2 class="screen-title">Remember</h2>
-          <span id="sommation-points" class="infinite-points">0 pt</span>
-          <!-- Outil de test: injecte des points dans le solde PARTAGÉ avec
+          <span id="sommation-points" class="infinite-points">0</span>
+          <!-- Outil de test: injecte des étoiles dans le solde PARTAGÉ avec
                Infini (voir main.js: spendSharedPoints/addSharedPoints) —
                retour utilisateur: "pour pouvoir tester à l'infini". -->
-          <button id="som-debug-points" class="som-debug-btn" type="button" title="Débug: +500 points">+500 pts</button>
+          <button id="som-debug-points" class="som-debug-btn" type="button" title="Débug: +500 étoiles">+500 étoiles</button>
         </header>
 
         <!-- État "terminé" (round 12, réécrit round 18): une fois PixelArt
@@ -973,8 +978,8 @@
           <button type="button" class="modal-close-x" data-som-ad-modal-close aria-label="Fermer">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
-          <h3 class="modal-title">Plus assez de points</h3>
-          <p class="modal-text">Regarde une pub pour récupérer 200 points.</p>
+          <h3 class="modal-title">Plus assez d'étoiles</h3>
+          <p class="modal-text">Regarde une pub pour récupérer 200 étoiles.</p>
           <!-- Round 20 (migration Capacitor/AdMob): feedback de chargement/échec
                de la rewarded ad — voir sommation.js: adWatchBtn.onclick. Vide et
                caché tant qu'il n'y a rien à signaler (pub prête, pas encore

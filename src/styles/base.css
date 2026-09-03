@@ -170,6 +170,24 @@ body {
   height: 18px;
 }
 
+/* Icônes des monnaies du jeu (voir game/currencyIcons.js: starIconSVG/
+   boltIconSVG) — étoile pour "Étoile(s)" (ex-points, bleu), éclair pour
+   "Énergie" (ex-étoiles, jaune). Taille en `em` (pas en px comme .icon-svg
+   ci-dessus) pour suivre automatiquement le font-size très variable des
+   contextes où ces icônes apparaissent (badge du menu, pastille de prix
+   minuscule sur un avatar, bouton flottant...) sans réglage au cas par cas.
+   La couleur vient de currentColor, donc du CSS de l'élément parent (voir
+   .title-profile-stat--points/.infinite-points en bleu,
+   .title-profile-stat--star/.daily-challenge-fab en jaune) — inchangé par
+   ce renommage. */
+.currency-icon {
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 3px;
+  vertical-align: -0.1em;
+  flex-shrink: 0;
+}
+
 /* Icônes plus grandes spécifiquement dans .icon-btn (Annuler/Réinitialiser)
    — l'icône toggle son/musique (.icon-toggle) garde la taille par défaut
    ci-dessus, plus discrète car ce sont des réglages, pas des actions de jeu. */

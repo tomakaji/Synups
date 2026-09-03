@@ -62,6 +62,11 @@ import {
   neuronIcon,
 } from "./game/render.js";
 import { initEditor } from "./editor.js";
+// Renommage joueur (retour utilisateur): "points" -> "Étoile(s)" (icône
+// étoile bleue), "étoiles" (Défi Quotidien) -> "Énergie" (icône éclair
+// jaune) — voir game/currencyIcons.js pour le détail de la décision
+// (identifiants internes/localStorage volontairement inchangés).
+import { starLabel, boltLabel, starIconSVG, boltIconSVG } from "./game/currencyIcons.js";
 import {
   initSommation,
   getSommationBadges,
@@ -212,14 +217,17 @@ async function advanceAfterWin() {
     // récompense (retour utilisateur: "à la victoire on utilise la pop up
     // de récompense pour montrer qu'on a gagné une étoile") QUE la première
     // fois, jamais sur un second appel accidentel qui ne créditerait rien.
+    // Retour utilisateur: la monnaie "étoile" du Défi Quotidien s'affiche
+    // désormais "Énergie" (icône éclair, jaune) — kind reste "star" en
+    // interne (voir currencyIcons.js: décision d'architecture).
     const alreadyDone = isDailyChallengeCompleted();
     const totalStars = completeTodayChallenge();
     renderDailyChallengeButton();
     if (!alreadyDone) {
       showCosmeticUnlockModal({
         kind: "star",
-        title: "+1 étoile",
-        subtitle: `Tu as maintenant ${totalStars} étoile${totalStars > 1 ? "s" : ""} — reviens demain pour un nouveau défi.`,
+        title: "+1 Énergie",
+        subtitle: `Tu as maintenant ${totalStars} Énergie — reviens demain pour un nouveau défi.`,
       });
     }
   } else {
@@ -331,16 +339,19 @@ const menuPointsBadgeEl = document.getElementById("menu-points-badge");
 const sommationPointsEl = document.getElementById("sommation-points");
 
 function renderPointsEverywhere() {
-  const label = `${infinitePoints} pt`;
-  infinitePointsEl.textContent = label;
+  // Retour utilisateur: "points" -> "Étoile(s)" (icône étoile bleue, plus
+  // d'abréviation "pt") — innerHTML (pas textContent) car starLabel()
+  // préfixe le nombre par l'icône SVG (voir currencyIcons.js).
+  const label = starLabel(infinitePoints);
+  infinitePointsEl.innerHTML = label;
   // Une fois PixelArt débloqué (5e et dernière récompense de Remember), le
   // mode est terminé (retour utilisateur round 12: "il sera marqué comme
   // terminé et ne sera plus jouable") — la carte du menu titre l'affiche à
   // la place du solde de points, qui n'a plus de sens ici (voir
   // enterRememberDirect ci-dessous: le clic ouvre quand même Remember, qui
   // affiche alors son propre état "terminé" — voir sommation.js: onShow()).
-  menuPointsBadgeEl.textContent = isPixelArtUnlocked() ? "Terminé" : label;
-  if (sommationPointsEl) sommationPointsEl.textContent = label;
+  menuPointsBadgeEl.innerHTML = isPixelArtUnlocked() ? "Terminé" : label;
+  if (sommationPointsEl) sommationPointsEl.innerHTML = label;
 }
 
 function awardInfinitePoints(tier) {
@@ -722,12 +733,12 @@ function showCosmeticUnlockModal({ kind, avatarId, badgeTier, title, subtitle })
     // up de récompense pour montrer qu'on a gagné une étoile" — réutilise
     // EXACTEMENT ce même mécanisme .modal/.cosmetic-unlock-* plutôt qu'une
     // modale dédiée, juste une 3e variante de bulle de révélation (même
-    // structure que .cosmetic-unlock-avatar, voir hint-modal.css) avec
-    // l'icône étoile du bouton flottant (voir index.html: #btn-daily-challenge).
+    // structure que .cosmetic-unlock-avatar, voir hint-modal.css). Icône
+    // éclair (retour utilisateur: "étoile" -> "Énergie") — même tracé que
+    // le bouton flottant du Défi Quotidien (voir currencyIcons.js: boltIconSVG).
     const bubble = document.createElement("span");
     bubble.className = "cosmetic-unlock-avatar cosmetic-unlock-star";
-    bubble.innerHTML =
-      '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2.5l2.9 6.2 6.6.6-5 4.5 1.5 6.7L12 17l-6 3.5 1.5-6.7-5-4.5 6.6-.6z"></path></svg>';
+    bubble.innerHTML = boltIconSVG();
     cosmeticUnlockRevealEl.appendChild(bubble);
   } else {
     // Même langage visuel que les carrés teaser de sélection Remember (voir
@@ -1232,7 +1243,8 @@ document.querySelectorAll(".infinite-star-btn").forEach((btn) => {
   // synchronisées.
   const tier = Number(btn.dataset.difficulty);
   const pointsEl = btn.querySelector(".infinite-star-points");
-  if (pointsEl) pointsEl.textContent = `+${INFINITE_POINTS_BY_TIER[tier] ?? 1} pt/niveau`;
+  // Retour utilisateur: icône étoile au lieu de l'abréviation "pt".
+  if (pointsEl) pointsEl.innerHTML = `+${starLabel(INFINITE_POINTS_BY_TIER[tier] ?? 1)}/niveau`;
 
   btn.onclick = () => {
     infiniteDifficulty = tier;
@@ -2108,7 +2120,9 @@ function refreshProfileAvatarPicker() {
     if (purchasable) {
       const price = document.createElement("span");
       price.className = "profile-avatar-price" + (avatar.unlock.type === "star" ? " profile-avatar-price--star" : "");
-      price.textContent = avatar.unlock.type === "star" ? `★${avatar.unlock.cost}` : String(avatar.unlock.cost);
+      // Retour utilisateur: icônes (étoile bleue = Étoiles, éclair jaune =
+      // Énergie) à la place de l'abréviation/symbole texte.
+      price.innerHTML = avatar.unlock.type === "star" ? boltLabel(avatar.unlock.cost) : starLabel(avatar.unlock.cost);
       btn.appendChild(price);
     }
     if (unlocked) {
@@ -2129,8 +2143,8 @@ function refreshProfileAvatarPicker() {
         if (!spent) {
           setProfileAvatarPurchaseStatus(
             isStarUnlock
-              ? `Pas assez d'étoiles (${avatar.unlock.cost} nécessaires).`
-              : `Pas assez de points (${avatar.unlock.cost} nécessaires).`,
+              ? `Pas assez d'Énergie (${avatar.unlock.cost} nécessaire).`
+              : `Pas assez d'Étoiles (${avatar.unlock.cost} nécessaires).`,
             true
           );
           return;
@@ -2145,8 +2159,8 @@ function refreshProfileAvatarPicker() {
           avatarId: avatar.id,
           title: `Badge « ${avatar.label} »`,
           subtitle: isStarUnlock
-            ? `Débloqué pour ${avatar.unlock.cost} étoiles !`
-            : `Débloqué pour ${avatar.unlock.cost} points !`,
+            ? `Débloqué pour ${avatar.unlock.cost} Énergie !`
+            : `Débloqué pour ${avatar.unlock.cost} Étoiles !`,
         });
       });
     }
@@ -2180,10 +2194,12 @@ function buildTitleProfileStats() {
   wrap.className = "title-profile-stats";
   const starsEl = document.createElement("span");
   starsEl.className = "title-profile-stat title-profile-stat--star";
-  starsEl.textContent = `★ ${loadStars()}`;
+  // Retour utilisateur: icône éclair (Énergie) au lieu du symbole "★" texte.
+  starsEl.innerHTML = boltLabel(loadStars());
   const pointsEl = document.createElement("span");
   pointsEl.className = "title-profile-stat title-profile-stat--points";
-  pointsEl.textContent = `${infinitePoints} pt`;
+  // Retour utilisateur: icône étoile (Étoiles) au lieu de l'abréviation "pt".
+  pointsEl.innerHTML = starLabel(infinitePoints);
   wrap.append(starsEl, pointsEl);
   return wrap;
 }
@@ -2696,7 +2712,7 @@ function renderDailyChallengeButton({ generating = false } = {}) {
   const showBadge = !generating && isDailyChallengeReady();
   dailyChallengeFabBadgeEl.classList.toggle("hidden", !showBadge);
   dailyChallengeFabBadgeEl.textContent = showBadge ? "!" : "";
-  btnDailyChallenge.title = "Défi Quotidien — grille du jour, +1 étoile";
+  btnDailyChallenge.title = "Défi Quotidien — grille du jour, +1 Énergie";
 }
 
 btnDailyChallenge.onclick = async () => {
