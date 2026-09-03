@@ -221,9 +221,21 @@ export async function playRemove() {
   tone.triggerAttackRelease("C4", "8n");
 }
 
+// Retour utilisateur: "le son d'échec est trop aigu [...] ça serait bien de
+// le remettre grave". F#3 (~185Hz, note précédente) tombe SOUS le passe-haut
+// "mobile-safe" à 200Hz partagé par tout ce fichier (voir speakerSafeHighpass
+// plus haut) — sa fondamentale se retrouvait donc déjà partiellement coupée,
+// ne laissant sonner que les harmoniques hautes du triangle, ce qui sonne
+// fin/aigu plutôt que grave malgré la note basse choisie au départ. Même
+// raisonnement, même correctif que darkPlaceLow/High un peu plus haut dans
+// ce fichier (notes remontées à l'époque pour rester AU-DESSUS du filtre,
+// donc pleinement audibles) : A3 (~220Hz) reste dans le registre grave de la
+// palette du jeu tout en gardant sa fondamentale intacte, ce qui sonne
+// nettement plus grave/plein à l'oreille que F#3 filtrée, malgré la
+// fréquence en Hz légèrement plus haute.
 export async function playError() {
   await ensureStarted();
-  soft.triggerAttackRelease("F#3", "16n", Tone.now(), ERROR_SFX_VELOCITY);
+  soft.triggerAttackRelease("A3", "16n", Tone.now(), ERROR_SFX_VELOCITY);
 }
 
 // Montée ambiante, plus proche d'une onde qui se déploie que d'une fanfare —
