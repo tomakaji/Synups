@@ -2,7 +2,7 @@
 // Sons doux et spatiaux (onde/reverb) plutôt que secs et percussifs, pour
 // rester cohérent avec le thème cérébral/neuronal du jeu.
 import * as Tone from "tone";
-import { isFailureActive } from "./music.js";
+import { isFailureActive, MUSIC_SCALE } from "./music.js";
 // Bus de sortie commun (limiteur anti-clipping) — voir audioBus.js, partagé
 // avec music.js: le contexte "playback" qui y est posé s'applique déjà à ce
 // fichier de toute façon (sound.js importe music.js juste au-dessus, donc
@@ -17,37 +17,22 @@ import { masterBus } from "./audioBus.js";
 // playTargetLost, playChargeEmptied) qui ne doivent PAS être affectés.
 const ERROR_SFX_VELOCITY = 1.2;
 
-// Note de pose = extraite de la VRAIE mélodie de neurone-couleur.wav
-// (analyse spectrale du fichier, voir music-demos/couches/notes-couches.md
-// pour le contexte général) plutôt qu'un tirage uniforme dans MUSIC_SCALE
-// comme avant — retour utilisateur: la pose doit "citer" la mélodie du jeu.
-// La piste est structurée en 3 blocs de 8s (phrase A-B-A', voir notes-
-// couches.md) ; chaque bloc est décomposé ci-dessous en sa propre suite de
-// notes JOUÉES DANS L'ORDRE. Bloc A (0-8s): E5 puis C5 puis A4 (résolution
-// sur la tonique). Bloc B (8-16s): E5, G4, E5 (seul bloc qui ne redescend
-// pas sur A4, cohérent avec son rôle de contraste). Bloc A' (16-24s):
-// C5, E5, A4 (variante du bloc A, même note de résolution finale).
-const MELODY_BLOCKS = [
-  ["E5", "C5", "A4"],
-  ["E5", "G4", "E5"],
-  ["C5", "E5", "A4"],
-];
+// Retour utilisateur: "j'aimerais monter un peu le volume du son qu'on joue
+// lorsqu'on pose une impulsion" — même mécanisme que ERROR_SFX_VELOCITY
+// ci-dessus (multiplicateur via `velocity`, pas le `.volume` de base du
+// synth `tone`, partagé avec playRemove/playSynapseRestore qui ne doivent
+// pas être affectés).
+const PLACE_SFX_VELOCITY = 1.25;
 
-// État de la suite en cours: `currentBlock` est l'un des tableaux ci-dessus
-// (référence directe, pas une copie), `posInBlock` l'index de la PROCHAINE
-// note à jouer dedans. Tant que la suite n'est pas épuisée, on avance
-// simplement dedans à chaque pose ; une fois épuisée, on retire un nouveau
-// bloc au hasard parmi les 3 (répétition du même bloc possible, voir retour
-// utilisateur) et on repart de son index 0.
-let currentBlock = null;
-let posInBlock = 0;
-
+// Note de pose = tirage aléatoire uniforme dans MUSIC_SCALE (gamme
+// pentatonique de La partagée par toute la musique du jeu, voir music.js).
+// Retour utilisateur: retour en arrière sur une tentative précédente qui
+// faisait plutôt CITER la mélodie de neurone-couleur.wav note par note
+// (suites fixes jouées dans l'ordre) — logique retirée, un tirage aléatoire
+// dans la gamme suffit à rester harmoniquement cohérent avec le reste de la
+// musique sans ce mécanisme de suite.
 function nextPlacementNote() {
-  if (!currentBlock || posInBlock >= currentBlock.length) {
-    currentBlock = MELODY_BLOCKS[Math.floor(Math.random() * MELODY_BLOCKS.length)];
-    posInBlock = 0;
-  }
-  return currentBlock[posInBlock++];
+  return MUSIC_SCALE[Math.floor(Math.random() * MUSIC_SCALE.length)];
 }
 
 let started = false;
@@ -224,10 +209,11 @@ export async function playPlace() {
     darkPlaceHigh.triggerAttackRelease("D#4", "8n", now);
     return;
   }
-  // Voir nextPlacementNote() plus haut: avance dans la suite de notes du
-  // bloc de mélodie en cours (neurone-couleur.wav), retire un nouveau bloc
-  // au hasard une fois la suite épuisée.
-  tone.triggerAttackRelease(nextPlacementNote(), "8n");
+  // Voir nextPlacementNote() plus haut: tirage aléatoire dans MUSIC_SCALE.
+  // PLACE_SFX_VELOCITY: légère hausse de volume demandée par l'utilisateur,
+  // sans toucher au volume de base de `tone` (partagé avec playRemove/
+  // playSynapseRestore).
+  tone.triggerAttackRelease(nextPlacementNote(), "8n", Tone.now(), PLACE_SFX_VELOCITY);
 }
 
 export async function playRemove() {
