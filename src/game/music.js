@@ -478,9 +478,26 @@ function pauseAllLayers() {
   for (const howl of Object.values(howls)) howl.pause();
 }
 
+// Retour utilisateur: "lorsqu'on revient d'une pause/unfocus [...] j'aimerais
+// qu'on le réactive en transition de volume rapide [...] car je pense que la
+// brutalité du retour du son fait un petit crachat sur les enceintes" —
+// reprendre une piste directement à son volume cible (Howl.play() seul) crée
+// un saut BRUTAL silence -> signal, qui produit un déclic/crachat au niveau
+// du haut-parleur (discontinuité physique de pression, indépendante du
+// contenu de la piste elle-même). Fondu RAPIDE (bien plus court que FADE_MS/
+// LAYER_FADE_MS, pensés pour des transitions musicales perceptibles) plutôt
+// qu'une simple reprise instantanée: assez court pour ne pas sembler
+// hésitant, assez long pour lisser ce saut.
+const RESUME_FADE_MS = 180;
+
 function resumeAllLayers() {
   if (!howls) return;
-  for (const howl of Object.values(howls)) howl.play();
+  for (const howl of Object.values(howls)) {
+    const target = howl.volume(); // volume cible déjà correct (couches débloquées, ambiance, échec) — pause/resume n'y touche pas
+    howl.volume(0);
+    howl.play();
+    if (target > 0) howl.fade(0, target, RESUME_FADE_MS);
+  }
 }
 
 /** Ajoute `reason` à l'ensemble des raisons actives de mise en pause — arrête
