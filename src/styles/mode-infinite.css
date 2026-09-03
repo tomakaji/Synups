@@ -113,6 +113,11 @@
 .infinite-gain .currency-icon {
   margin-right: 0;
   margin-left: 2px;
+  /* Retour utilisateur: icône étoile plus grande — .currency-icon (base.css)
+     la dimensionne en `em` (0.85em) relatif au font-size du parent; celui de
+     .infinite-gain (0.62rem) la rendait minuscule. Valeur absolue ici plutôt
+     que relative pour la détacher de ce texte très petit. */
+  font-size: 0.8rem;
 }
 
 /* Bouton de test Sommation ("+500 pts") — retour utilisateur: "un petit
@@ -181,23 +186,17 @@
   }
 }
 
-#btn-infinite-settings,
-#btn-infinite-next {
-  background: none;
-  border: 1px solid #2a3040;
-  color: var(--text-dim);
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.78rem;
-  transition: all 0.2s;
-}
-
-#btn-infinite-settings:hover,
-#btn-infinite-next:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
+/* Retour utilisateur: "Les boutons d'action dans le header (Config et
+   Nouvelle grille) n'ont pas le même design que tous les autres boutons
+   d'action de menu [...] (le background pas la même couleur)" — BUG
+   CORRIGÉ: ces deux boutons portent déjà class="icon-btn" (voir index.html,
+   même classe que #btn-level-grid, #btn-hint, #btn-undo...), mais cette
+   règle scopée par ID (spécificité plus forte qu'une classe) écrasait son
+   `background: var(--panel)` avec `background: none` — les rendant
+   transparents, seuls parmi tous les boutons d'action de l'app. Aucune
+   raison de les traiter différemment: la règle entière est retirée, .icon-btn
+   (base.css) + .screen-header .icon-btn (screen-header.css, pour la taille
+   compacte 38px) suffisent, exactement comme pour #btn-level-grid. */
 
 .infinite-config {
   width: min(520px, 92vw);

@@ -202,8 +202,25 @@ async function advanceAfterWin() {
   await wait(BOARD_FADE_MS);
   const holdStart = performance.now();
   if (mode === "infinite") {
-    awardInfinitePoints(lastInfiniteResult?.measuredTier ?? lastInfiniteResult?.requestedTier ?? 1);
+    // Retour utilisateur: "l'animation d'addition d'étoiles [...] ne se
+    // déclenche pas" — BUG CORRIGÉ: le gain était crédité (et l'animation
+    // déclenchée) AVANT `runGeneration`, qui enchaîne aussitôt (chemin
+    // "buffered", le cas courant — voir runGeneration) sur
+    // loadInfiniteLevel/startBoard/renderer.build: une reconstruction
+    // SYNCHRONE de tout le plateau (potentiellement de nombreux nœuds DOM/
+    // SVG), dans la MÊME tâche JS, juste après avoir ajouté la classe
+    // d'animation. Le navigateur ne peint qu'UNE fois cette tâche terminée:
+    // si elle prend plus de temps que la durée de l'animation, celle-ci n'a
+    // jamais l'occasion de s'exécuter — son propre temps s'écoule "à vide"
+    // pendant que le thread est occupé. Le palier (pour calculer le gain)
+    // est capturé AVANT `runGeneration` (sinon `lastInfiniteResult` a déjà
+    // été écrasé par le niveau SUIVANT une fois `awardInfinitePoints` appelé
+    // après) mais le crédit + le déclenchement de l'animation n'arrivent
+    // QU'APRÈS: le plateau suivant est alors déjà construit, le thread est
+    // libre, l'animation démarre sur une frame propre et joue vraiment.
+    const wonTier = lastInfiniteResult?.measuredTier ?? lastInfiniteResult?.requestedTier ?? 1;
     await runGeneration({ intoBoard: true });
+    awardInfinitePoints(wonTier);
   } else if (mode === "community") {
     // Pas de "niveau suivant" prédéterminé en Communauté (contrairement à
     // Histoire/Infini) — voir plus bas: on revient au fil après la pause,
