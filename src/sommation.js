@@ -1468,13 +1468,23 @@ export function initSommation(pointsApi) {
     return n >= max ? "lvlMax" : `lvl${n}`;
   }
 
-  function cellHtml(r, c) {
+  function cellHtml(r, c, isSelected) {
     const cell = board[r][c];
     if (!cell) return "";
     if (cell.type === "gen") {
       const atMax = cell.level >= MAX_GEN_LEVEL;
       const badge = cell.color === "w" ? "" : `<span class="som-badge">${Math.round(genAccuracy(cell.level) * 100)}%</span>`;
-      return `${neuronSvg(cell.color, 22, atMax)}${badge}<span class="som-badge som-badge-lvl">${lvlLabel(cell.level, MAX_GEN_LEVEL)}</span>`;
+      // Retour utilisateur: "que le jeu, visuellement, parvienne à faire
+      // comprendre au joueur qu'il doit cliquer dessus pour générer des
+      // lumières et qu'elles coûtent une étoile à chaque fois" — coin
+      // libre (haut-droite, voir .som-badge/.som-badge-lvl ci-dessous pour
+      // les deux autres coins déjà pris) affichant "-1★" UNIQUEMENT une
+      // fois le générateur sélectionné, au moment précis où l'info est
+      // utile (avant, il n'y a rien à payer). Combiné à l'anneau qui
+      // pulse en boucle sur la case (voir sommation.css:
+      // .som-cell.som-selected), qui elle invite au SECOND tap.
+      const costBadge = isSelected ? `<span class="som-badge-cost">-${starLabel(genCost(cell.level))}</span>` : "";
+      return `${neuronSvg(cell.color, 22, atMax)}${badge}<span class="som-badge som-badge-lvl">${lvlLabel(cell.level, MAX_GEN_LEVEL)}</span>${costBadge}`;
     }
     if (cell.type === "light") {
       // Design "flagrant" (retour utilisateur) — voir lightSvg(): un pip
@@ -1557,7 +1567,7 @@ export function initSommation(pointsApi) {
         const isLightCell = !locked && cell?.type === "light";
         const tintStyle = isLightCell ? ` style="--som-light-tint:${colorFor(cell.ch, 0.12)}"` : "";
         const cls = `som-cell${locked ? " som-locked" : isEmpty ? " som-empty" : ""}${isSelected ? " som-selected" : ""}${isLightCell ? " som-light-cell" : ""}`;
-        html += `<div class="${cls}" data-r="${r}" data-c="${c}"${tintStyle}>${locked ? lockedCellHtml(`${r},${c}`) : cellHtml(r, c)}</div>`;
+        html += `<div class="${cls}" data-r="${r}" data-c="${c}"${tintStyle}>${locked ? lockedCellHtml(`${r},${c}`) : cellHtml(r, c, isSelected)}</div>`;
       }
     }
     gridEl.innerHTML = html;

@@ -20,18 +20,23 @@
 }
 
 /* Même coquille mobile que #view-community/#view-editor: hauteur bornée au
-   viewport + une seule zone qui défile (ici .som-board-wrap), pour que le
-   plateau ne pousse jamais le header hors écran sur petit format.
-   Round 25: la hauteur totale est réduite de la hauteur du bandeau
-   publicitaire (voir base.css: --ad-banner-height) — .som-board-wrap étant
-   le seul enfant flexible (flex:1) de cette colonne, c'est LUI qui absorbe
-   automatiquement la réduction, sans toucher au header/à la barre de
-   progression au-dessus. */
+   viewport (round 25: réduite de la hauteur du bandeau publicitaire, voir
+   base.css: --ad-banner-height).
+   Retour utilisateur: "les trois blocs (progression, jeu, infos) [...] pas
+   en space-between mais juste une marge pour les séparer, et l'ensemble
+   centré sur la hauteur" — .som-board-wrap n'est plus flex:1 (voir plus
+   bas): les 3 blocs (.som-progress-wrap/.som-board-wrap/#som-spawn-info)
+   gardent donc leur hauteur naturelle, séparés par `gap`, et
+   justify-content:center centre le GROUPE entier dans la hauteur
+   disponible plutôt que d'étirer le bloc du milieu pour repousser
+   progression/infos aux deux extrémités. */
 #view-sommation {
   height: calc(100vh - var(--ad-banner-height, 0px));
   overflow: hidden;
   margin-top: -24px;
   margin-bottom: -48px;
+  justify-content: center;
+  gap: 18px;
 }
 
 /* Barre de progression vers la prochaine récompense (badge) — remplace
@@ -42,7 +47,11 @@
    sommation.js: render(). */
 .som-progress-wrap {
   width: min(360px, 90vw);
-  margin: 6px auto 0;
+  /* La marge du haut/l'espacement avec les blocs suivants vient maintenant
+     du `gap` de #view-sommation (voir plus haut) — margin:auto ici ne sert
+     plus qu'au centrage horizontal (déjà redondant avec align-items:center
+     du parent, gardé pour rester explicite). */
+  margin: 0 auto;
   flex-shrink: 0;
 }
 
@@ -162,9 +171,13 @@
   flex-shrink: 0;
 }
 
+/* Retour utilisateur: "pas en space-between [...] l'ensemble des trois
+   blocs est centré sur la hauteur" — n'est plus flex:1 (ne s'étire plus
+   pour repousser .som-progress-wrap en haut et #som-spawn-info en bas, voir
+   #view-sommation ci-dessus qui gère maintenant l'espacement/le centrage) :
+   garde juste sa hauteur naturelle (celle de #sommation-grid). overflow:auto
+   conservé par sécurité si jamais le contenu dépassait la hauteur dispo. */
 .som-board-wrap {
-  flex: 1;
-  min-height: 0;
   width: 100%;
   display: flex;
   align-items: center;
@@ -233,9 +246,32 @@
   opacity: 0.6;
 }
 
+/* Retour utilisateur: "que le jeu, visuellement, parvienne à faire
+   comprendre au joueur qu'il doit cliquer dessus pour générer des lumières
+   [...] à chaque fois" — le contour épaissi seul (statique) invitait peu à
+   retaper la case ; un anneau qui pulse EN BOUCLE (même technique que
+   .som-fx-merge/som-pulse-merge dans sommation-fx.css, ici rendue infinie
+   plutôt qu'à usage unique) lit beaucoup plus clairement comme "actionnable
+   maintenant", dans le même langage visuel que le halo sonar déjà utilisé
+   ailleurs dans le jeu pour signaler une case active (voir board.css:
+   .cell-sonar-halo). Combiné à .som-badge-cost (voir sommation-fx.css) qui
+   affiche le prix directement sur la case pendant qu'elle pulse. */
 .som-cell.som-selected {
   border-color: var(--accent);
   border-width: 2px;
+  animation: som-selected-pulse 1.6s ease-out infinite;
+}
+
+@keyframes som-selected-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(110, 231, 255, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(110, 231, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(110, 231, 255, 0);
+  }
 }
 
 /* Case survolée pendant un glisser en cours — verte si le dépôt serait

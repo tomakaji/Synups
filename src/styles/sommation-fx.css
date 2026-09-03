@@ -130,6 +130,30 @@
   left: 3px;
 }
 
+/* Retour utilisateur: "que le jeu, visuellement, parvienne à faire
+   comprendre au joueur qu'il doit cliquer dessus pour générer des lumières
+   et qu'elles coûtent une étoile à chaque fois" — badge "-1★" posé dans le
+   SEUL coin encore libre de la case (haut-droite, voir .som-badge/
+   .som-badge-lvl ci-dessus pour les deux autres), affiché UNIQUEMENT une
+   fois le générateur sélectionné (voir sommation.js: cellHtml, isSelected)
+   — l'info n'a de sens qu'à ce moment précis. Même habillage pilule que
+   .profile-avatar-price (Mon profil) pour rester cohérent avec le seul
+   autre endroit du jeu où un coût en Étoiles est affiché sur une vignette. */
+.som-badge-cost {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  display: flex;
+  align-items: center;
+  min-width: 20px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #06222b;
+  font-size: 0.52rem;
+  font-weight: 800;
+}
+
 /* Rendu "flagrant" des lumières (retour utilisateur) — voir sommation.js:
    lightSvg(): un pip radial par rang, halo statique (drop-shadow inline)
    qui grandit avec le rang. Le "souffle" de vie ci-dessous n'anime que la
@@ -359,11 +383,12 @@
 
 .som-spawn-info {
   width: min(360px, 90vw);
-  /* Retour utilisateur: "un peu de marge en bas" — le bouton "Générer" qui
-     suivait directement a été retiré depuis (redondant, voir sommation.js),
-     ce panneau est maintenant le dernier élément de l'écran ; la marge
-     basse reste utile au-dessus de la zone sûre du bas d'écran. */
-  margin: 6px auto 16px;
+  /* Retour utilisateur: "l'ensemble des trois blocs est centré sur la
+     hauteur" — l'espacement avec .som-board-wrap au-dessus vient maintenant
+     du `gap` de #view-sommation (voir sommation.css), et ce panneau ne
+     traîne plus jusqu'au bas de l'écran (le groupe entier est centré,
+     pas collé en bas) : margin:auto ne sert plus qu'au centrage horizontal. */
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
