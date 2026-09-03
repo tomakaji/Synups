@@ -1567,7 +1567,11 @@ function loadInfiniteLevel(result) {
   // INFINITE_POINTS_BY_TIER), basé sur le palier RÉELLEMENT obtenu
   // (shownTier, mesuré si dispo) plutôt que sur le réglage demandé, pour
   // rester cohérent avec le gain effectif à la victoire de CE niveau.
-  infiniteGainEl.textContent = `+${INFINITE_POINTS_BY_TIER[shownTier] ?? 1}`;
+  // Round suivant (retour utilisateur): "+1★" plutôt qu'un simple "+1" sans
+  // unité — innerHTML (pas textContent) pour injecter l'icône étoile après
+  // le chiffre (voir mode-infinite.css: .infinite-points-row/.infinite-gain,
+  // désormais affiché À DROITE du solde plutôt qu'en dessous).
+  infiniteGainEl.innerHTML = `+${INFINITE_POINTS_BY_TIER[shownTier] ?? 1}${starIconSVG()}`;
   infiniteBadgeEl.classList.toggle("hidden", result.confirmedUnique);
   startBoard();
 }

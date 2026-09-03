@@ -62,9 +62,17 @@
    #infinite-points uniquement): .points-gain/.points-loss doivent aussi
    pouvoir animer #sommation-points (header Remember) et #menu-points-badge
    (carte du menu), qui ne portent PAS la classe .infinite-points (voir
-   main.js: renderPointsEverywhere, déclenchement centralisé sur les trois). */
+   main.js: renderPointsEverywhere, déclenchement centralisé sur les trois).
+   Round suivant (retour utilisateur: "je ne vois pas le badge pulser en
+   doré") — le simple changement de `color` sur un texte de 0.75rem passait
+   trop inaperçu, surtout en Infini où le gain tombe pendant que l'attention
+   du joueur est sur le plateau qui s'estompe (voir main.js: advanceAfterWin).
+   Ajoute un anneau lumineux (box-shadow qui s'étend puis s'efface), même
+   technique déjà éprouvée dans le jeu pour signaler un changement d'état sans
+   ambiguïté (voir sommation.css: @keyframes som-selected-pulse) — bien plus
+   difficile à manquer qu'un simple flash de couleur sur du petit texte. */
 .points-gain {
-  animation: points-pulse 0.5s ease-out;
+  animation: points-pulse 0.6s ease-out;
 }
 
 /* Miroir de .points-gain ci-dessus (mêmes timing/structure de keyframe) mais
@@ -72,26 +80,39 @@
    ailleurs pour les échecs, voir .som-fx-obj-fail) au lieu du doré du gain —
    signal opposé, immédiatement distinguable au premier coup d'œil. */
 .points-loss {
-  animation: points-pulse-loss 0.5s ease-out;
+  animation: points-pulse-loss 0.6s ease-out;
 }
 
-/* Retour utilisateur: "retire le bloc qui indique la difficulté et montre le
-   caractère infini [...] plutôt mettre un +1/+3/+5 en fonction de la
-   difficulté choisie en dessous du compte d'étoiles" — empile
-   #infinite-points et le nouveau #infinite-gain verticalement (au lieu du
-   ∞ · ★★☆ retiré, voir index.html/main.js: loadInfiniteLevel). */
-.infinite-points-stack {
+/* Retour utilisateur: "j'aime pas le +1 sous le badge, on devrait le mettre
+   à droite plutot, et ajouter le symbole etoile derriere: +1★" — remplace
+   l'empilement vertical (round précédent) par une rangée: #infinite-points
+   puis #infinite-gain juste à sa droite, alignés sur la même ligne de base
+   (nom de classe mis à jour en conséquence, .infinite-points-stack ->
+   .infinite-points-row, plus rien n'y est empilé). */
+.infinite-points-row {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
 }
 
+/* Retour utilisateur: "+1★" — le nombre est désormais suivi de l'icône
+   étoile (voir main.js: loadInfiniteLevel, starIconSVG()) plutôt qu'un
+   simple "+N" sans unité. .currency-icon (base.css) réserve un espace APRÈS
+   l'icône pour un texte qui la SUIT — ici c'est l'inverse (l'icône suit le
+   chiffre), donc annulé au profit d'un petit espace AVANT l'icône (voir plus
+   bas), même principe que .som-badge-cost (sommation-fx.css). */
 .infinite-gain {
+  display: inline-flex;
+  align-items: center;
   font-size: 0.62rem;
   font-weight: 600;
   color: var(--text-dim);
   letter-spacing: 0.02em;
+}
+
+.infinite-gain .currency-icon {
+  margin-right: 0;
+  margin-left: 2px;
 }
 
 /* Bouton de test Sommation ("+500 pts") — retour utilisateur: "un petit
@@ -118,33 +139,45 @@
   color: var(--accent);
 }
 
+/* rgba(255, 224, 138, x) = #ffe08a (le doré du gain ci-dessus) en rgb — même
+   principe que .som-pulse-merge (sommation-fx.css): un anneau qui s'étend
+   puis s'efface, largement plus visible qu'un simple changement de `color`
+   sur un texte aussi petit (retour utilisateur: "je ne vois pas le badge
+   pulser en doré"). */
 @keyframes points-pulse {
   0% {
     transform: scale(1);
     color: var(--accent);
+    box-shadow: 0 0 0 0 rgba(255, 224, 138, 0.65);
   }
   35% {
-    transform: scale(1.18);
+    transform: scale(1.22);
     color: #ffe08a;
+    box-shadow: 0 0 0 8px rgba(255, 224, 138, 0.35);
   }
   100% {
     transform: scale(1);
     color: var(--accent);
+    box-shadow: 0 0 0 14px rgba(255, 224, 138, 0);
   }
 }
 
+/* rgba(255, 107, 107, x) = var(--error) #ff6b6b en rgb. */
 @keyframes points-pulse-loss {
   0% {
     transform: scale(1);
     color: var(--accent);
+    box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.65);
   }
   35% {
     transform: scale(0.85);
     color: var(--error);
+    box-shadow: 0 0 0 8px rgba(255, 107, 107, 0.35);
   }
   100% {
     transform: scale(1);
     color: var(--accent);
+    box-shadow: 0 0 0 14px rgba(255, 107, 107, 0);
   }
 }
 
