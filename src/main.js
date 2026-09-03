@@ -1190,6 +1190,9 @@ const navInfiniteEl = document.getElementById("nav-infinite");
 const navDailyEl = document.getElementById("nav-daily");
 const infiniteLevelLabelEl = document.getElementById("infinite-level-label");
 const infiniteBadgeEl = document.getElementById("infinite-badge");
+// Retour utilisateur: "+1/+3/+5 en fonction de la difficulté choisie en
+// dessous du compte d'étoiles" — voir loadInfiniteLevel() plus bas.
+const infiniteGainEl = document.getElementById("infinite-gain");
 const btnInfiniteSettings = document.getElementById("btn-infinite-settings");
 const btnInfiniteNext = document.getElementById("btn-infinite-next");
 const infiniteFeaturesEl = document.getElementById("infinite-features");
@@ -1512,7 +1515,20 @@ function loadInfiniteLevel(result) {
   currentLevel = result.level;
   grid = new LightUpGrid(currentLevel);
   const shownTier = result.measuredTier ?? result.requestedTier;
-  infiniteLevelLabelEl.textContent = `∞ · ${starsLabel(shownTier)}`;
+  // Retour utilisateur: "retire le bloc qui indique la difficulté et montre
+  // le caractère infini" — #infinite-level-label ne réaffiche plus "∞ ·
+  // ★★☆" au repos (vidé ici pour effacer un éventuel texte transitoire
+  // "génération…" encore affiché, voir runGeneration ci-dessous, qui reste
+  // le SEUL cas où cet élément affiche encore du texte). Le palier reste
+  // visible via le nouveau +N sous le compte d'étoiles (voir
+  // infiniteGainEl ci-dessous) plutôt que via ce label.
+  infiniteLevelLabelEl.textContent = "";
+  // Retour utilisateur: "+1/+3/+5 en fonction de la difficulté choisie" —
+  // même barème que le vrai gain (voir awardInfinitePoints/
+  // INFINITE_POINTS_BY_TIER), basé sur le palier RÉELLEMENT obtenu
+  // (shownTier, mesuré si dispo) plutôt que sur le réglage demandé, pour
+  // rester cohérent avec le gain effectif à la victoire de CE niveau.
+  infiniteGainEl.textContent = `+${INFINITE_POINTS_BY_TIER[shownTier] ?? 1}`;
   infiniteBadgeEl.classList.toggle("hidden", result.confirmedUnique);
   startBoard();
 }

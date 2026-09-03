@@ -219,10 +219,22 @@
               <span id="level-name">1</span>
               <button id="btn-next" aria-label="Niveau suivant" title="Suivant (dev)">&rarr;</button>
             </span>
+            <!-- Retour utilisateur: "retire le bloc qui indique la
+                 difficulté et montre le caractère infini [...] plutôt
+                 mettre un +1/+3/+5 en fonction de la difficulté choisie en
+                 dessous du compte d'étoiles" — #infinite-level-label reste
+                 dans le DOM (encore utilisé comme texte transitoire
+                 "génération…", voir main.js: loadInfiniteLevel/runGeneration)
+                 mais n'affiche plus "∞ · ★★☆" au repos. #infinite-gain
+                 (nouveau) affiche "+N" sous #infinite-points (voir
+                 mode-infinite.css: .infinite-points-stack). -->
             <span id="nav-infinite" class="nav-group hidden">
-              <span id="infinite-level-label">∞</span>
+              <span id="infinite-level-label"></span>
               <span id="infinite-badge" class="infinite-badge hidden" title="Ce niveau n'a pas de solution unique confirmée — plusieurs façons de le résoudre existent peut-être">variante multiple</span>
-              <span id="infinite-points" class="infinite-points" title="Étoiles gagnées en mode Infini">0</span>
+              <span class="infinite-points-stack">
+                <span id="infinite-points" class="infinite-points" title="Étoiles gagnées en mode Infini">0</span>
+                <span id="infinite-gain" class="infinite-gain"></span>
+              </span>
             </span>
             <span id="nav-community" class="nav-group hidden">
               <span id="community-level-title" class="community-level-title"></span>
@@ -489,8 +501,8 @@
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
           <!-- Retour utilisateur (round 28): bouton d'action juste après
-               Retour plutôt que poussé à droite — voir community.css:
-               margin-left:auto déplacé sur .screen-title. -->
+               Retour plutôt que poussé à droite. Le titre "Communauté" qui
+               suit juste après reste aligné à gauche (voir community.css). -->
           <button id="btn-community-profile" class="icon-btn" aria-label="Mon profil" title="Mon profil">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="8" r="4"></circle>

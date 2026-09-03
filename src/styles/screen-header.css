@@ -44,9 +44,9 @@
      de l'écran (voir .global-mute-btn) — sans cette réserve, le contenu du
      header (surtout .header-actions, poussé à droite) passe dessous et s'y
      superpose sur les écrans étroits (retour utilisateur). */
-  padding-top: calc(18px + env(safe-area-inset-top, 0px));
+  padding-top: calc(13px + env(safe-area-inset-top, 0px));
   padding-right: 66px;
-  padding-bottom: 18px;
+  padding-bottom: 13px;
   padding-left: 20px;
   /* Fond opaque + léger liseré: le header recouvre maintenant le contenu
      qui défile en dessous (position:fixed), donc plus question de rester
@@ -56,6 +56,17 @@
      juste en dessous plutôt que de créer une bande visuellement décalée. */
   background: #171c2a;
   border-bottom: 1px solid var(--cell-border);
+}
+
+/* Retour utilisateur: "j'aimerais qu'ils soient plus petit en hauteur" —
+   variante compacte de .icon-btn (44px ailleurs, voir base.css) RÉSERVÉE au
+   header: 38px reste confortablement tapable tout en réduisant nettement la
+   hauteur globale (voir --screen-header-height ci-dessus, qui suit cette
+   même valeur). Scopée à .screen-header pour ne PAS affecter .icon-btn
+   ailleurs dans l'app (barre d'actions de jeu, boutons Options, etc.). */
+.screen-header .icon-btn {
+  width: 38px;
+  height: 38px;
 }
 
 /* Réserve, sur chaque écran secondaire (tous sauf l'écran titre, qui n'a pas

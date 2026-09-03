@@ -56,13 +56,11 @@
 }
 
 /* Round 28 (retour utilisateur): bouton "Mon profil" déplacé juste après
-   Retour (voir index.html) — c'est maintenant le TITRE qui est poussé à
-   droite, ciblé sur CET écran seulement (#view-community) pour ne pas
-   affecter les autres écrans qui réutilisent .screen-title (ex. Remember,
-   Options), dont le header n'a pas de bouton d'action à gauche. */
-#view-community .screen-title {
-  margin-left: auto;
-}
+   Retour (voir index.html). Round suivant (retour utilisateur: "les titres
+   [...] soient alignés à gauche plutôt qu'à droite") — le margin-left:auto
+   qui poussait "Communauté" à droite est retiré : le titre suit maintenant
+   le bouton "Mon profil" dans le flux normal du header, aligné à gauche
+   comme sur tous les autres écrans (Remember, Options, Éditeur...). */
 
 /* Round 26 (retour utilisateur): "Créer une grille" doit prendre 75% de la
    ligne — c'est maintenant le seul bouton de cette rangée ("Importer un

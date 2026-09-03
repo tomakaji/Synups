@@ -15,7 +15,20 @@
    directs de .screen — qui n'a lui-même aucun gap — donc rien ne les
    séparait. La marge inclut aussi de quoi absorber la lueur (box-shadow)
    des bannières de badge tier 3/4, qui déborde légèrement de leur boîte. */
+/* Retour utilisateur: "la partie 'Mes grilles publiées'/'Mes favoris' [...]
+   doit prendre toute la largeur de la section [...] titre à gauche et
+   contenu centré" — .options-section n'a par défaut AUCUNE largeur propre
+   (voir options.css), donc sa boîte se calcule par "shrink-to-fit" comme
+   enfant direct de .screen (align-items:center, voir navigation.css) : sans
+   largeur explicite ici, .options-label (texte court) et .community-feed/
+   .community-empty (width: min(560px, 100%), voir community.css) pouvaient
+   se retrouver avec des largeurs effectives différentes selon la largeur
+   d'écran disponible, donnant l'impression que le contenu est plus étroit/
+   centré que le titre. Même largeur EXPLICITE que .community-feed ici:
+   garantit que titre et contenu partagent TOUJOURS exactement la même
+   boîte, sans dépendre du calcul shrink-to-fit du navigateur. */
 #view-community-profile > .options-section {
+  width: min(560px, 100%);
   margin-top: 24px;
 }
 
