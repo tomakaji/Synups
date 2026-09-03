@@ -123,14 +123,55 @@
   border-color: #2a3040;
 }
 
+/* Rappel visuel du logo "Fusion RGB" (retour utilisateur: "un rappel du
+   logo au dessus du titre") — même PNG que le favicon/l'icône PWA (fond déjà
+   sombre, assorti à --bg, voir commentaire dans index.html), donc pas de
+   cadre carré dur: coins arrondis + léger halo pour le détacher proprement
+   du fond du menu plutôt que de compter sur une correspondance pixel-perfect
+   des deux dégradés. */
+.game-logo-mark {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  box-shadow: 0 0 22px -2px rgba(110, 231, 255, 0.35);
+}
+
+/* Retour utilisateur: "une petite animation cool en loop sur le titre" —
+   dégradé glissant reprenant les TROIS couleurs de lumière du jeu (voir
+   game/colors.js: PALETTE "100"/"010"/"001", mêmes rgb ici pour rester
+   cohérent avec le logo/les rayons plutôt qu'une couleur inventée), balayé
+   en boucle sur le texte via background-clip. -webkit-text-fill-color
+   nécessaire en plus de `color: transparent` pour Safari/WKWebView (app
+   iOS). Respecte prefers-reduced-motion (fige sur le dégradé, sans balayage). */
 .game-logo {
   letter-spacing: 0.3em;
   font-weight: 300;
   font-size: 2rem;
   margin: 0;
   text-transform: uppercase;
-  color: var(--accent);
-  transition: color 0.3s;
+  background: linear-gradient(90deg, #ff5d6c, #59e39d, #5da9ff, #ff5d6c);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: game-logo-shimmer 7s linear infinite;
+}
+
+@keyframes game-logo-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 300% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-logo {
+    animation: none;
+    background-position: 0% 50%;
+  }
 }
 
 .game-tagline {
