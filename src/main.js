@@ -372,16 +372,43 @@ const sommationPointsEl = document.getElementById("sommation-points");
 // que ce rendu initial (chargement de page) n'anime rien.
 let lastRenderedPoints = infinitePoints;
 
+// Durée des keyframes points-pulse/points-pulse-loss (voir
+// mode-infinite.css) — dupliquée ici UNIQUEMENT pour programmer le nettoyage
+// ci-dessous, jamais pour piloter l'animation elle-même (toujours définie en
+// CSS pur).
+const POINTS_ANIM_MS = 600;
+
 // Retire puis rajoute la classe d'animation pour pouvoir la relancer même si
 // une précédente est encore en cours (un simple ajout ne rejouerait pas le
 // keyframe si la classe est déjà présente) — le reflow forcé entre les deux
 // garantit que le navigateur voit bien les deux mutations comme séparées
 // plutôt que de les fusionner dans la même frame.
+//
+// Bug corrigé (retour utilisateur: "si je vais dans les paramètres puis
+// reviens à la grille sans rien changer [...] on voit l'animation de gain
+// d'étoiles [rejouée], seulement après avoir déjà gagné une grille") : la
+// classe n'était JAMAIS retirée une fois le keyframe terminé — sans effet
+// tant que l'élément restait affiché, mais un `.screen` masqué
+// (`display:none`, voir navigation.css) puis réaffiché (Réglages -> Retour,
+// ou menu -> Infini) retire puis réinsère l'élément du rendu, ce qui REJOUE
+// l'animation CSS depuis le début même si aucun JS ne l'a redéclenchée —
+// donnant l'impression d'un second gain qui n'a jamais eu lieu. Nettoyée ici
+// via un timer (pas un `animationend`: ne se déclencherait pas si
+// l'animation est interrompue en plein vol par ce même passage à
+// `display:none`, laissant la classe traîner malgré tout) — le timer
+// précédent est annulé avant d'en programmer un nouveau pour qu'un
+// redéclenchement rapproché (gain suivi de près par une dépense) ne coupe
+// jamais la nouvelle animation en cours de route.
 function triggerPointsAnim(el, cls) {
   if (!el) return;
-  el.classList.remove(cls);
+  if (el._pointsAnimTimeout != null) clearTimeout(el._pointsAnimTimeout);
+  el.classList.remove("points-gain", "points-loss");
   void el.offsetWidth;
   el.classList.add(cls);
+  el._pointsAnimTimeout = setTimeout(() => {
+    el.classList.remove(cls);
+    el._pointsAnimTimeout = null;
+  }, POINTS_ANIM_MS);
 }
 
 function renderPointsEverywhere() {
