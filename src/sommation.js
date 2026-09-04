@@ -110,6 +110,16 @@ const MIN_LIGHT_TIER_FOR_FRAGMENT = 2;
 // utilisé pour interpoler toutes les formules de probabilité ci-dessous.
 const MAX_GEN_LEVEL = 10;
 
+// RewardAdd (retour utilisateur): proposition occasionnelle d'un générateur
+// gratuit contre une pub — voir maybeTriggerGenOffer()/tryPlacePendingGenOffer()
+// plus bas. Probabilité de base à CHAQUE génération de lumière (jamais sur un
+// morceau), boostée si aucune proposition n'a été tirée depuis longtemps
+// (voir REWARDADD_BOOST_AFTER_MS), pour ne jamais en priver un joueur trop
+// longtemps sur une session étendue.
+const REWARDADD_BASE_CHANCE = 0.01;
+const REWARDADD_BOOST_CHANCE = 0.07;
+const REWARDADD_BOOST_AFTER_MS = 8 * 60 * 60 * 1000;
+
 // Coût en points d'une génération — affiché sur le bouton "Générer" (retour
 // utilisateur: "indiquer le prix en points"). Retour utilisateur round 8:
 // "le coût pour utiliser un générateur sera de 1 point" — coût FIXE, quel
@@ -659,6 +669,16 @@ export function initSommation(pointsApi) {
   const adModalEl = document.getElementById("som-ad-modal");
   const adWatchBtn = document.getElementById("btn-som-ad-watch");
   const adStatusEl = document.getElementById("som-ad-status");
+  // RewardAdd (retour utilisateur): modale "accepter/refuser" d'une
+  // proposition de générateur — voir maybeTriggerGenOffer()/
+  // openGenOfferModal() plus bas. Accepter EXIGE une vraie rewarded ad
+  // (retour utilisateur), même mécanisme que adModalEl ci-dessus.
+  const genOfferModalEl = document.getElementById("som-genoffer-modal");
+  const genOfferAcceptBtn = document.getElementById("btn-som-genoffer-accept");
+  const genOfferRejectBtn = document.getElementById("btn-som-genoffer-reject");
+  const genOfferStatusEl = document.getElementById("som-genoffer-status");
+  const genOfferTextEl = document.getElementById("som-genoffer-text");
+  let openGenOfferCoord = null; // {r, c} de la proposition actuellement affichée dans la modale, ou null
   // Modale de confirmation "recycler ce générateur" — retour utilisateur
   // round 9: "si on met un générateur dans l'objectif pour le recycler,
   // j'aimerais que tu préviennes avec une modale de confirmation... pour
@@ -727,6 +747,22 @@ export function initSommation(pointsApi) {
   // dans l'ordre"), plutôt que l'ancien "tout ou rien" atomique du round 6.
   let lockFill = savedBoard?.lockFill ?? {};
 
+  // RewardAdd: proposition en attente d'une case libre pour être VRAIMENT
+  // posée sur le plateau (voir tryPlacePendingGenOffer()) — {color, level} |
+  // null. Une fois posée, l'état vit directement dans board[r][c] (type
+  // "genOffer") comme n'importe quelle autre case ; ceci ne sert QUE pendant
+  // la fenêtre où aucune case n'était libre au moment du tirage (retour
+  // utilisateur: "si il n'y a pas de case vide [...] on attend qu'une case
+  // se libère").
+  let pendingGenOffer = savedBoard?.pendingGenOffer ?? null;
+  // Horodatage du dernier tirage RÉUSSI (proposition obtenue, posée ou pas
+  // encore) — sert à faire monter la probabilité (retour utilisateur: "si le
+  // joueur n'a pas eu de proposition depuis longtemps (8h), alors on monte
+  // cette probabilité à 7% tant qu'elle n'a pas été déclenchée"). `null`
+  // (jamais tirée) est traité comme "il y a longtemps" ci-dessous, pour ne
+  // jamais désavantager une toute nouvelle partie.
+  let lastGenOfferAt = savedBoard?.lastGenOfferAt ?? null;
+
   function isLocked(r, c) {
     return lockedCells.has(`${r},${c}`);
   }
@@ -785,6 +821,67 @@ export function initSommation(pointsApi) {
       }
     }
     return null;
+  }
+
+  // ---------- RewardAdd (proposition occasionnelle d'un générateur) ----------
+
+  function hasActiveGenOfferOnBoard() {
+    return board.some((row) => row.some((cell) => cell?.type === "genOffer"));
+  }
+
+  /** Meilleur niveau, PARMI les générateurs de cette couleur possédés
+   * actuellement sur le plateau (0 si aucun) — voir maybeTriggerGenOffer(). */
+  function bestGeneratorLevel(color) {
+    let best = 0;
+    for (const row of board) {
+      for (const cell of row) {
+        if (cell?.type === "gen" && cell.color === color && cell.level > best) best = cell.level;
+      }
+    }
+    return best;
+  }
+
+  /** Tire une couleur PARMI UNLOCK_COLORS (blanc/rouge/vert/bleu, retour
+   * utilisateur) au hasard, au niveau (meilleur générateur possédé de cette
+   * couleur + 1) — si ce niveau dépasserait MAX_GEN_LEVEL, retour
+   * utilisateur confirmé: on CHANGE DE COULEUR plutôt que d'annuler la
+   * proposition. `null` uniquement si les 4 couleurs sont déjà au plafond
+   * (cas limite fin de partie). */
+  function rollGenOfferColorAndLevel() {
+    const order = [...UNLOCK_COLORS].sort(() => Math.random() - 0.5);
+    for (const color of order) {
+      const best = bestGeneratorLevel(color);
+      if (best < MAX_GEN_LEVEL) return { color, level: best + 1 };
+    }
+    return null;
+  }
+
+  /** Place la proposition en attente dès qu'une case se libère (retour
+   * utilisateur) — appelée en tête de render(), qui est déjà le point de
+   * passage unique après CHAQUE mutation du plateau (voir son commentaire
+   * plus bas), donc toute case qui se libère est détectée au rendu suivant
+   * sans avoir à instrumenter chaque handler individuellement. */
+  function tryPlacePendingGenOffer() {
+    if (!pendingGenOffer || hasActiveGenOfferOnBoard()) return;
+    const spot = findEmptyCell();
+    if (!spot) return;
+    board[spot.r][spot.c] = { type: "genOffer", color: pendingGenOffer.color, level: pendingGenOffer.level };
+    pendingGenOffer = null;
+  }
+
+  /** Tirage RewardAdd — retour utilisateur: appelé à CHAQUE génération de
+   * lumière (jamais sur un morceau, voir spawnFromSelected), jamais si une
+   * proposition est déjà active ou en attente (une seule à la fois). */
+  function maybeTriggerGenOffer() {
+    if (pendingGenOffer || hasActiveGenOfferOnBoard()) return;
+    const longOverdue = lastGenOfferAt == null || Date.now() - lastGenOfferAt > REWARDADD_BOOST_AFTER_MS;
+    const chance = longOverdue ? REWARDADD_BOOST_CHANCE : REWARDADD_BASE_CHANCE;
+    if (Math.random() >= chance) return;
+    const draw = rollGenOfferColorAndLevel();
+    if (!draw) return; // les 4 couleurs sont au plafond — retour utilisateur: pas de proposition dans ce cas
+    lastGenOfferAt = Date.now();
+    pendingGenOffer = draw;
+    tryPlacePendingGenOffer();
   }
 
   /** Nourrir la case verrouillée ACTIVE — retour utilisateur round 7: "les 4
@@ -940,6 +1037,9 @@ export function initSommation(pointsApi) {
     } else {
       const tier = rollLightTier(gen.level);
       board[spot.r][spot.c] = { type: "light", ch: outcome.ch, tier };
+      // RewardAdd (retour utilisateur): "à chaque génération de lumiere" —
+      // jamais sur un morceau (branche ci-dessus), voir maybeTriggerGenOffer().
+      maybeTriggerGenOffer();
     }
     // Fx "spawn" (pop-in depuis rien) plutôt que "merge" (halo sur un
     // élément déjà là) — voir style.css: .som-fx-spawn. Son NEUF, court et
@@ -968,6 +1068,29 @@ export function initSommation(pointsApi) {
   }
   function closeAdModal() {
     adModalEl?.classList.add("hidden");
+  }
+
+  function closeGenOfferModal() {
+    genOfferModalEl?.classList.add("hidden");
+    openGenOfferCoord = null;
+  }
+
+  function openGenOfferModal(r, c) {
+    const cell = board[r]?.[c];
+    if (!cell || cell.type !== "genOffer") return;
+    openGenOfferCoord = { r, c };
+    if (genOfferStatusEl) {
+      genOfferStatusEl.textContent = "";
+      genOfferStatusEl.classList.add("hidden");
+    }
+    if (genOfferAcceptBtn) {
+      genOfferAcceptBtn.disabled = false;
+      genOfferAcceptBtn.textContent = "Regarder la pub";
+    }
+    if (genOfferTextEl) {
+      genOfferTextEl.textContent = `Un générateur ${COLOR_NAMES[cell.color]} niveau ${cell.level} t'est proposé. Regarde une pub pour l'obtenir, ou refuse pour libérer la case.`;
+    }
+    genOfferModalEl?.classList.remove("hidden");
   }
 
   function doGeneratorMerge(aCell, bCell) {
@@ -1517,6 +1640,14 @@ export function initSommation(pointsApi) {
       return `${lightSvg(cell.ch, cell.tier)}<span class="som-badge som-badge-lvl">${lvlLabel(cell.tier, MAX_LIGHT_TIER)}</span>`;
     }
     if (cell.type === "frag") return fragmentSvg();
+    if (cell.type === "genOffer") {
+      // RewardAdd (retour utilisateur): affiche la vraie couleur/niveau
+      // proposés (comme un générateur normal, voir la branche "gen"
+      // ci-dessus) — seul l'anneau qui pulse (voir sommation.css:
+      // .som-genoffer-cell) et le tap -> modale (voir render() plus bas)
+      // distinguent visuellement cette case d'un générateur déjà possédé.
+      return `${neuronSvg(cell.color, 22)}<span class="som-badge som-badge-lvl">${lvlLabel(cell.level, MAX_GEN_LEVEL)}</span>`;
+    }
     return "";
   }
 
@@ -1573,6 +1704,11 @@ export function initSommation(pointsApi) {
   }
 
   function render() {
+    // RewardAdd: pose la proposition en attente dès qu'une case est libre —
+    // voir tryPlacePendingGenOffer(). En tête de render() car render() est
+    // déjà le point de passage unique après CHAQUE mutation du plateau
+    // (voir le commentaire de writeBoardState plus bas).
+    tryPlacePendingGenOffer();
     let html = objectiveHtml();
 
     for (let r = 0; r < SIZE; r++) {
@@ -1590,8 +1726,9 @@ export function initSommation(pointsApi) {
         // pour que ces dernières restent visibles par-dessus pendant un
         // survol/une animation de glisser).
         const isLightCell = !locked && cell?.type === "light";
+        const isGenOfferCell = !locked && cell?.type === "genOffer";
         const tintStyle = isLightCell ? ` style="--som-light-tint:${colorFor(cell.ch, 0.12)}"` : "";
-        const cls = `som-cell${locked ? " som-locked" : isEmpty ? " som-empty" : ""}${isSelected ? " som-selected" : ""}${isLightCell ? " som-light-cell" : ""}`;
+        const cls = `som-cell${locked ? " som-locked" : isEmpty ? " som-empty" : ""}${isSelected ? " som-selected" : ""}${isLightCell ? " som-light-cell" : ""}${isGenOfferCell ? " som-genoffer-cell" : ""}`;
         html += `<div class="${cls}" data-r="${r}" data-c="${c}"${tintStyle}>${locked ? lockedCellHtml(`${r},${c}`) : cellHtml(r, c, isSelected)}</div>`;
       }
     }
@@ -1606,6 +1743,17 @@ export function initSommation(pointsApi) {
       // écouteur dédié ici (même principe que la case objectif).
       if (isLocked(r, c)) return;
       if (!board[r][c]) return; // case vide: pas de source de glisser (mais reste une cible valide)
+      // RewardAdd: une proposition n'est ni déplaçable ni fusionnable (retour
+      // utilisateur: "cliquer dessus pour avoir une modal") — un simple tap
+      // l'ouvre directement, en dehors du système de glisser-déposer utilisé
+      // par le reste du plateau.
+      if (board[r][c].type === "genOffer") {
+        el.addEventListener("pointerdown", (e) => {
+          e.preventDefault();
+          openGenOfferModal(r, c);
+        });
+        return;
+      }
       el.addEventListener("pointerdown", (e) => startDrag(e, r, c));
     });
 
@@ -1679,7 +1827,16 @@ export function initSommation(pointsApi) {
     // instrumenter chaque handler individuellement. `selectedGen` est repris
     // APRÈS le bloc ci-dessus pour persister sa valeur déjà auto-corrigée
     // (remise à null si elle ne pointait plus vers un générateur valide).
-    writeBoardState({ board, lockedCells: Array.from(lockedCells), lockFill, objectiveIndex, objectiveState, selectedGen });
+    writeBoardState({
+      board,
+      lockedCells: Array.from(lockedCells),
+      lockFill,
+      objectiveIndex,
+      objectiveState,
+      selectedGen,
+      pendingGenOffer,
+      lastGenOfferAt,
+    });
   }
 
   if (debugPointsBtn) {
@@ -1715,6 +1872,52 @@ export function initSommation(pointsApi) {
           : "Pub fermée avant la fin — aucun point crédité.",
         true
       );
+    };
+  }
+
+  document.querySelectorAll("[data-som-genoffer-modal-close]").forEach((el) => (el.onclick = closeGenOfferModal));
+  if (genOfferAcceptBtn) {
+    genOfferAcceptBtn.onclick = async () => {
+      if (!openGenOfferCoord) return;
+      const { r, c } = openGenOfferCoord;
+      genOfferAcceptBtn.disabled = true;
+      genOfferAcceptBtn.textContent = "Chargement…";
+      if (genOfferStatusEl) {
+        genOfferStatusEl.textContent = "";
+        genOfferStatusEl.classList.add("hidden");
+      }
+      const { earned, reason } = await showRewardedAd();
+      const cell = board[r]?.[c];
+      if (earned && cell?.type === "genOffer") {
+        board[r][c] = { type: "gen", color: cell.color, level: cell.level };
+        trackEvent("rewarded_ad_completed", { placement: "remember_genoffer" });
+        playChargeFull();
+        closeGenOfferModal();
+        render();
+        return;
+      }
+      genOfferAcceptBtn.disabled = false;
+      genOfferAcceptBtn.textContent = "Regarder la pub";
+      if (genOfferStatusEl) {
+        genOfferStatusEl.textContent =
+          reason === "unavailable"
+            ? "Pas de pub disponible pour l'instant — réessaie dans un instant."
+            : "Pub fermée avant la fin — le générateur reste proposé, retente quand tu veux.";
+        genOfferStatusEl.classList.remove("hidden");
+      }
+    };
+  }
+  if (genOfferRejectBtn) {
+    genOfferRejectBtn.onclick = () => {
+      if (!openGenOfferCoord) return;
+      const { r, c } = openGenOfferCoord;
+      const cell = board[r]?.[c];
+      if (cell?.type === "genOffer") {
+        board[r][c] = null;
+        playChargeEmptied();
+      }
+      closeGenOfferModal();
+      render();
     };
   }
 

@@ -1015,6 +1015,27 @@
            faux mouvement" — voir sommation.js: onDragEnd(). Seulement pour
            un GÉNÉRATEUR (les morceaux/lumières recyclés restent sans
            confirmation, geste peu coûteux). -->
+      <!-- RewardAdd (retour utilisateur): modale "accepter/refuser" d'une
+           proposition de générateur (case "genOffer" du plateau) — voir
+           sommation.js: openGenOfferModal()/maybeTriggerGenOffer(). Accepter
+           exige une vraie rewarded ad, même mécanisme que som-ad-modal
+           ci-dessus. -->
+      <div id="som-genoffer-modal" class="modal hidden">
+        <div class="modal-backdrop" data-som-genoffer-modal-close></div>
+        <div class="modal-card">
+          <button type="button" class="modal-close-x" data-som-genoffer-modal-close aria-label="Fermer">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+          <h3 class="modal-title">Générateur proposé</h3>
+          <p class="modal-text" id="som-genoffer-text"></p>
+          <p id="som-genoffer-status" class="som-ad-status hidden"></p>
+          <div class="modal-actions">
+            <button id="btn-som-genoffer-reject" class="options-btn">Refuser</button>
+            <button id="btn-som-genoffer-accept" class="options-btn options-btn--accent">Regarder la pub</button>
+          </div>
+        </div>
+      </div>
+
       <div id="som-recycle-confirm-modal" class="modal hidden">
         <div class="modal-backdrop" data-som-recycle-modal-close></div>
         <div class="modal-card">

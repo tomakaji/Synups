@@ -148,8 +148,21 @@ export const AVATARS = [
   // débloquer des avatars et des badges") — lot DÉDIÉ aux étoiles, séparé du
   // lot "purchase" ci-dessus (points) : voir unlock.type "star" dans
   // isAvatarUnlocked/avatarUnlockLabel plus bas, et dailyChallenge.js pour la
-  // monnaie elle-même (1 étoile/jour). Coûts choisis pour ~1 semaine puis
-  // ~1 mois de Défi Quotidien complété.
+  // monnaie elle-même (1 étoile/jour).
+  //
+  // Retour utilisateur (round suivant) : "les 5 badges achetables avec les
+  // éclairs seront à ces prix : 3, 5, 10, 20, 50" — Comète/Supernova
+  // (5/20) existaient déjà, complété ici par 3 nouveaux badges (3/10/50)
+  // dans la MÊME veine céleste/énergie plutôt qu'un thème différent, pour
+  // que le lot des 5 reste visuellement cohérent (dégradé de rareté du
+  // météore modeste au corps céleste le plus spectaculaire) — ORDONNÉS par
+  // coût croissant dans le tableau, comme le reste de la liste.
+  {
+    id: "meteor",
+    label: "Météore",
+    unlock: { type: "star", cost: 3 },
+    svg: '<svg viewBox="0 0 100 100"><path d="M78,22 L28,72" stroke="#ff7a45" stroke-width="8" stroke-linecap="round" opacity="0.5"/><path d="M74,26 L40,60" stroke="#ffb98a" stroke-width="4" stroke-linecap="round" opacity="0.85"/><circle cx="26" cy="74" r="15" fill="#c9563a"/><circle cx="21" cy="69" r="3" fill="#8f3722"/><circle cx="31" cy="80" r="2.5" fill="#8f3722"/></svg>',
+  },
   {
     id: "comet",
     label: "Comète",
@@ -157,10 +170,22 @@ export const AVATARS = [
     svg: '<svg viewBox="0 0 100 100"><circle cx="68" cy="32" r="14" fill="#ffd76e"/><path d="M58,42 L18,86" stroke="#ffd76e" stroke-width="7" stroke-linecap="round" opacity="0.55"/><path d="M62,38 L30,78" stroke="#ffe9b0" stroke-width="4" stroke-linecap="round" opacity="0.8"/></svg>',
   },
   {
+    id: "aurora",
+    label: "Aurore",
+    unlock: { type: "star", cost: 10 },
+    svg: '<svg viewBox="0 0 100 100"><path d="M8,70 Q30,40 50,58 T92,42" fill="none" stroke="#59e39d" stroke-width="8" stroke-linecap="round" opacity="0.75"/><path d="M8,58 Q30,28 50,46 T92,30" fill="none" stroke="#5da9ff" stroke-width="7" stroke-linecap="round" opacity="0.7"/><path d="M8,46 Q30,16 50,34 T92,18" fill="none" stroke="#c98fe0" stroke-width="6" stroke-linecap="round" opacity="0.65"/></svg>',
+  },
+  {
     id: "nova",
     label: "Supernova",
     unlock: { type: "star", cost: 20 },
     svg: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="14" fill="#ffe9b0"/><g stroke="#c98fe0" stroke-width="6" stroke-linecap="round"><line x1="50" y1="8" x2="50" y2="26"/><line x1="50" y1="74" x2="50" y2="92"/><line x1="8" y1="50" x2="26" y2="50"/><line x1="74" y1="50" x2="92" y2="50"/><line x1="21" y1="21" x2="34" y2="34"/><line x1="66" y1="66" x2="79" y2="79"/><line x1="79" y1="21" x2="66" y2="34"/><line x1="34" y1="66" x2="21" y2="79"/></g></svg>',
+  },
+  {
+    id: "eclipse",
+    label: "Éclipse",
+    unlock: { type: "star", cost: 50 },
+    svg: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="#ffd76e" stroke-width="6"/><g stroke="#ffd76e" stroke-width="4" stroke-linecap="round"><line x1="50" y1="2" x2="50" y2="12"/><line x1="50" y1="88" x2="50" y2="98"/><line x1="2" y1="50" x2="12" y2="50"/><line x1="88" y1="50" x2="98" y2="50"/><line x1="15" y1="15" x2="22" y2="22"/><line x1="78" y1="78" x2="85" y2="85"/><line x1="85" y1="15" x2="78" y2="22"/><line x1="22" y1="78" x2="15" y2="85"/></g><circle cx="46" cy="50" r="32" fill="#0a0c10"/></svg>',
   },
 ];
 

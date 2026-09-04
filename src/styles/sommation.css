@@ -274,6 +274,30 @@
   }
 }
 
+/* RewardAdd (retour utilisateur): proposition de générateur occasionnelle,
+   voir sommation.js: maybeTriggerGenOffer()/cellHtml(). Même technique que
+   .som-selected ci-dessus (anneau qui pulse en boucle) mais teintée doré/
+   ambre plutôt que l'accent cyan, pour rester distincte d'une simple
+   sélection ET évoquer "récompense" (même famille chromatique que
+   .som-badge-cost et les badges "star" — voir community-store.js). */
+.som-cell.som-genoffer-cell {
+  border-color: #ffd76e;
+  border-width: 2px;
+  animation: som-genoffer-pulse 1.6s ease-out infinite;
+}
+
+@keyframes som-genoffer-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 215, 110, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 215, 110, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 215, 110, 0);
+  }
+}
+
 /* Case survolée pendant un glisser en cours — verte si le dépôt serait
    valide, rouge sinon (retour utilisateur: "au survol, pour prévisualiser
    ce qui va se passer") — voir sommation.js: onDragMove/predictDrop(). */
