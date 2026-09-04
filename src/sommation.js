@@ -1477,6 +1477,24 @@ export function initSommation(pointsApi) {
   function handleGeneratorTap(r, c) {
     const cell = board[r]?.[c];
     if (cell?.type !== "gen") return;
+    // Retour utilisateur: "si on essaye de générer avec 0 étoile, alors on
+    // déclenche la modale" — vérifié ICI, AVANT toute logique de sélection
+    // (premier tap = sélection, deuxième = confirmation), pour que ça reste
+    // vrai QUEL QUE SOIT l'état de `selectedGen` au moment du tap (y
+    // compris une valeur restaurée d'une ANCIENNE sauvegarde qui ne
+    // correspondrait plus exactement à cette case précise — retour
+    // utilisateur: "il faut que ce soit compatible avec n'importe quelle
+    // sauvegarde interprétable"). Un tap sur UN générateur SANS assez
+    // d'étoiles propose donc directement la pub, dès le premier tap,
+    // plutôt que de dépendre d'un double-tap qui pourrait ne jamais
+    // "matcher" selon l'état hérité.
+    const cost = genCost(cell.level);
+    if (pointsApi.getPoints() < cost) {
+      selectedGen = { r, c };
+      openAdModal();
+      render();
+      return;
+    }
     if (selectedGen && selectedGen.r === r && selectedGen.c === c) {
       // Round 24: hapticLight() ici — ce second tap déclenche l'action en
       // passant par une case (<div>), jamais un <button> (le bouton
