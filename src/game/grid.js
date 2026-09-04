@@ -1019,6 +1019,13 @@ export class LightUpGrid {
 
         const appliedColors = PRISM_DIRECTIONS.map((_, i) => PRISM_COLOR_SEQUENCE[(appliedRotation + i) % 4]);
         cell._prismColors = PRISM_DIRECTIONS.map((_, i) => PRISM_COLOR_SEQUENCE[(displayRotation + i) % 4]);
+        // Diagnostic pour generator.js (voir prismGenuinelyUsed) — la seule
+        // couleur RÉELLEMENT appliquée (par opposition à `_prismColors`, qui
+        // est la rotation AFFICHÉE, en avance d'un cran) sur chaque
+        // direction effectivement en portée d'une lumière, `null` sinon.
+        // Jamais lu ailleurs qu'en génération (render.js n'utilise que
+        // `_prismColors`/`_prismAdjacentCount`, voir plus haut).
+        cell._prismAppliedColors = rangeHits.map((hit, i) => (hit ? appliedColors[i] : null));
 
         rangeHits.forEach((hit, i) => {
           if (!hit) return;

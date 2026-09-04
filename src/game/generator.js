@@ -153,7 +153,18 @@ export const FEATURES = {
   // (implemented: false, aucun niveau seed/histoire ne s'en sert), sans
   // impact sur le solveur/générateur qui n'en avaient de toute façon aucune
   // logique réelle.
-  prism: { label: "Prisme", weight: 3, implemented: false, requires: "color" },
+  // Câblé au générateur (placePrisms/prismGenuinelyUsed/pruneUnusedPrisms,
+  // voir leurs commentaires) — même politique que Miroir/Pyra: `requires:
+  // "color"` reste nécessaire car un prisme colore les lumières à sa portée
+  // (voir grid.js) mais ça n'a d'effet observable QUE si une cible couleur
+  // existe pour distinguer les solutions selon cette teinte — sans Couleur,
+  // aucune cible n'existe jamais, un prisme resterait donc toujours
+  // purement décoratif, exactement comme Miroir. `pickProbability` élevée
+  // pour la même raison que Miroir/Pyra (voir leurs commentaires) :
+  // maximiser la chance d'être piochée sur LE MÊME essai qui obtient déjà
+  // Couleur, seule façon gratuite d'augmenter sa fréquence sans budget de
+  // recherche dédié.
+  prism: { label: "Prisme", weight: 3, implemented: true, requires: "color", pickProbability: 0.92 },
   // `requires: "color"` (retour utilisateur : "ce qu'on veut c'est un
   // dilemme de COULEUR sur le Pyra", pas juste un dilemme sur son propre
   // compte — voir `pruneUnnecessaryPyra`, dont le SEUL critère de survie
@@ -523,6 +534,18 @@ const MIRROR_BUDGET_MULTIPLIER = 1;
 // réelles, comme MIRROR_DENSITY/PYRA_MAX_CANDIDATES avant lui.
 const MIRROR_NEURON_COUNT = 1;
 
+// Prisme : nombre de prismes posés PAR ESSAI quand la feature est piochée
+// (voir FEATURES.prism) — même compte fixe prudent que MIRROR_NEURON_COUNT
+// plutôt qu'une densité par case: un prisme scanne dans ses 4 directions
+// fixes jusqu'au premier obstacle (voir grid.js `_scanRangeForLight`), donc
+// en poser plusieurs multiplie le risque qu'une portée tombe hors-grille ou
+// dégénère la forme sans rien gagner en pratique (repairToUnique/
+// stripToTargetTier retentent de toute façon proprement avec un nouveau
+// seed sur toute forme dégénérée, voir generateLevel) — juste un facteur de
+// taux d'essais gâchés, pas de correction. À ajuster plus tard une fois du
+// recul pris sur des parties réelles, comme MIRROR_NEURON_COUNT avant lui.
+const PRISM_COUNT = 1;
+
 // Budget global d'une génération (Phase F du doc), CLÉS = ÉTOILES affichées
 // (voir SOLVER_TIER_FOR_STARS) : le premier des deux atteint arrête la
 // boucle et on sert le meilleur candidat rencontré. Cette boucle est un
@@ -656,7 +679,7 @@ function pickFeatureSubset(rand, enabledKeys, budget) {
  * lors de la résolution") est elle aussi vérifiée a posteriori dans
  * `tryGenerate` (voir `mirrorNeuronGenuinelyUsed`).
  */
-function buildInitialLayout({ rows, cols, clueDensity, cornerVoid, mirrorDensity, mirrorNeuronCount, rand }) {
+function buildInitialLayout({ rows, cols, clueDensity, cornerVoid, mirrorDensity, mirrorNeuronCount, prismCount, rand }) {
   const layout = [];
   for (let r = 0; r < rows; r++) {
     const row = [];
@@ -678,6 +701,13 @@ function buildInitialLayout({ rows, cols, clueDensity, cornerVoid, mirrorDensity
   // pour que ces deux passes traitent déjà les neurones comme des obstacles
   // fixes (voir isFixedObstacleToken) au moment de choisir quoi rouvrir.
   if (mirrorNeuronCount > 0) placeMirrorNeurons(layout, rows, cols, mirrorNeuronCount, rand);
+  // Voir placePrisms : posé après Miroir/Neurone miroir (aucun des trois ne
+  // touche que des cases encore "." donc l'ordre entre eux n'a pas
+  // d'importance en soi) mais AVANT relaxIsolatedCells/mergeSmallIslands,
+  // pour la même raison que le Neurone miroir juste au-dessus — ces deux
+  // passes doivent déjà traiter les prismes comme des obstacles fixes (voir
+  // isFixedObstacleToken) au moment de choisir quoi rouvrir.
+  if (prismCount > 0) placePrisms(layout, rows, cols, prismCount, rand);
   // Voir relaxIsolatedCells : le remplissage ci-dessus tire chaque case
   // indépendamment, ce qui peut par pur hasard entourer une case vide sur
   // ses 4 côtés — cette passe répare les cas vraiment inutiles et plafonne
@@ -868,6 +898,46 @@ function placeMirrorNeurons(layout, rows, cols, count, rand) {
   for (let i = 0; i < Math.min(count, pool.length); i++) {
     const [r, c] = pool[i];
     layout[r][c] = "M";
+  }
+}
+
+/**
+ * Pose au plus `count` prismes sur des cases "." (jamais "W", même
+ * exclusion que `placeMirrorNeurons` — laisse les candidats indice
+ * disponibles), biaisées vers le centre du plateau (même `centralityScore`
+ * que le Neurone miroir). Contrairement au Neurone miroir (qui contraint
+ * TOUTE sa ligne/colonne, sans ligne de vue), un prisme ne colore que la
+ * PREMIÈRE lumière "à portée de laser" dans chacune de ses 4 directions
+ * fixes (transparent au VOID, arrêté par tout autre obstacle — voir grid.js
+ * `_scanRangeForLight`) : la centralité reste malgré tout le meilleur biais
+ * disponible à ce stade (avant tout appel solveur, donc avant de savoir où
+ * les lumières finiront réellement) — elle maximise la place ouverte dans
+ * les 4 directions, donc la chance qu'au moins une n'atteigne pas
+ * immédiatement un mur/une charge/un autre obstacle. La légitimité ("au
+ * moins un prisme réellement traversé par une lumière ET dont la couleur
+ * appliquée compte vraiment") est vérifiée a posteriori dans `tryGenerate`
+ * (voir `prismGenuinelyUsed`), pas ici.
+ */
+function placePrisms(layout, rows, cols, count, rand) {
+  if (count <= 0) return;
+  const candidates = [];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (layout[r][c] !== ".") continue;
+      candidates.push([r, c, centralityScore(r, c, rows, cols)]);
+    }
+  if (candidates.length === 0) return;
+  candidates.sort((a, b) => b[2] - a[2]);
+  const poolSize = Math.max(count, Math.ceil(candidates.length / 3));
+  const pool = candidates.slice(0, poolSize);
+  shuffle(pool, rand);
+  for (let i = 0; i < Math.min(count, pool.length); i++) {
+    const [r, c] = pool[i];
+    // Token "P" seul: `firstColor` par défaut "r" côté grid.js
+    // (parseCellToken) — la couleur de départ n'a aucune importance propre
+    // (simple décalage de la rotation, voir PRISM_COLOR_SEQUENCE), aucune
+    // raison de la tirer au hasard ici.
+    layout[r][c] = "P";
   }
 }
 
@@ -1153,15 +1223,25 @@ function isMirrorNeuronToken(t) {
   return t === "M";
 }
 
-/** Réunion des deux types de case fixe du niveau (posées une fois pour
+/** Vrai si `t` est un token de prisme ("P", jamais suivi d'une lettre de
+ * couleur ici — voir `placePrisms`: la couleur de départ par défaut de
+ * grid.js/`parseCellToken` suffit toujours) — comme le Miroir dévieur et le
+ * Neurone miroir, une case FIXE posée dans `buildInitialLayout`, jamais
+ * dérivée ni rouverte ensuite, avec ses propres fonctions dédiées
+ * (`prismGenuinelyUsed`, `pruneUnusedPrisms`). */
+function isPrismToken(t) {
+  return t === "P";
+}
+
+/** Réunion des trois types de case fixe du niveau (posées une fois pour
  * toutes dans `buildInitialLayout`, jamais dérivées ni rouvertes ensuite) —
- * voir `isMirrorToken`/`isMirrorNeuronToken`. Utilisé aux quelques endroits
- * où la distinction entre les deux mécaniques n'a pas d'importance (fusion
- * d'îlots, réparation de case isolée, dérivation d'indice) ; les usages
- * SPÉCIFIQUES au Miroir dévieur (nettoyage de nécessité, biais de coloriage)
- * continuent d'utiliser `isMirrorToken` seul. */
+ * voir `isMirrorToken`/`isMirrorNeuronToken`/`isPrismToken`. Utilisé aux
+ * quelques endroits où la distinction entre les mécaniques n'a pas
+ * d'importance (fusion d'îlots, réparation de case isolée, dérivation
+ * d'indice) ; les usages SPÉCIFIQUES à une mécanique (nettoyage de
+ * nécessité, biais de coloriage) continuent d'utiliser leur token dédié. */
 function isFixedObstacleToken(t) {
-  return isMirrorToken(t) || isMirrorNeuronToken(t);
+  return isMirrorToken(t) || isMirrorNeuronToken(t) || isPrismToken(t);
 }
 
 /** Vrai si `t` est un token d'indice DÉJÀ dérivé (numéro "1"-"4" ou case
@@ -1817,6 +1897,73 @@ function pruneUnusedMirrorNeurons(layout, rows, cols, solution, nodeBudget, dead
 }
 
 /**
+ * Vrai si AU MOINS UN prisme du plateau a réellement coloré une lumière
+ * d'une teinte NON blanche (voir grid.js recompute(), bloc "2b) Prismes")
+ * dans la solution gagnante `solution` — pendant de `mirrorGenuinelyUsed`
+ * pour le Prisme (même philosophie: la feature ne doit jamais rester
+ * purement décorative). Lit `_prismAppliedColors` (voir grid.js —
+ * uniquement posé pour cet usage de génération) plutôt que de recalculer le
+ * scan/la rotation ici : chaque entrée vaut soit `null` (aucune lumière en
+ * portée sur cette direction), soit la lettre de couleur RÉELLEMENT
+ * appliquée ("r"/"g"/"b"/"w"). "w" (blanc) ne compte PAS comme une couleur
+ * réelle — voir TARGET_CODES dans grid.js: "w" vaut r+g+b tous vrais, donc
+ * fonctionnellement identique à l'absence de coloration, seul un canal
+ * unique (r, g ou b) restreint réellement la teinte reçue par la lumière et
+ * peut donc faire la différence pour une cible couleur. Si aucune charge
+ * n'a de couleur (Couleur pas obtenue pour cet essai), aucune cible couleur
+ * n'existe jamais pour en dépendre — mais la fonction reste correcte dans
+ * ce cas: un prisme peut très bien avoir coloré une lumière (indépendant de
+ * toute charge, voir grid.js) sans que ça compte pour autant, c'est
+ * pourquoi l'appelant (`tryGenerate`) exige EN PLUS `colorApplied`, comme
+ * pour le Miroir.
+ */
+function prismGenuinelyUsed(layout, rows, cols, solution) {
+  const grid = buildGridWithLights(layout, rows, cols, solution);
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (!isPrismToken(layout[r][c])) continue;
+      const applied = grid.cellAt(r, c)._prismAppliedColors;
+      if (applied?.some((letter) => letter && letter !== "w")) return true;
+    }
+  return false;
+}
+
+/**
+ * Nettoie EN PLACE les prismes purement décoratifs (aucune lumière colorée
+ * d'une teinte non blanche dans la solution gagnante, voir
+ * `prismGenuinelyUsed`) — même politique et même remède que
+ * `pruneUnusedMirrors`/`pruneUnusedMirrorNeurons` (voir leurs commentaires
+ * pour le détail du raisonnement, identique ici): convertir en VOID ("X"),
+ * re-vérifier par un solve complet, et REVENIR au prisme d'origine si
+ * l'unicité casse — un prisme "non coloré utilement" par le gagnant peut
+ * malgré tout être ce qui invalide une solution alternative (une lumière de
+ * CETTE alternative-là, elle, tombe peut-être bien dans sa portée avec une
+ * couleur qui compte), donc son retrait n'est jamais automatiquement sûr.
+ * Un prisme à la fois, jamais un lot entier, pour la même raison que les
+ * deux fonctions sœurs.
+ */
+function pruneUnusedPrisms(layout, rows, cols, solution, nodeBudget, deadline) {
+  const grid = buildGridWithLights(layout, rows, cols, solution);
+  const candidates = [];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (!isPrismToken(layout[r][c])) continue;
+      const applied = grid.cellAt(r, c)._prismAppliedColors;
+      const used = applied?.some((letter) => letter && letter !== "w");
+      if (!used) candidates.push([r, c]);
+    }
+  for (const [r, c] of candidates) {
+    if (deadline != null && Date.now() > deadline) return;
+    const prevToken = layout[r][c];
+    layout[r][c] = "X";
+    const finalLevel = { name: "Infini", rows, cols, cells: layoutToRows(layout) };
+    const verify = analyzeAndCount(finalLevel, 2, nodeBudget, { hint: solution });
+    const stillUnique = verify && verify.exhausted && verify.count === 1;
+    if (!stillUnique) layout[r][c] = prevToken; // nécessaire malgré tout: on le remet
+  }
+}
+
+/**
  * Étape 2 (voir commentaire d'en-tête) : essaie de colorier un sous-ensemble
  * des charges numériques restantes puis de désigner des cases-cibles dont la
  * teinte, sous ce coloriage, DIFFÈRE entre `winner` (la solution qu'on veut
@@ -2263,6 +2410,11 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
   const wantsMirror = featureSubset.includes("mirror");
   const wantsPyra = featureSubset.includes("pyra");
   const wantsMirrorNeuron = featureSubset.includes("mirrorNeuron");
+  // `pickFeatureSubset` garantit déjà que "prism" n'est retenu que si
+  // "color" l'est AUSSI pour CET essai précis (même raisonnement que
+  // "mirror" ci-dessus) — un prisme sans aucune cible couleur ne
+  // distinguerait jamais rien.
+  const wantsPrism = featureSubset.includes("prism");
 
   const layout = buildInitialLayout({
     rows,
@@ -2271,6 +2423,7 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
     cornerVoid,
     mirrorDensity: wantsMirror ? MIRROR_DENSITY : 0,
     mirrorNeuronCount: wantsMirrorNeuron ? MIRROR_NEURON_COUNT : 0,
+    prismCount: wantsPrism ? PRISM_COUNT : 0,
     rand,
   });
   // Voir PYRA_MAX_CANDIDATES: choisi une seule fois ici, APRÈS
@@ -2341,6 +2494,16 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
   if (wantsMirrorNeuron)
     pruneUnusedMirrorNeurons(layout, rows, cols, finalAnalysis.solution, preset.nodeBudget, deadline);
 
+  // Phase Prisme : même politique que le Miroir dévieur (voir son
+  // commentaire ci-dessus) — dépend de `colorApplied`, contrairement au
+  // Neurone miroir: un prisme ne colore utilement une lumière (au sens où
+  // ça peut compter pour une cible) que si une cible couleur existe pour en
+  // dépendre, exactement comme un miroir n'a d'effet que sur un laser déjà
+  // coloré. Utilise `finalAnalysis.solution` (APRÈS Couleur, si obtenue)
+  // pour la même raison que `mirrorApplied`/`mirrorNeuronApplied` ci-dessus.
+  const prismApplied = wantsPrism && colorApplied && prismGenuinelyUsed(layout, rows, cols, finalAnalysis.solution);
+  if (wantsPrism) pruneUnusedPrisms(layout, rows, cols, finalAnalysis.solution, preset.nodeBudget, deadline);
+
   // Phase Pyra : chaque "Y" déjà présent dans `layout` a été validé au
   // moment même de sa dérivation (voir `resolveAndDeriveClues`), donc
   // contrairement au Miroir, aucune vérification a posteriori contre
@@ -2359,13 +2522,45 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
     if (k === "color") return colorApplied;
     if (k === "mirror") return mirrorApplied;
     if (k === "mirrorNeuron") return mirrorNeuronApplied;
+    if (k === "prism") return prismApplied;
     if (k === "pyra") return pyraApplied;
     return true;
   });
 
   neutralizeDeadIsolatedCells(layout, rows, cols);
 
-  return { rows, cols, cells: layoutToRows(layout), analysis: finalAnalysis, featureSubset: actualFeatureSubset };
+  // Vérification finale d'intégrité — chacune des passes de nettoyage de
+  // nécessité ci-dessus (pruneUnusedMirrors/pruneUnusedMirrorNeurons/
+  // pruneUnusedPrisms/pruneUnnecessaryPyra) se re-vérifie déjà
+  // individuellement via `analyzeAndCount` avant de commiter une mutation
+  // (`count===1` sinon la mutation est annulée) — mais AUCUNE ne met à jour
+  // `finalAnalysis.solution` en retour. Bug trouvé lors de l'intégration du
+  // Prisme (voir commit) : sur un plateau ayant À LA FOIS un Prisme et un
+  // Pyra, la démotion d'un "Y" par `pruneUnnecessaryPyra` (qui tourne APRÈS
+  // le nettoyage du Prisme) peut légitimement re-confirmer `count===1` —
+  // l'unicité globale n'est jamais cassée — mais sur une solution DE
+  // LUMIÈRES DIFFÉRENTE de celle mémorisée dans `finalAnalysis.solution`
+  // (dérivée d'un état antérieur du plateau, où le Prisme — sensible à la
+  // géométrie de TOUT obstacle sur sa ligne/colonne, y compris un "Y" pas
+  // encore démoté — donnait une rotation de couleur différente) : le niveau
+  // livré n'était alors PAS gagnable par la solution qu'on s'apprêtait à
+  // renvoyer, bien qu'il reste parfaitement unique par ailleurs. Une
+  // dernière passe ICI, sur le plateau VRAIMENT final, sans aucune
+  // confiance dans les analyses précédentes, est le seul moyen de garantir
+  // que `analysis.solution` gagne RÉELLEMENT le plateau qu'on renvoie —
+  // sinon on jette cet essai (`null`, `generateLevel` retente naturellement
+  // avec un nouveau seed) plutôt que de livrer un niveau cassé.
+  const finalCells = layoutToRows(layout);
+  const finalVerify = analyzeAndCount(
+    { name: "Infini", rows, cols, cells: finalCells },
+    2,
+    preset.nodeBudget,
+    { hint: finalAnalysis.solution }
+  );
+  if (!finalVerify || !finalVerify.exhausted || finalVerify.count !== 1) return null;
+  finalAnalysis = { tier: finalVerify.tier, branchCount: finalVerify.branchCount, solution: finalVerify.solution };
+
+  return { rows, cols, cells: finalCells, analysis: finalAnalysis, featureSubset: actualFeatureSubset };
 }
 
 /**
@@ -2379,8 +2574,10 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
  * (même principe, voir Phase Pyra) — la présence d'au moins une case Pyra
  * survivante à palier/couleur/miroir égaux, puis `preferMirrorNeuron`
  * (même principe, voir Phase Neurone miroir) — la présence d'un neurone
- * miroir RÉELLEMENT utilisé à tout le reste égal, puis (à tout le reste
- * égal, imparfait) un `branchCount` qui pousse dans la direction demandée.
+ * miroir RÉELLEMENT utilisé, puis `preferPrism` (même principe, voir Phase
+ * Prisme) — la présence d'un prisme RÉELLEMENT utilisé à tout le reste
+ * égal, puis (à tout le reste égal, imparfait) un `branchCount` qui pousse
+ * dans la direction demandée.
  */
 export function isBetterCandidate(
   a,
@@ -2389,7 +2586,8 @@ export function isBetterCandidate(
   preferColor = false,
   preferMirror = false,
   preferPyra = false,
-  preferMirrorNeuron = false
+  preferMirrorNeuron = false,
+  preferPrism = false
 ) {
   if (!a) return true;
   const aUnique = a.solutionCount === 1;
@@ -2435,6 +2633,12 @@ export function isBetterCandidate(
     if (aMirrorNeuron !== bMirrorNeuron) return bMirrorNeuron;
   }
 
+  if (preferPrism) {
+    const aPrism = a.featureSubset?.includes("prism") ?? false;
+    const bPrism = b.featureSubset?.includes("prism") ?? false;
+    if (aPrism !== bPrism) return bPrism;
+  }
+
   if (a.measuredTier != null && b.measuredTier != null && a.measuredTier === b.measuredTier) {
     const aBranch = a.branchCount ?? 0;
     const bBranch = b.branchCount ?? 0;
@@ -2471,6 +2675,7 @@ export function generateLevel({
   const mirrorRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("mirror");
   const pyraRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("pyra");
   const mirrorNeuronRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("mirrorNeuron");
+  const prismRequested = Array.isArray(enabledFeatureKeys) && enabledFeatureKeys.includes("prism");
   const defaultBudget = getGenerationBudget(stars);
   // Voir COLOR_BUDGET_MULTIPLIER: viser À LA FOIS le bon palier ET une
   // couleur nécessaire est un objectif combiné plus dur qu'un seul des deux
@@ -2550,7 +2755,16 @@ export function generateLevel({
       break;
     }
     if (
-      isBetterCandidate(best, candidate, solverTarget, colorRequested, mirrorRequested, pyraRequested, mirrorNeuronRequested)
+      isBetterCandidate(
+        best,
+        candidate,
+        solverTarget,
+        colorRequested,
+        mirrorRequested,
+        pyraRequested,
+        mirrorNeuronRequested,
+        prismRequested
+      )
     )
       best = candidate;
   }
