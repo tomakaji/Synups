@@ -2420,18 +2420,52 @@ function neutralizeDeadIsolatedCells(layout, rows, cols) {
 }
 
 // Défi Quotidien (retour utilisateur: "générer une très grande grille
-// (difficulté 3 mais en plus grand) chaque jour") — décalage additif
-// appliqué aux BORNES de rowsRange/colsRange du palier 3★ UNIQUEMENT pour
-// cet appel précis (voir generateLevel/tryGenerate ci-dessous), jamais une
+// (difficulté 3 mais en plus grand) chaque jour", puis renforcé par un
+// second retour: "j'aimerais que la difficulté soit particulièrement forte
+// (plus que trois étoiles) [et] qu'on augmente la taille considérablement,
+// il faut que ce soit un niveau assez long") — décalage additif appliqué
+// aux BORNES de rowsRange/colsRange du palier 3★ UNIQUEMENT pour cet appel
+// précis (voir generateLevel/tryGenerate ci-dessous), jamais une
 // modification de DIFFICULTY_PRESETS lui-même: les paliers 1-3★ normaux
 // (mode Infini) restent EXACTEMENT ceux mesurés/calibrés empiriquement (voir
 // le commentaire au-dessus de DIFFICULTY_PRESETS sur le plafond ~96 cellules
-// pour la latence solveur). +3 lignes/+2 colonnes ~= +40% de cellules
-// (11-12x7-8 -> 14-15x9-10, ~126-150 cases) — sensiblement plus grand sans
-// s'aventurer dans une taille jamais mesurée. Le palier de difficulté visé
-// (solverTarget, voir SOLVER_TIER_FOR_STARS) reste celui du 3★ normal: même
-// TECHNIQUE de résolution exigée, seule la grille physique est plus grande.
-export const DAILY_CHALLENGE_SIZE_BOOST = { rows: 3, cols: 2 };
+// pour la latence solveur — un plafond pensé pour le thread PRINCIPAL,
+// jamais applicable ici : voir dailyChallenge.js, cette génération tourne
+// exclusivement en Worker d'arrière-plan). +6 lignes/+4 colonnes ~= +125%
+// de cellules par rapport au preset 3★ de base (11-12x7-8 -> 17-18x11-12,
+// ~187-216 cases) — mesuré empiriquement (scripts/bench-daily2.mjs, 20
+// seeds) : temps par tentative 0.9-9.6s (médiane ~1.9s), largement dans le
+// budget MAX_TIME_MS du Défi Quotidien (45s, voir dailyChallenge.js) même
+// en tenant compte des tentatives supplémentaires exigées par
+// DAILY_CHALLENGE_MIN_BRANCH_COUNT ci-dessous. Une taille encore plus
+// généreuse a été essayée (+9/+6, ~294 cases) mais rejetée : une tentative
+// isolée a mesuré 84s, très au-delà du budget — la variance du temps de
+// résolution explose près de ce plafond, pas seulement sa moyenne.
+export const DAILY_CHALLENGE_SIZE_BOOST = { rows: 6, cols: 4 };
+
+// Second levier de difficulté, complémentaire à la taille ci-dessus : viser
+// le palier solveur 4 (`SOLVER_TIER_FOR_STARS[3]`, déjà le cas pour un 3★
+// normal) ne suffit PAS à lui seul à garantir "plus dur qu'un 3★ normal",
+// car ce palier couvre en réalité une plage TRÈS large de `branchCount`
+// (tout ce qui dépasse 130, voir solver.js: computeTier) — sans exigence
+// supplémentaire, `generateLevel` s'arrête dès son isPerfect (mesuré=cible)
+// et peut donc renvoyer un plateau à peine au-dessus de ce seuil (observé
+// empiriquement : branchCount aussi bas que 240 pour ce format de grille,
+// à peine plus dur qu'un 3★ ordinaire). En exigeant en plus un
+// `branchCount` minimum (voir son usage dans generateLevel/isBetterCandidate
+// ci-dessous), la recherche continue activement dans le MÊME budget tant
+// que ce plancher n'est pas atteint, au lieu de s'arrêter sur le premier
+// palier 4 venu. Valeur calibrée empiriquement (scripts/bench-daily2.mjs,
+// 20 seeds, format 17-18x11-12) : médiane observée ~754, p25 ~541 — 800 vise
+// donc légèrement au-dessus de la médiane "chance pure" (environ la moitié
+// des tirages l'atteignent dès le premier essai, l'autre moitié doit
+// activement chercher mieux dans le budget existant) sans réclamer un
+// niveau extrême (p75~1300, max~7000) qui risquerait de ne jamais converger
+// pour certaines formes de plateau. Jamais un motif d'échec (`generateLevel`
+// retourne toujours son MEILLEUR candidat trouvé même si ce plancher n'est
+// finalement pas atteint dans le budget, voir isBetterCandidate) — un plancher
+// souhaité, pas une garantie dure.
+export const DAILY_CHALLENGE_MIN_BRANCH_COUNT = 800;
 
 function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
   const preset = DIFFICULTY_PRESETS[stars];
@@ -2673,6 +2707,17 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
  * Prisme) — la présence d'un prisme RÉELLEMENT utilisé à tout le reste
  * égal, puis (à tout le reste égal, imparfait) un `branchCount` qui pousse
  * dans la direction demandée.
+ *
+ * `minBranchCount` (voir DAILY_CHALLENGE_MIN_BRANCH_COUNT) : optionnel,
+ * `undefined` pour tout appelant existant (aucun changement de
+ * comportement). Quand fourni ET que les deux candidats sont DÉJÀ pile sur
+ * leur palier cible (cas normalement "équivalent", `return false` plus bas
+ * — le seul cas que cette addition modifie), départage par le plus haut
+ * `branchCount` tant que `a` n'a pas encore atteint ce plancher : sans ça,
+ * `generateLevel` garderait aveuglément le PREMIER essai qui atteint le
+ * palier demandé, même si un essai suivant, tout aussi valide, était
+ * nettement plus dur — empêchant tout progrès vers `minBranchCount` une
+ * fois le palier atteint une première fois.
  */
 export function isBetterCandidate(
   a,
@@ -2682,7 +2727,8 @@ export function isBetterCandidate(
   preferMirror = false,
   preferPyra = false,
   preferMirrorNeuron = false,
-  preferPrism = false
+  preferPrism = false,
+  minBranchCount
 ) {
   if (!a) return true;
   const aUnique = a.solutionCount === 1;
@@ -2754,6 +2800,11 @@ export function isBetterCandidate(
     // bTarget` dans l'immense majorité des cas — `aTarget` seul suffit.
     if (a.measuredTier < aTarget) return bBranch > aBranch;
     if (a.measuredTier > aTarget) return bBranch < aBranch;
+    // Voir commentaire de `minBranchCount` ci-dessus : seul cas nouveau,
+    // les deux candidats sont pile sur `aTarget` (sinon déjà traité par les
+    // deux `if` au-dessus) mais `a` n'a pas encore atteint le plancher
+    // demandé — continue à pousser vers un `branchCount` plus élevé.
+    if (minBranchCount != null && aBranch < minBranchCount) return bBranch > aBranch;
   }
   return false; // équivalents sur tous les critères : on garde le premier trouvé
 }
@@ -2778,6 +2829,11 @@ export function generateLevel({
   // comportement pour eux (voir tryGenerate: sizeBoost falsy -> ranges
   // inchangées).
   sizeBoost,
+  // Défi Quotidien uniquement (voir DAILY_CHALLENGE_MIN_BRANCH_COUNT) —
+  // undefined pour tout appel existant, donc AUCUN changement de
+  // comportement pour eux (voir isPerfect/isBetterCandidate plus bas :
+  // `minBranchCount == null` désactive toute la logique qui en dépend).
+  minBranchCount,
 } = {}) {
   const stars = clampTier(difficulty);
   const solverTarget = SOLVER_TIER_FOR_STARS[stars]; // voir SOLVER_TIER_FOR_STARS: 1★→2, 2★→3, 3★→4
@@ -2866,8 +2922,18 @@ export function generateLevel({
     // départagé par `preferPyra`, pas une exigence dure).
     const hasPyraThisCandidate = candidate.featureSubset.includes("pyra");
     const pyraRichEnough = !hasPyraThisCandidate || (candidate.pyraTotal > 0 && candidate.pyraRich === candidate.pyraTotal);
+    // Défi Quotidien uniquement (voir DAILY_CHALLENGE_MIN_BRANCH_COUNT) :
+    // `minBranchCount == null` pour tout appel existant -> `branchEnough`
+    // toujours vrai, `isPerfect` inchangé. Sinon, un palier pile atteint
+    // mais avec un `branchCount` trop bas (voir son commentaire — le palier
+    // 4 couvre une plage large) ne compte plus comme "parfait" : la boucle
+    // continue à chercher mieux dans le même budget.
+    const branchEnough = minBranchCount == null || branchCount >= minBranchCount;
     const isPerfect =
-      measuredTier === ownSolverTarget && (!colorRequested || candidate.featureSubset.includes("color")) && pyraRichEnough;
+      measuredTier === ownSolverTarget &&
+      (!colorRequested || candidate.featureSubset.includes("color")) &&
+      pyraRichEnough &&
+      branchEnough;
     if (isPerfect) {
       best = candidate;
       break;
@@ -2881,7 +2947,8 @@ export function generateLevel({
         mirrorRequested,
         pyraRequested,
         mirrorNeuronRequested,
-        prismRequested
+        prismRequested,
+        minBranchCount
       )
     )
       best = candidate;

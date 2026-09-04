@@ -311,41 +311,47 @@ export async function showRewardedAd() {
 }
 
 /** Affiche l'interstitielle préchargée — PAS une rewarded (voir en-tête de
- * fichier): rien à récompenser, rien à attendre. Volontairement "fire and
- * forget" (pas de Promise à await côté appelant, contrairement à
- * showRewardedAd) — voir main.js: loadInfiniteLevel() l'appelle sans
- * bloquer le chargement du niveau suivant, qui continue de se préparer
- * PENDANT que l'interstitielle s'affiche par-dessus. No-op silencieux sur
- * web/plateforme non supportée, ou si aucune pub n'est prête (jamais de
- * niveau "en attente d'une pub" côté joueur). */
+ * fichier): rien à récompenser, rien à attendre pour CRÉDITER quoi que ce
+ * soit. Retourne malgré tout une Promise résolue une fois l'interstitielle
+ * réglée (affichée puis fermée, échec d'affichage, ou immédiatement en
+ * no-op — voir plus bas) : certains appelants (voir dailyChallenge.js/
+ * main.js: fin du Défi Quotidien, "pub interstitielle courte avant de
+ * revenir au menu") ont besoin d'enchaîner APRÈS coup, d'autres restent
+ * "fire and forget" en ignorant simplement cette Promise — voir main.js:
+ * loadInfiniteLevel() l'appelle sans l'attendre, le niveau Infini suivant
+ * continue de se préparer PENDANT que l'interstitielle s'affiche par-
+ * dessus. No-op silencieux (Promise déjà résolue) sur web/plateforme non
+ * supportée, ou si aucune pub n'est prête (jamais de niveau "en attente
+ * d'une pub" côté joueur, ni de retour au menu bloqué indéfiniment côté
+ * Défi Quotidien). */
 export function showInterstitialAd() {
-  if (!Capacitor.isNativePlatform() || !interstitialReady) return;
+  if (!Capacitor.isNativePlatform() || !interstitialReady) return Promise.resolve();
   interstitialReady = false;
 
   // Voir music.js: pauseMusic/resumeMusic — même raisonnement que
-  // showRewardedAd ci-dessus (posée avant l'appel natif). Contrairement au
-  // rewarded, cette fonction était jusqu'ici "fire and forget" (aucun
-  // listener) : Dismissed/FailedToShow sont désormais écoutés UNIQUEMENT
-  // pour savoir quand relever la pause, jamais pour bloquer main.js (qui
-  // continue de l'appeler sans attendre, voir son commentaire ci-dessus).
+  // showRewardedAd ci-dessus (posée avant l'appel natif).
   pauseMusic("ad");
   let settled = false;
   const listeners = [];
-  const finish = () => {
-    if (settled) return;
-    settled = true;
-    listeners.forEach((l) => l.remove());
-    resumeMusic("ad");
-  };
-  Promise.all([
-    AdMob.addListener(InterstitialAdPluginEvents.Dismissed, finish),
-    AdMob.addListener(InterstitialAdPluginEvents.FailedToShow, finish),
-  ]).then((handles) => listeners.push(...handles));
+  return new Promise((resolve) => {
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      listeners.forEach((l) => l.remove());
+      resumeMusic("ad");
+      resolve();
+    };
+    Promise.all([
+      AdMob.addListener(InterstitialAdPluginEvents.Dismissed, finish),
+      AdMob.addListener(InterstitialAdPluginEvents.FailedToShow, finish),
+    ]).then((handles) => listeners.push(...handles));
 
-  AdMob.showInterstitial().catch(() => finish());
-  // Consommée dans tous les cas (affichée ou échec d'affichage): recharge
-  // immédiatement pour le prochain palier de 5 niveaux.
-  prepareInterstitial();
+    AdMob.showInterstitial().catch(() => finish());
+    // Consommée dans tous les cas (affichée ou échec d'affichage): recharge
+    // immédiatement pour le prochain déclenchement (palier Infini OU
+    // prochain Défi Quotidien réussi, même pool partagé).
+    prepareInterstitial();
+  });
 }
 
 /** Enregistre le callback appelé à chaque changement de hauteur du bandeau

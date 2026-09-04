@@ -14,7 +14,7 @@
 // rôle de la date est de décider QUAND régénérer (une fois par jour civil,
 // heure locale de l'appareil), jamais CE QUI est généré.
 import { requestLevel } from "./infiniteClient.js";
-import { DAILY_CHALLENGE_SIZE_BOOST } from "./generator.js";
+import { DAILY_CHALLENGE_SIZE_BOOST, DAILY_CHALLENGE_MIN_BRANCH_COUNT } from "./generator.js";
 import { loadDailyChallenge, saveDailyChallenge, loadStars, addStars } from "./storage.js";
 import { trackEvent } from "./analytics.js";
 
@@ -92,6 +92,7 @@ export function ensureTodayChallenge() {
     maxAttempts: MAX_ATTEMPTS,
     maxTimeMs: MAX_TIME_MS,
     sizeBoost: DAILY_CHALLENGE_SIZE_BOOST,
+    minBranchCount: DAILY_CHALLENGE_MIN_BRANCH_COUNT,
   })
     .then((result) => {
       if (!result) return null;

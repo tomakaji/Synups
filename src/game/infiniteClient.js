@@ -149,7 +149,7 @@ export function raceForBest(taskPromises, { isPerfect, isBetter }) {
  * se corrompre — en pratique la file d'attente `enqueuePoolJob` plus bas les
  * sérialise de toute façon (une seule génération à la fois sur le pool).
  */
-function generateOnce({ difficulty, enabledFeatureKeys, seed, maxAttempts, maxTimeMs, sizeBoost } = {}) {
+function generateOnce({ difficulty, enabledFeatureKeys, seed, maxAttempts, maxTimeMs, sizeBoost, minBranchCount } = {}) {
   const tier = clampTier(difficulty);
   // Voir generator.js/generateLevel: quand la couleur est demandée, un
   // résultat n'est "parfait" que s'il l'a AUSSI obtenue — sinon on continue
@@ -178,12 +178,25 @@ function generateOnce({ difficulty, enabledFeatureKeys, seed, maxAttempts, maxTi
       maxAttempts: perWorkerAttempts,
       maxTimeMs: totalTimeMs,
       sizeBoost,
+      minBranchCount,
     })
   );
 
+  // `minBranchCount` (Défi Quotidien uniquement, voir generator.js:
+  // DAILY_CHALLENGE_MIN_BRANCH_COUNT) : chaque Worker a déjà cherché à le
+  // satisfaire EN INTERNE (voir generateLevel/isPerfect côté worker) avant
+  // de renvoyer son propre "best" — cette vérification ici, au niveau de la
+  // course entre Workers, reste cohérente avec ce même critère plutôt que
+  // de résoudre prématurément sur un résultat qui ne l'a pas atteint alors
+  // qu'un autre Worker, encore en cours, pourrait y arriver.
   return raceForBest(tasks, {
-    isPerfect: (r) => r.confirmedUnique && r.measuredTier === tier && (!colorRequested || r.featureSubset?.includes("color")),
-    isBetter: (best, candidate) => isBetterCandidate(best, candidate, tier, colorRequested, mirrorRequested),
+    isPerfect: (r) =>
+      r.confirmedUnique &&
+      r.measuredTier === tier &&
+      (!colorRequested || r.featureSubset?.includes("color")) &&
+      (minBranchCount == null || (r.branchCount ?? 0) >= minBranchCount),
+    isBetter: (best, candidate) =>
+      isBetterCandidate(best, candidate, tier, colorRequested, mirrorRequested, false, false, false, minBranchCount),
   });
 }
 

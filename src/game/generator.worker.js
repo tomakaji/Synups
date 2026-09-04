@@ -21,8 +21,8 @@ self.onmessage = (event) => {
 
   let result = null;
   try {
-    const { difficulty, enabledFeatureKeys, seed, maxAttempts, maxTimeMs, sizeBoost } = event.data;
-    result = generateLevel({ difficulty, enabledFeatureKeys, seed, maxAttempts, maxTimeMs, sizeBoost });
+    const { difficulty, enabledFeatureKeys, seed, maxAttempts, maxTimeMs, sizeBoost, minBranchCount } = event.data;
+    result = generateLevel({ difficulty, enabledFeatureKeys, seed, maxAttempts, maxTimeMs, sizeBoost, minBranchCount });
   } catch (err) {
     self.postMessage({ type: "error", requestId, message: err?.message || String(err) });
     return;

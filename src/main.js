@@ -270,7 +270,17 @@ async function advanceAfterWin() {
   }
   // Défi Quotidien: pas de "niveau suivant" (une seule grille/jour, voir
   // ci-dessus) — retour direct au menu titre une fois l'étoile créditée.
-  if (mode === "daily") goBack();
+  // Retour utilisateur: "à la fin du niveau quotidien, on place une pub
+  // interstitielle courte avant de revenir au menu" — voir ads.js:
+  // showInterstitialAd(), qui retourne désormais une Promise résolue une
+  // fois l'interstitielle réglée (affichée puis fermée, échec d'affichage,
+  // ou immédiatement en no-op sur web/sans pub prête) précisément pour ce
+  // genre d'appelant qui doit enchaîner APRÈS coup — contrairement au
+  // palier Infini (voir loadInfiniteLevel) qui reste fire-and-forget.
+  if (mode === "daily") {
+    await showInterstitialAd();
+    goBack();
+  }
 }
 
 // Musique par calques [voir music.js]: `mechanicCounts` est appelé une fois
