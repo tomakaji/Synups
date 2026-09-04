@@ -1241,6 +1241,17 @@ export function initSommation(pointsApi) {
     return gridEl.querySelector(`.som-cell[data-r="${r}"][data-c="${c}"]`);
   }
 
+  /** Vrai si (x,y) tombe dans le rectangle — utilisé en secours quand
+   * elementFromPoint() ne retrouve pas la case de départ (voir onDragEnd:
+   * l'espace entre cases, `gap` du CSS grid, n'appartient à AUCUN
+   * `.som-cell`, donc un relâchement qui atterrit pile dans cet interstice
+   * — plausible avec un tremblement naturel du doigt/de la souris sur un
+   * "double-tap" rapide — fait échouer elementFromPoint alors que le geste
+   * n'a, en pratique, jamais quitté la case). */
+  function pointInRect(x, y, rect) {
+    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+  }
+
   function findDropTargetAt(x, y) {
     const el = document.elementFromPoint ? document.elementFromPoint(x, y) : null;
     const cellEl = el?.closest?.(".som-cell");
@@ -1507,19 +1518,33 @@ export function initSommation(pointsApi) {
       const target = findDropTargetAt(e.clientX, e.clientY);
       // Retour utilisateur: "on ne peut plus visionner la reward add [...]
       // quand on essaye de generer sans avoir d'étoiles [...] rien du tout
-      // ne se passe" — BUG CORRIGÉ: un double-tap rapide pour spammer un
-      // générateur (voir handleGeneratorTap ci-dessus) dépasse facilement
-      // DRAG_THRESHOLD à cause du léger tremblement naturel du doigt, SANS
-      // jamais vraiment quitter la case de départ — `moved` passait quand
-      // même à `true`, et handleDrop() (voir plus bas) retourne
-      // SILENCIEUSEMENT dès que la cible est la case source elle-même (son
-      // tout premier test: `target.r === src.r && target.c === src.c`) —
-      // ni sélection, ni génération, ni modale pub, pour un geste pourtant
-      // identique à un tap immobile. Un "glisser" qui retombe sur SA PROPRE
-      // case est donc désormais traité exactement comme un tap immobile
-      // plutôt que comme un glisser-déposer sur soi-même (qui n'a de toute
-      // façon aucun sens : rien à fusionner/échanger avec soi-même).
-      if (target && target.r === r && target.c === c) {
+      // ne se passe" — BUG CORRIGÉ (round 1): un double-tap rapide pour
+      // spammer un générateur (voir handleGeneratorTap ci-dessus) dépasse
+      // facilement DRAG_THRESHOLD à cause du léger tremblement naturel du
+      // doigt, SANS jamais vraiment quitter la case de départ — `moved`
+      // passait quand même à `true`, et handleDrop() (voir plus bas)
+      // retourne SILENCIEUSEMENT dès que la cible est la case source
+      // elle-même (son tout premier test: `target.r === src.r && target.c
+      // === src.c`) — ni sélection, ni génération, ni modale pub, pour un
+      // geste pourtant identique à un tap immobile.
+      //
+      // BUG CORRIGÉ (round 2, retour utilisateur: la modale pub ne
+      // s'ouvrait "jamais" sur certains générateurs déjà présents, malgré
+      // une sélection visuellement correcte au premier tap): le même
+      // tremblement peut aussi faire relâcher le doigt/la souris pile dans
+      // l'INTERSTICE entre deux cases (le `gap` du CSS grid, voir
+      // sommation.css: .som-grid) — un espace qui n'appartient à AUCUN
+      // `.som-cell`. Dans ce cas `document.elementFromPoint` ne retrouve
+      // AUCUNE case (`findDropTargetAt` renvoie `null`), et le test
+      // ci-dessous (`target && ...`) échouait alors qu'on n'a, en pratique,
+      // jamais quitté la case de départ — secours géométrique via
+      // `pointInRect` sur le rectangle RÉEL de `sourceEl` (fiable même
+      // quand elementFromPoint rate la cible), plutôt que de dépendre
+      // uniquement du hit-testing DOM.
+      const releaseStillOnSource =
+        (target && target.r === r && target.c === c) ||
+        (!target && pointInRect(e.clientX, e.clientY, sourceEl.getBoundingClientRect()));
+      if (releaseStillOnSource) {
         handleGeneratorTap(r, c);
         drag = null;
         return;
