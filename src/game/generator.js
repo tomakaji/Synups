@@ -213,6 +213,54 @@ const SOLVER_TIER_FOR_STARS = { 1: 2, 2: 3, 3: 4 };
 // "les niveaux 3★ sont pas assez difficiles").
 const MAX_SOLVER_TIER = 4;
 
+// Retour utilisateur: "je pense que notre façon d'implémenter [Prisme, Pyra,
+// Neurone miroir] rend la grille plus facile que si elles n'y étaient pas,
+// car ces mécaniques ajoutent en complexité mais aussi en indices
+// possibles." Constat exact : `computeTier`/le palier solveur mesurent la
+// difficulté de RECHERCHE d'un solveur qui ne fait AUCUNE différence entre
+// une case indice ordinaire et l'une de ces trois mécaniques — mais pour un
+// JOUEUR humain, chacune fonctionne comme un indice "gratuit" en plus de son
+// obstacle: un Neurone miroir DUPLIQUE une lumière déjà déduite (l'humain
+// lit l'écho au lieu de re-déduire), un Pyra RÉVÈLE une fourchette de compte
+// (1-3) sans qu'aucune charge n'ait besoin d'être posée là pour l'obtenir,
+// un Prisme RÉVÈLE une couleur qui, une fois vue, élimine d'un coup toutes
+// les hypothèses de placement qui l'auraient rendue différente. Le palier
+// mesuré (calibré sur des plateaux SANS ces mécaniques) ne capture donc pas
+// cet allègement perçu.
+//
+// Compensation choisie: une fois qu'au moins une de ces trois features a
+// survécu jusqu'au bout (mirrorNeuronApplied/prismApplied/pyraApplied
+// CONFIRMÉS, après toute passe de nécessité — jamais avant), retirer des
+// charges numériques SUPPLÉMENTAIRES pour viser UN CRAN de plus
+// (ASSISTIVE_MECHANIC_TIER_BONUS) que le palier de base déjà atteint —
+// PAS le maximum théorique (`MAX_SOLVER_TIER`) : l'idée est de compenser
+// l'indice gratuit, pas de transformer systématiquement un "1★ avec Pyra"
+// en un niveau aussi dur qu'un 3★ vanille (mesuré : viser directement
+// MAX_SOLVER_TIER produisait des sauts de 1★ à 3★ selon la chance du
+// plateau à se laisser dépouiller, bien au-delà du "cran de plus" voulu).
+//
+// PREMIÈRE tentative (abandonnée, gardée en note pour ne pas la retenter) :
+// viser un palier solveur plus élevé DÈS `stripToTargetTier` (avant même
+// repair/color/pruning) dès que la feature était PIOCHÉE pour cet essai.
+// Mesuré cassé : `pickProbability` élevée (0.92, voir FEATURES) sur ces
+// trois features fait qu'un essai les pioche très souvent, mais
+// `pruneUnnecessaryPyra`/`pruneUnusedMirrorNeurons`/`pruneUnusedPrisms` en
+// retirent une bonne partie comme décoratives APRÈS coup — le plateau final
+// se retrouvait alors durci pour une mécanique qui n'y figurait même plus,
+// y compris des essais totalement "vanille" (aucune des trois) qui n'ont
+// jamais reçu la moindre part de la compensation. En agissant seulement
+// APRÈS confirmation de survie, jamais de durcissement gaspillé ni mal
+// attribué.
+//
+// Miroir dévieur et Couleur ne sont volontairement PAS concernés: ils ne
+// révèlent jamais un état de la grille qu'il faudrait sinon déduire — un
+// miroir ne fait que rediriger un laser déjà existant (aucune information
+// nouvelle sur les LUMIÈRES elles-mêmes), et la couleur seule EST la
+// difficulté ajoutée (voir tryColorizeForNecessity: toujours vérifiée
+// nécessaire), pas un raccourci vers elle.
+const ASSISTIVE_MECHANIC_KEYS = ["pyra", "mirrorNeuron", "prism"];
+const ASSISTIVE_MECHANIC_TIER_BONUS = 1;
+
 /**
  * Plages de génération par étoile (clés = étoiles affichées, PAS paliers
  * solveur — voir `SOLVER_TIER_FOR_STARS`). Contrairement à la v1, la densité
@@ -2527,6 +2575,28 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
     return true;
   });
 
+  // Voir ASSISTIVE_MECHANIC_KEYS/ASSISTIVE_MECHANIC_TIER_BONUS (commentaire
+  // d'en-tête) : une fois qu'au moins une de Pyra/Neurone miroir/Prisme a
+  // RÉELLEMENT survécu jusqu'ici (jamais avant — voir ce commentaire pour
+  // la première approche essayée et abandonnée), retire des charges
+  // numériques SUPPLÉMENTAIRES pour viser un cran de plus que le palier de
+  // base déjà atteint, en réutilisant `stripToTargetTier` — mais sur le
+  // plateau DÉJÀ colorié cette fois (donc chaque retrait est revérifié
+  // couleur comprise, via `boardHasColorTargets`/`refreshForLeafCheck` dans
+  // solver.js, contrairement au tout premier appel plus haut qui travaille
+  // encore en blanc). Plafonné à `MAX_SOLVER_TIER`, jamais un échec si le
+  // plateau ne s'y prête pas (best-effort, comme `stripToTargetTier`
+  // lui-même) — `finalAnalysis` n'est mis à jour QUE si cette passe a
+  // effectivement amélioré quelque chose (son propre premier test interne,
+  // `best.tier >= targetTier`, retourne tel quel sans rien retirer si c'est
+  // déjà le cas, typiquement au palier 3★ qui vise déjà MAX_SOLVER_TIER dès
+  // le premier appel de `stripToTargetTier` plus haut).
+  if (mirrorNeuronApplied || prismApplied || pyraApplied) {
+    const tightenTarget = Math.min(MAX_SOLVER_TIER, solverTarget + ASSISTIVE_MECHANIC_TIER_BONUS);
+    const tightened = stripToTargetTier(layout, rows, cols, tightenTarget, preset.nodeBudget, rand, deadline);
+    if (tightened) finalAnalysis = tightened;
+  }
+
   neutralizeDeadIsolatedCells(layout, rows, cols);
 
   // Vérification finale d'intégrité — chacune des passes de nettoyage de
@@ -2560,7 +2630,32 @@ function tryGenerate(seed, stars, enabledFeatureKeys, deadline, sizeBoost) {
   if (!finalVerify || !finalVerify.exhausted || finalVerify.count !== 1) return null;
   finalAnalysis = { tier: finalVerify.tier, branchCount: finalVerify.branchCount, solution: finalVerify.solution };
 
-  return { rows, cols, cells: finalCells, analysis: finalAnalysis, featureSubset: actualFeatureSubset };
+  // `requestedSolverTier`: le VRAI palier visé pour CET essai — peut
+  // dépasser `SOLVER_TIER_FOR_STARS[stars]` quand une mécanique assistive a
+  // RÉELLEMENT survécu (voir ASSISTIVE_MECHANIC_KEYS/le durcissement
+  // ci-dessus), auquel cas on le fixe au palier VRAIMENT atteint après
+  // durcissement (jamais en-dessous de `solverTarget`) : `measuredTier` ne
+  // doit alors jamais être vu comme "trop dur" par rapport à ce qu'on a
+  // délibérément visé. Lu par `generateLevel` pour comparer `measuredTier`
+  // à SA PROPRE cible (voir isBetterCandidate) plutôt qu'à la cible de base
+  // partagée par tous les essais — sinon un essai avec Neurone miroir, dont
+  // le palier mesuré dépasse la cible de base par construction, semblerait
+  // "trop dur" par rapport à un essai sans mécanique tombé pile dessus, ce
+  // qui annulerait la compensation en la faisant systématiquement perdre au
+  // départage.
+  const survivedAssistiveMechanic = ASSISTIVE_MECHANIC_KEYS.some((k) => actualFeatureSubset.includes(k));
+  const requestedSolverTier = survivedAssistiveMechanic
+    ? Math.max(solverTarget, finalAnalysis.tier ?? solverTarget)
+    : solverTarget;
+
+  return {
+    rows,
+    cols,
+    cells: finalCells,
+    analysis: finalAnalysis,
+    featureSubset: actualFeatureSubset,
+    requestedSolverTier,
+  };
 }
 
 /**
@@ -2594,8 +2689,20 @@ export function isBetterCandidate(
   const bUnique = b.solutionCount === 1;
   if (aUnique !== bUnique) return bUnique;
 
-  const aDist = a.measuredTier == null ? Infinity : Math.abs(a.measuredTier - requestedTier);
-  const bDist = b.measuredTier == null ? Infinity : Math.abs(b.measuredTier - requestedTier);
+  // Chaque candidat compare son palier mesuré à SA PROPRE cible
+  // (`a.requestedTier`/`b.requestedTier`, posée par `generateLevel` — voir
+  // ASSISTIVE_MECHANIC_KEYS/tryGenerate) plutôt qu'au `requestedTier`
+  // partagé reçu en paramètre (gardé en repli pour un appelant qui ne
+  // poserait pas ce champ, voir infiniteClient.js) : un essai avec Pyra/
+  // Neurone miroir/Prisme vise DÉLIBÉRÉMENT un cran de plus pour compenser
+  // l'indice gratuit qu'il donne au joueur — le comparer à la cible de base
+  // le ferait paraître "trop dur" et perdant systématiquement le départage
+  // contre un essai sans mécanique tombé pile sur cette cible de base,
+  // annulant la compensation.
+  const aTarget = a.requestedTier ?? requestedTier;
+  const bTarget = b.requestedTier ?? requestedTier;
+  const aDist = a.measuredTier == null ? Infinity : Math.abs(a.measuredTier - aTarget);
+  const bDist = b.measuredTier == null ? Infinity : Math.abs(b.measuredTier - bTarget);
   if (aDist !== bDist) return bDist < aDist;
 
   if (preferColor) {
@@ -2642,8 +2749,11 @@ export function isBetterCandidate(
   if (a.measuredTier != null && b.measuredTier != null && a.measuredTier === b.measuredTier) {
     const aBranch = a.branchCount ?? 0;
     const bBranch = b.branchCount ?? 0;
-    if (a.measuredTier < requestedTier) return bBranch > aBranch;
-    if (a.measuredTier > requestedTier) return bBranch < aBranch;
+    // `aTarget` (déjà calculé ci-dessus): les deux candidats ont ici le
+    // même `measuredTier`, donc `aDist === bDist` implique `aTarget ===
+    // bTarget` dans l'immense majorité des cas — `aTarget` seul suffit.
+    if (a.measuredTier < aTarget) return bBranch > aBranch;
+    if (a.measuredTier > aTarget) return bBranch < aBranch;
   }
   return false; // équivalents sur tous les critères : on garde le premier trouvé
 }
@@ -2706,6 +2816,14 @@ export function generateLevel({
 
     const level = { name: "Infini", rows: raw.rows, cols: raw.cols, cells: raw.cells };
     const { tier: measuredTier, branchCount, solution } = raw.analysis;
+    // Voir ASSISTIVE_MECHANIC_KEYS/tryGenerate: `raw.requestedSolverTier`
+    // est la cible RÉELLE de CET essai (peut dépasser `solverTarget` de
+    // base si Pyra/Neurone miroir/Prisme a RÉELLEMENT survécu jusqu'au
+    // durcissement final) — c'est CETTE valeur, pas `solverTarget`, qu'il
+    // faut comparer à `measuredTier`
+    // (isPerfect ci-dessous, isBetterCandidate plus bas) pour ne pas
+    // pénaliser un essai délibérément visé plus dur.
+    const ownSolverTarget = raw.requestedSolverTier ?? solverTarget;
 
     const candidate = {
       level,
@@ -2714,7 +2832,7 @@ export function generateLevel({
       confirmedUnique: true,
       measuredTier, // palier SOLVEUR (1-4) à ce stade
       branchCount,
-      requestedTier: solverTarget,
+      requestedTier: ownSolverTarget,
       featureSubset: raw.featureSubset,
       attempts,
     };
@@ -2749,7 +2867,7 @@ export function generateLevel({
     const hasPyraThisCandidate = candidate.featureSubset.includes("pyra");
     const pyraRichEnough = !hasPyraThisCandidate || (candidate.pyraTotal > 0 && candidate.pyraRich === candidate.pyraTotal);
     const isPerfect =
-      measuredTier === solverTarget && (!colorRequested || candidate.featureSubset.includes("color")) && pyraRichEnough;
+      measuredTier === ownSolverTarget && (!colorRequested || candidate.featureSubset.includes("color")) && pyraRichEnough;
     if (isPerfect) {
       best = candidate;
       break;
