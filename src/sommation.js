@@ -1241,17 +1241,6 @@ export function initSommation(pointsApi) {
     return gridEl.querySelector(`.som-cell[data-r="${r}"][data-c="${c}"]`);
   }
 
-  /** Vrai si (x,y) tombe dans le rectangle — utilisé en secours quand
-   * elementFromPoint() ne retrouve pas la case de départ (voir onDragEnd:
-   * l'espace entre cases, `gap` du CSS grid, n'appartient à AUCUN
-   * `.som-cell`, donc un relâchement qui atterrit pile dans cet interstice
-   * — plausible avec un tremblement naturel du doigt/de la souris sur un
-   * "double-tap" rapide — fait échouer elementFromPoint alors que le geste
-   * n'a, en pratique, jamais quitté la case). */
-  function pointInRect(x, y, rect) {
-    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
-  }
-
   function findDropTargetAt(x, y) {
     const el = document.elementFromPoint ? document.elementFromPoint(x, y) : null;
     const cellEl = el?.closest?.(".som-cell");
@@ -1512,62 +1501,45 @@ export function initSommation(pointsApi) {
     clearHoverAndPreview();
     if (ghostEl) ghostEl.remove();
 
+    // Retour utilisateur (round 3): "pourquoi pas juste un tap/click simple
+    // [...] pourquoi ce système complexe dans lequel on va vérifier le
+    // relâchement" — un tap immobile, OU un léger glisser qui retombe sur
+    // SA PROPRE case (tremblement naturel du doigt/de la souris, voir
+    // DRAG_THRESHOLD), n'est PLUS géré ici du tout : c'est l'événement
+    // natif "click" (voir son écouteur posé dans render() plus bas) qui
+    // s'en charge — le navigateur détecte LUI-MÊME, de façon fiable, "le
+    // pointeur a été relâché sur CETTE case", sans qu'on réimplémente un
+    // seuil de distance ou un elementFromPoint maison (qui pouvait rater
+    // sa cible pile dans l'interstice `gap` entre deux cases — deux
+    // tentatives de correctif ici même en témoignent). `click` ne se
+    // déclenche jamais après un VRAI glisser vers une AUTRE case (pression
+    // et relâchement doivent viser le même élément), donc aucun risque de
+    // double déclenchement avec le glisser-déposer ci-dessous, qui ne
+    // traite plus QUE ce cas : un VRAI déplacement vers une case
+    // différente (fusion, échange, dépôt sur l'objectif/le cadenas...).
     if (!moved) {
-      handleGeneratorTap(r, c);
+      drag = null;
+      return;
+    }
+    const target = findDropTargetAt(e.clientX, e.clientY);
+    const srcCell = board[r]?.[c];
+    // Retour utilisateur round 9: "si on met un générateur dans l'objectif
+    // pour le recycler, préviens avec une modale de confirmation... pour
+    // éviter la frustration d'un faux mouvement" — SEUL un générateur qui
+    // ne correspond à AUCUNE exigence (donc perdu pour de bon, voir
+    // matchesRequirement/predictDrop) déclenche la confirmation ; un
+    // générateur qui nourrit l'objectif final, ou une lumière/un morceau
+    // recyclé, restent immédiats (geste peu coûteux ou volontaire).
+    const wouldRecycleGenerator =
+      target?.objective &&
+      srcCell?.type === "gen" &&
+      !objectiveState.requirements.some((req) => matchesRequirement(srcCell, req));
+    if (wouldRecycleGenerator) {
+      pendingRecycleDrop = { src: { r, c }, target };
+      recycleModalEl?.classList.remove("hidden");
     } else {
-      const target = findDropTargetAt(e.clientX, e.clientY);
-      // Retour utilisateur: "on ne peut plus visionner la reward add [...]
-      // quand on essaye de generer sans avoir d'étoiles [...] rien du tout
-      // ne se passe" — BUG CORRIGÉ (round 1): un double-tap rapide pour
-      // spammer un générateur (voir handleGeneratorTap ci-dessus) dépasse
-      // facilement DRAG_THRESHOLD à cause du léger tremblement naturel du
-      // doigt, SANS jamais vraiment quitter la case de départ — `moved`
-      // passait quand même à `true`, et handleDrop() (voir plus bas)
-      // retourne SILENCIEUSEMENT dès que la cible est la case source
-      // elle-même (son tout premier test: `target.r === src.r && target.c
-      // === src.c`) — ni sélection, ni génération, ni modale pub, pour un
-      // geste pourtant identique à un tap immobile.
-      //
-      // BUG CORRIGÉ (round 2, retour utilisateur: la modale pub ne
-      // s'ouvrait "jamais" sur certains générateurs déjà présents, malgré
-      // une sélection visuellement correcte au premier tap): le même
-      // tremblement peut aussi faire relâcher le doigt/la souris pile dans
-      // l'INTERSTICE entre deux cases (le `gap` du CSS grid, voir
-      // sommation.css: .som-grid) — un espace qui n'appartient à AUCUN
-      // `.som-cell`. Dans ce cas `document.elementFromPoint` ne retrouve
-      // AUCUNE case (`findDropTargetAt` renvoie `null`), et le test
-      // ci-dessous (`target && ...`) échouait alors qu'on n'a, en pratique,
-      // jamais quitté la case de départ — secours géométrique via
-      // `pointInRect` sur le rectangle RÉEL de `sourceEl` (fiable même
-      // quand elementFromPoint rate la cible), plutôt que de dépendre
-      // uniquement du hit-testing DOM.
-      const releaseStillOnSource =
-        (target && target.r === r && target.c === c) ||
-        (!target && pointInRect(e.clientX, e.clientY, sourceEl.getBoundingClientRect()));
-      if (releaseStillOnSource) {
-        handleGeneratorTap(r, c);
-        drag = null;
-        return;
-      }
-      const srcCell = board[r]?.[c];
-      // Retour utilisateur round 9: "si on met un générateur dans l'objectif
-      // pour le recycler, préviens avec une modale de confirmation... pour
-      // éviter la frustration d'un faux mouvement" — SEUL un générateur qui
-      // ne correspond à AUCUNE exigence (donc perdu pour de bon, voir
-      // matchesRequirement/predictDrop) déclenche la confirmation ; un
-      // générateur qui nourrit l'objectif final, ou une lumière/un morceau
-      // recyclé, restent immédiats (geste peu coûteux ou volontaire).
-      const wouldRecycleGenerator =
-        target?.objective &&
-        srcCell?.type === "gen" &&
-        !objectiveState.requirements.some((req) => matchesRequirement(srcCell, req));
-      if (wouldRecycleGenerator) {
-        pendingRecycleDrop = { src: { r, c }, target };
-        recycleModalEl?.classList.remove("hidden");
-      } else {
-        handleDrop({ r, c }, target);
-        render();
-      }
+      handleDrop({ r, c }, target);
+      render();
     }
     drag = null;
   }
@@ -1769,17 +1741,26 @@ export function initSommation(pointsApi) {
       if (isLocked(r, c)) return;
       if (!board[r][c]) return; // case vide: pas de source de glisser (mais reste une cible valide)
       // RewardAdd: une proposition n'est ni déplaçable ni fusionnable (retour
-      // utilisateur: "cliquer dessus pour avoir une modal") — un simple tap
-      // l'ouvre directement, en dehors du système de glisser-déposer utilisé
-      // par le reste du plateau.
+      // utilisateur: "cliquer dessus pour avoir une modal") — un simple
+      // click l'ouvre directement (voir plus bas pour le choix de "click"
+      // plutôt que "pointerdown"), en dehors du système de glisser-déposer
+      // utilisé par le reste du plateau.
       if (board[r][c].type === "genOffer") {
-        el.addEventListener("pointerdown", (e) => {
-          e.preventDefault();
-          openGenOfferModal(r, c);
-        });
+        el.addEventListener("click", () => openGenOfferModal(r, c));
         return;
       }
       el.addEventListener("pointerdown", (e) => startDrag(e, r, c));
+      // Retour utilisateur: "pourquoi pas juste un tap/click simple [...]
+      // pourquoi ce système complexe" — l'événement natif "click" (fiable,
+      // géré par le navigateur lui-même : il ne se déclenche QUE si la
+      // pression ET le relâchement visaient CETTE case, quel que soit le
+      // trajet entre les deux) est désormais le SEUL déclencheur de
+      // handleGeneratorTap — voir onDragEnd(), qui ne gère plus que le
+      // glisser-déposer vers une case DIFFÉRENTE. handleGeneratorTap()
+      // reste un no-op pour les cases qui ne sont pas des générateurs
+      // (voir sa garde `cell?.type !== "gen"`), donc l'écouteur peut rester
+      // générique ici plutôt que filtré par type.
+      el.addEventListener("click", () => handleGeneratorTap(r, c));
     });
 
     playPendingFx();
