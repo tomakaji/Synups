@@ -258,9 +258,14 @@ async function advanceAfterWin() {
   if (mode === "community" && currentCommunityLevel) {
     // On ne redemande QUE si le joueur n'a pas déjà aimé la grille pendant
     // la partie (bouton coeur du bandeau) — sinon la question serait
-    // redondante. Voir openCommunityRateModal/btnCommunityRateLike.
+    // redondante. Voir openCommunityRateModal/btnCommunityRateLike. On ne
+    // redemande jamais non plus sur sa PROPRE grille publiée (retour
+    // utilisateur: "on ne doit pas pouvoir liker sa propre grille publiée
+    // dans communauté") — `likedByMe` ne peut de toute façon jamais être vrai
+    // sur ses propres grilles, mais sans ce garde-fou la modale de notation
+    // s'ouvrirait quand même en lui proposant de "liker" sa propre création.
     const fresh = getLevel(currentCommunityLevel.id);
-    if (fresh?.likedByMe) goBack();
+    if (fresh?.likedByMe || fresh?.source === "local") goBack();
     else openCommunityRateModal(currentCommunityLevel);
   }
   // Défi Quotidien: pas de "niveau suivant" (une seule grille/jour, voir
@@ -1972,7 +1977,14 @@ function buildCommunityCard(level, { showUnpublish = false, onChange } = {}) {
   const spacer = document.createElement("span");
   spacer.className = "community-card-spacer";
 
-  bottom.append(likeBtn, likesStat, playsStat, spacer);
+  // Retour utilisateur: "on ne doit pas pouvoir liker sa propre grille
+  // publiée dans communauté" — le bouton like n'a de sens que sur les
+  // grilles des autres ; le compteur de likes reste toujours visible.
+  if (level.source === "local") {
+    bottom.append(likesStat, playsStat, spacer);
+  } else {
+    bottom.append(likeBtn, likesStat, playsStat, spacer);
+  }
 
   if (level.source === "local") {
     const shareBtn = document.createElement("button");
@@ -2135,6 +2147,10 @@ function loadDailyChallengeLevel(level) {
 function refreshCommunityLikeButton() {
   if (!currentCommunityLevel) return;
   const fresh = getLevel(currentCommunityLevel.id);
+  // Retour utilisateur: "on ne doit pas pouvoir liker sa propre grille
+  // publiée dans communauté" — sur sa propre grille (source "local"), le
+  // bouton coeur du bandeau de jeu n'a pas lieu d'être.
+  btnCommunityLike.classList.toggle("hidden", fresh?.source === "local");
   btnCommunityLike.classList.toggle("liked", !!fresh?.likedByMe);
 }
 
@@ -2511,7 +2527,13 @@ function setMode(next) {
     btnLevelGrid.classList.add("hidden");
     btnInfiniteSettings.classList.add("hidden");
     btnInfiniteNext.classList.add("hidden");
-    btnCommunityLike.classList.remove("hidden");
+    // Pas de `remove("hidden")` inconditionnel ici: sur sa PROPRE grille
+    // publiée (retour utilisateur: "on ne doit pas pouvoir liker sa propre
+    // grille publiée dans communauté") le bouton doit rester caché.
+    // `refreshCommunityLikeButton` retranche cette logique (basée sur
+    // `currentCommunityLevel`, déjà positionné par `loadCommunityLevel` avant
+    // que `setMode` ne soit appelée) pour ne pas la dupliquer ici.
+    refreshCommunityLikeButton();
     playControlsEl.classList.remove("play-controls--left");
     playView.classList.remove("hidden");
     return;

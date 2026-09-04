@@ -407,8 +407,15 @@ export function likedLevels() {
 
 /** Bascule votre like sur une grille et renvoie le nouvel état (true = vous
  * l'aimez désormais). Fonctionne aussi bien sur une grille seed que sur une
- * grille publiée (locale ou par un autre "joueur" simulé). */
+ * grille publiée (locale ou par un autre "joueur" simulé) — SAUF sur une
+ * grille dont VOUS êtes l'auteur (retour utilisateur: "on ne doit pas
+ * pouvoir liker sa propre grille publiée dans communauté"), où c'est un
+ * no-op qui renvoie toujours `false` (jamais likée par vous-même). Une
+ * grille seed (auteur fictif, jamais `ownerUid`) n'est jamais concernée par
+ * cette restriction. */
 export function toggleLike(id) {
+  const level = getLevel(id);
+  if (level?.ownerUid && level.ownerUid === myUid) return false;
   const liked = loadLikedIds();
   if (liked.has(id)) liked.delete(id);
   else liked.add(id);
