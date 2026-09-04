@@ -117,6 +117,13 @@ const MAX_GEN_LEVEL = 10;
 // (voir REWARDADD_BOOST_AFTER_MS), pour ne jamais en priver un joueur trop
 // longtemps sur une session étendue.
 const REWARDADD_BASE_CHANCE = 0.01;
+// Retour utilisateur: "lorsque le joueur refuse l'offre, elle revient trop
+// vite [...] on pourrait la passer à 2% si il rejette l'offre et 1% si il
+// l'accepte" — deux taux de base distincts selon l'ISSUE de la DERNIÈRE
+// proposition résolue (voir lastGenOfferDecision), plutôt qu'un taux
+// unique — voir maybeTriggerGenOffer().
+const REWARDADD_BASE_CHANCE_AFTER_ACCEPT = 0.01;
+const REWARDADD_BASE_CHANCE_AFTER_REJECT = 0.02;
 const REWARDADD_BOOST_CHANCE = 0.07;
 const REWARDADD_BOOST_AFTER_MS = 8 * 60 * 60 * 1000;
 
@@ -762,6 +769,13 @@ export function initSommation(pointsApi) {
   // (jamais tirée) est traité comme "il y a longtemps" ci-dessous, pour ne
   // jamais désavantager une toute nouvelle partie.
   let lastGenOfferAt = savedBoard?.lastGenOfferAt ?? null;
+  // "accept" | "reject" | null (jamais résolue) — voir REWARDADD_BASE_CHANCE_*
+  // ci-dessus: détermine le taux de base de la PROCHAINE proposition selon
+  // l'issue de la dernière (retour utilisateur, voir constantes plus haut).
+  // `null` par défaut (aucune proposition résolue encore) se comporte comme
+  // "accept" (taux le plus bas), pour ne pas démarrer une partie neuve avec
+  // un taux gonflé sans raison.
+  let lastGenOfferDecision = savedBoard?.lastGenOfferDecision ?? null;
 
   function isLocked(r, c) {
     return lockedCells.has(`${r},${c}`);
@@ -875,7 +889,9 @@ export function initSommation(pointsApi) {
   function maybeTriggerGenOffer() {
     if (pendingGenOffer || hasActiveGenOfferOnBoard()) return;
     const longOverdue = lastGenOfferAt == null || Date.now() - lastGenOfferAt > REWARDADD_BOOST_AFTER_MS;
-    const chance = longOverdue ? REWARDADD_BOOST_CHANCE : REWARDADD_BASE_CHANCE;
+    const baseChance =
+      lastGenOfferDecision === "reject" ? REWARDADD_BASE_CHANCE_AFTER_REJECT : REWARDADD_BASE_CHANCE_AFTER_ACCEPT;
+    const chance = longOverdue ? REWARDADD_BOOST_CHANCE : baseChance;
     if (Math.random() >= chance) return;
     const draw = rollGenOfferColorAndLevel();
     if (!draw) return; // les 4 couleurs sont au plafond — retour utilisateur: pas de proposition dans ce cas
@@ -1842,6 +1858,7 @@ export function initSommation(pointsApi) {
       selectedGen,
       pendingGenOffer,
       lastGenOfferAt,
+      lastGenOfferDecision,
     });
   }
 
@@ -1896,6 +1913,7 @@ export function initSommation(pointsApi) {
       const cell = board[r]?.[c];
       if (earned && cell?.type === "genOffer") {
         board[r][c] = { type: "gen", color: cell.color, level: cell.level };
+        lastGenOfferDecision = "accept";
         trackEvent("rewarded_ad_completed", { placement: "remember_genoffer" });
         playChargeFull();
         closeGenOfferModal();
@@ -1920,6 +1938,7 @@ export function initSommation(pointsApi) {
       const cell = board[r]?.[c];
       if (cell?.type === "genOffer") {
         board[r][c] = null;
+        lastGenOfferDecision = "reject";
         playChargeEmptied();
       }
       closeGenOfferModal();
