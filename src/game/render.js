@@ -353,30 +353,67 @@ export function mirrorNeuronIcon() {
   </svg>`;
 }
 
-/** Icône d'un prisme: octogone facetté (pierre taillée) avec 4 facettes
- * de forme et taille RIGOUREUSEMENT identiques, chacune centrée sur sa
- * direction cardinale (gauche/bas/droite/haut — donc alignée avec la
- * case voisine qu'elle colore, pas sur un angle entre deux voisins).
- * Chaque facette reste attachée au centre et à ses deux côtés partagés
- * avec ses voisines ; seule sa pointe extérieure respire (avance/recule),
- * en boucle et à un rythme décalé d'une facette à l'autre (asynchrone) —
- * design validé en mockup (variante E) plutôt qu'une simple pulsation
- * d'opacité globale, trop discrète pour se voir.
+// Compteur global d'appels à prismIcon() — sert UNIQUEMENT à fabriquer un id
+// de <clipPath> garanti unique par icône générée (voir prismIcon):
+// plusieurs prismes peuvent coexister sur le même plateau, et un id de
+// clip-path dupliqué entre deux <svg> ferait pointer le second vers le
+// clipPath du premier (comportement de référencement d'id SVG, pas une
+// erreur silencieuse) — un compteur qui n'augmente jamais élimine tout
+// risque de collision, y compris entre deux (re)générations successives de
+// la MÊME case (voir renderPrismIcon: un changement de thème régénère
+// entièrement l'icône, donc un nouvel id à chaque fois est correct, l'ancien
+// <clipPath> disparaissant avec l'ancien innerHTML).
+let prismIconSeq = 0;
+
+/** Icône d'un prisme: octogone facetté (pierre taillée) avec 4 facettes.
  *
- * La rotation (voir grid.js: chaque lumière supplémentaire à portée de
- * laser pivote l'ordre d'un cran) n'est PAS obtenue en recalculant quelle
- * couleur va dans quelle facette à chaque rendu — ça ne peut pas
- * s'animer, un changement de fill est instantané. Les 4 facettes sont
- * peintes UNE FOIS avec l'arrangement "de base" (rotation 0, dérivé
- * uniquement de `firstColor`), regroupées dans un <g class="prism-rotor">
- * qu'on fait pivoter de 90° par lumière en portée (`cell._prismAdjacentCount`,
- * voir grid.js) via un transform CSS. Une rotation de +90° (horaire)
- * déplace visuellement le contenu de "droite"→"bas"→"gauche"→"haut"→
- * "droite", ce qui reproduit exactement le décalage de couleurs voulu
- * (vérifié algébriquement: nouvelle couleur en gauche = ancienne couleur
- * en bas, etc.) tout en restant une VRAIE rotation qu'on peut animer en
- * transition CSS — voir render(): le <g> est mis à jour en place (son
- * `transform`, pas son innerHTML) pour que la transition s'applique.
+ * Retour utilisateur ("le design est sympa mais ne permet pas assez de
+ * visualiser sa mécanique [...] il faudrait un état d'entre-deux entre ce
+ * qu'il colore actuellement et ce qu'il va colorer ensuite [...] où il
+ * empiète un peu sur sa ligne du présent et celle du futur") : le CONTOUR
+ * (la silhouette des 4 facettes, dessin taillé de la pierre) et la COULEUR
+ * (qui va à quelle direction) sont maintenant deux calques INDÉPENDANTS,
+ * validés en mockup itératif avec l'utilisateur (variante "A3") :
+ *   - le contour respire exactement comme avant (pointe de chaque facette
+ *     qui avance/recule en boucle, décalée de 0.65s d'une facette à
+ *     l'autre) — SEUL ce calque respire désormais ;
+ *   - la couleur vit dans un disque séparé, de taille FIXE (rayon 44,
+ *     volontairement au-delà du rayon max du contour, 42 — jamais de
+ *     respiration ici), posé dans un <g clip-path="..."> DÉCOUPÉ par la silhouette du
+ *     contour (un <clipPath> qui rejoue la MÊME animation `points` que le
+ *     contour visible, pour rester synchronisé image par image) : tout ce
+ *     que le disque déborde au-delà du contour à un instant donné est
+ *     simplement gommé, jamais une couleur redimensionnée pour "ruser". Le
+ *     disque est surdimensionné (44 > 42) précisément pour qu'il y ait
+ *     TOUJOURS assez de matière à découper, même quand le contour respire à
+ *     son maximum — sans ça un vide serait visible entre le contour et la
+ *     couleur pendant l'inspiration.
+ *   - ce disque tourne en continu, en boucle, MÊME sans qu'aucune lumière
+ *     ne change d'état : une poussée lente et progressive (démarre
+ *     doucement, accélère, puis ralentit en approchant sa limite — comme un
+ *     effort) jusqu'à 75° — tout près d'un cran complet (90°) sans jamais
+ *     l'atteindre — puis un relâchement rapide (comme un élastique qu'on
+ *     lâche) qui la ramène à son point de départ. C'est CETTE poussée qui,
+ *     aux jointures entre deux couleurs, laisse entrevoir un instant la
+ *     teinte voisine avant de se rétracter (l'"empiètement" demandé) —
+ *     obtenu par la seule rotation + le découpage ci-dessus, sans dessiner
+ *     le moindre dégradé ou sliver ad hoc par facette.
+ *
+ * La rotation RÉELLE (voir grid.js: chaque lumière supplémentaire à portée
+ * de laser pivote l'ordre d'un cran) reste identique au mécanisme existant
+ * et n'est PAS ré-inventée ici : les couleurs du disque sont peintes UNE
+ * FOIS avec l'arrangement "de base" (rotation 0, dérivé uniquement de
+ * `firstColor`), et c'est le <g class="prism-rotor"> — inchangé dans son
+ * rôle, désormais posé ENTRE le découpage fixe et le disque de couleurs qui
+ * respire par la rotation — qui pivote de 90° par lumière en portée
+ * (`cell._prismAdjacentCount`) via ce même transform CSS animable. La
+ * poussée continue ci-dessus est un <g> supplémentaire ENCORE À
+ * L'INTÉRIEUR du rotor : les deux rotations (réelle + poussée d'anticipation)
+ * se composent naturellement (imbrication de transforms), et le
+ * clip-path — posé sur le calque ENGLOBANT, jamais affecté par les
+ * transforms de ses enfants — reste fixe quoi qu'il arrive à l'intérieur.
+ * Voir render(): le <g class="prism-rotor"> est mis à jour en place (son
+ * `transform`, pas son innerHTML) pour que la transition CSS s'applique.
  */
 export function prismIcon(cell) {
   if (isPixelTheme()) return pixelPrismIcon(cell, PRISM_COLOR_SEQUENCE, PRISM_LETTER_COLORS);
@@ -386,22 +423,71 @@ export function prismIcon(cell) {
   const down = hexFor(PRISM_LETTER_COLORS[base[1]]) || "#888";
   const right = hexFor(PRISM_LETTER_COLORS[base[2]]) || "#888";
   const up = hexFor(PRISM_LETTER_COLORS[base[3]]) || "#888";
-  // Chaque facette: centre, côté partagé, pointe (respire entre 42 et 34
-  // de rayon), côté partagé suivant. begin décalé de 0.65s par facette.
-  const facet = (fill, side1, tipOut, tipIn, side2, begin) => `
-    <polygon points="50,50 ${side1} ${tipOut} ${side2}" fill="${fill}" fill-opacity="0.88" stroke="#05060a" stroke-width="3" stroke-linejoin="round">
-      <animate attributeName="points" dur="2.6s" begin="${begin}" repeatCount="indefinite"
-        values="50,50 ${side1} ${tipOut} ${side2};50,50 ${side1} ${tipIn} ${side2};50,50 ${side1} ${tipOut} ${side2}"/>
-    </polygon>`;
-  const facets = [
-    facet(right, "79.7,20.3", "92,50", "84,50", "79.7,79.7", "0s"),
-    facet(down, "79.7,79.7", "50,92", "50,84", "20.3,79.7", "0.65s"),
-    facet(left, "20.3,79.7", "8,50", "16,50", "20.3,20.3", "1.3s"),
-    facet(up, "20.3,20.3", "50,8", "50,16", "79.7,20.3", "1.95s"),
-  ].join("");
+  // Angles standard SVG (0°=droite, 90°=bas, 180°=gauche, 270°=haut — Y
+  // pointe vers le bas) : même ordre/décalage (0.65s) que l'ancien code.
+  const slots = [
+    { fill: right, ang: 0 },
+    { fill: down, ang: 90 },
+    { fill: left, ang: 180 },
+    { fill: up, ang: 270 },
+  ];
+  const polar = (r, deg) => {
+    const rad = (deg * Math.PI) / 180;
+    return `${(50 + r * Math.cos(rad)).toFixed(1)},${(50 + r * Math.sin(rad)).toFixed(1)}`;
+  };
+  // Géométrie partagée par le contour ET le clip-path (voir plus haut: les
+  // deux doivent rester identiques pour que le découpage colle exactement
+  // au contour visible à chaque instant de la respiration).
+  const breathingFacets = slots.map((s, i) => ({
+    c1: polar(42, s.ang - 45),
+    c2: polar(42, s.ang + 45),
+    out: polar(42, s.ang),
+    inn: polar(34, s.ang),
+    begin: `${(i * 0.65).toFixed(2)}s`,
+  }));
+  const contour = breathingFacets
+    .map(
+      (f) => `
+    <polygon points="50,50 ${f.c1} ${f.out} ${f.c2}" fill="none" stroke="#05060a" stroke-width="3" stroke-linejoin="round">
+      <animate attributeName="points" dur="2.6s" begin="${f.begin}" repeatCount="indefinite"
+        values="50,50 ${f.c1} ${f.out} ${f.c2};50,50 ${f.c1} ${f.inn} ${f.c2};50,50 ${f.c1} ${f.out} ${f.c2}"/>
+    </polygon>`
+    )
+    .join("");
+  const clipId = `prism-clip-${prismIconSeq++}`;
+  const clipDefs = breathingFacets
+    .map(
+      (f) => `<polygon points="50,50 ${f.c1} ${f.out} ${f.c2}">
+        <animate attributeName="points" dur="2.6s" begin="${f.begin}" repeatCount="indefinite"
+          values="50,50 ${f.c1} ${f.out} ${f.c2};50,50 ${f.c1} ${f.inn} ${f.c2};50,50 ${f.c1} ${f.out} ${f.c2}"/>
+      </polygon>`
+    )
+    .join("");
+  // Disque de couleurs: rayon fixe 44 (voir commentaire d'en-tête), jamais
+  // de respiration — seule sa rotation (réelle + poussée d'anticipation,
+  // voir plus bas) varie.
+  const wedges = slots
+    .map((s) => {
+      const c1 = polar(44, s.ang - 45);
+      const c2 = polar(44, s.ang + 45);
+      const tip = polar(44, s.ang);
+      return `<polygon points="50,50 ${c1} ${tip} ${c2}" fill="${s.fill}" fill-opacity="0.9"/>`;
+    })
+    .join("");
   const deg = (cell._prismAdjacentCount || 0) * 90;
   return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
-    <g class="prism-rotor" style="transform-origin:50px 50px; transform:rotate(${deg}deg)">${facets}</g>
+    <defs><clipPath id="${clipId}">${clipDefs}</clipPath></defs>
+    <g clip-path="url(#${clipId})">
+      <g class="prism-rotor" style="transform-origin:50px 50px; transform:rotate(${deg}deg)">
+        <g>
+          ${wedges}
+          <animateTransform attributeName="transform" type="rotate"
+            values="0 50 50;75 50 50;0 50 50" keyTimes="0;0.8;1" calcMode="spline"
+            keySplines="0.55 0 0.25 1;0.55 0.02 0.25 1" dur="3s" repeatCount="indefinite"/>
+        </g>
+      </g>
+    </g>
+    ${contour}
   </svg>`;
 }
 
