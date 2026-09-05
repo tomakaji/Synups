@@ -475,15 +475,27 @@ export function prismIcon(cell) {
     })
     .join("");
   const deg = (cell._prismAdjacentCount || 0) * 90;
+  // Retour utilisateur: "tant qu'on n'a pas posé de lumière qui active le
+  // prisme, on peut le laisser sans animation de rotation interne, juste
+  // l'animation de respiration" — avant toute lumière en portée, le disque
+  // de couleurs reste totalement statique (aucun <animateTransform>), figé
+  // dans sa position de base (ex: rouge à gauche si firstColor==="r"). Le
+  // wobble d'anticipation ne démarre qu'une fois le prisme "activé"
+  // (_prismAdjacentCount >= 1) — même seuil que `prismActive` plus bas
+  // (render(): musique par calques).
+  const active = (cell._prismAdjacentCount || 0) >= 1;
+  const wedgeAnim = active
+    ? `<animateTransform attributeName="transform" type="rotate"
+            values="0 50 50;75 50 50;0 50 50" keyTimes="0;0.8;1" calcMode="spline"
+            keySplines="0.55 0 0.25 1;0.55 0.02 0.25 1" dur="3s" repeatCount="indefinite"/>`
+    : "";
   return `<svg viewBox="0 0 100 100" class="cell-icon-svg">
     <defs><clipPath id="${clipId}">${clipDefs}</clipPath></defs>
     <g clip-path="url(#${clipId})">
       <g class="prism-rotor" style="transform-origin:50px 50px; transform:rotate(${deg}deg)">
-        <g>
+        <g transform="rotate(0 50 50)">
           ${wedges}
-          <animateTransform attributeName="transform" type="rotate"
-            values="0 50 50;75 50 50;0 50 50" keyTimes="0;0.8;1" calcMode="spline"
-            keySplines="0.55 0 0.25 1;0.55 0.02 0.25 1" dur="3s" repeatCount="indefinite"/>
+          ${wedgeAnim}
         </g>
       </g>
     </g>
@@ -1023,11 +1035,19 @@ export function createBoardRenderer(boardEl, options = {}) {
     // thème avec lequel le rotor actuel a été peint, pour ne réutiliser le
     // raccourci "juste tourner le transform" que si le thème n'a pas bougé.
     const pixel = String(isPixelTheme());
-    if (rotor && icon.dataset.pixelTheme === pixel) {
+    // Idem pour le franchissement du seuil d'activation (0 <-> >=1 lumière
+    // en portée, voir prismIcon): le wobble d'anticipation n'existe QUE dans
+    // le SVG (présence/absence de l'<animateTransform>), donc un simple
+    // changement de `rotor.style.transform` ne peut ni l'ajouter ni le
+    // retirer — il faut régénérer l'innerHTML au moment précis où l'état
+    // "actif" change, comme pour le thème.
+    const active = String((cellData._prismAdjacentCount || 0) >= 1);
+    if (rotor && icon.dataset.pixelTheme === pixel && icon.dataset.prismActive === active) {
       rotor.style.transform = `rotate(${deg}deg)`;
     } else {
       icon.innerHTML = prismIcon(cellData);
       icon.dataset.pixelTheme = pixel;
+      icon.dataset.prismActive = active;
     }
   }
 
