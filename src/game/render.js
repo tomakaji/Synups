@@ -399,19 +399,29 @@ let prismIconSeq = 0;
  *     obtenu par la seule rotation + le découpage ci-dessus, sans dessiner
  *     le moindre dégradé ou sliver ad hoc par facette.
  *
- * La rotation RÉELLE (voir grid.js: chaque lumière supplémentaire à portée
- * de laser pivote l'ordre d'un cran) reste identique au mécanisme existant
- * et n'est PAS ré-inventée ici : les couleurs du disque sont peintes UNE
- * FOIS avec l'arrangement "de base" (rotation 0, dérivé uniquement de
- * `firstColor`), et c'est le <g class="prism-rotor"> — inchangé dans son
- * rôle, désormais posé ENTRE le découpage fixe et le disque de couleurs qui
- * respire par la rotation — qui pivote de 90° par lumière en portée
- * (`cell._prismAdjacentCount`) via ce même transform CSS animable. La
- * poussée continue ci-dessus est un <g> supplémentaire ENCORE À
- * L'INTÉRIEUR du rotor : les deux rotations (réelle + poussée d'anticipation)
- * se composent naturellement (imbrication de transforms), et le
- * clip-path — posé sur le calque ENGLOBANT, jamais affecté par les
- * transforms de ses enfants — reste fixe quoi qu'il arrive à l'intérieur.
+ * La rotation RÉELLE du disque doit refléter la couleur RÉELLEMENT appliquée
+ * aux lumières déjà posées (voir grid.js: `appliedRotation = baseIndex +
+ * max(0, adjacentLights-1)`, PAS `_prismColors`/displayRotation qui est la
+ * prévision "un cran d'avance" — celle-ci n'est plus affichée en dur, c'est
+ * le rôle du wobble ci-dessus). Concrètement: poser la 1ère lumière (0->1)
+ * n'incrémente PAS `max(0, count-1)` (0->0) donc AUCUNE rotation ne doit se
+ * produire — seule l'apparition du wobble marque l'activation. La 2e lumière
+ * (1->2) provoque la PREMIÈRE vraie rotation de 90° (recolorant du même coup
+ * la 1ère lumière déjà posée, un cran plus loin dans PRISM_COLOR_SEQUENCE —
+ * comportement du moteur, pas un bug de rendu). D'où `deg = max(0, count-1)
+ * * 90` ci-dessous (retour utilisateur: l'ancien `count * 90` faisait
+ * pivoter le disque dès la 1ère lumière, un pivot inutile qui décalait
+ * toutes les couleurs sans raison mécanique).
+ * Les couleurs du disque sont peintes UNE FOIS avec l'arrangement "de base"
+ * (rotation 0, dérivé uniquement de `firstColor`), et c'est le
+ * <g class="prism-rotor"> — posé ENTRE le découpage fixe et le disque de
+ * couleurs qui respire par la rotation — qui porte cette rotation réelle via
+ * son transform CSS animable. La poussée continue ci-dessus est un <g>
+ * supplémentaire ENCORE À L'INTÉRIEUR du rotor : les deux rotations (réelle
+ * + poussée d'anticipation) se composent naturellement (imbrication de
+ * transforms), et le clip-path — posé sur le calque ENGLOBANT, jamais
+ * affecté par les transforms de ses enfants — reste fixe quoi qu'il arrive
+ * à l'intérieur.
  * Voir render(): le <g class="prism-rotor"> est mis à jour en place (son
  * `transform`, pas son innerHTML) pour que la transition CSS s'applique.
  */
@@ -474,7 +484,12 @@ export function prismIcon(cell) {
       return `<polygon points="50,50 ${c1} ${tip} ${c2}" fill="${s.fill}" fill-opacity="0.9"/>`;
     })
     .join("");
-  const deg = (cell._prismAdjacentCount || 0) * 90;
+  // Rotation RÉELLE = couleurs effectivement appliquées, PAS la prévision
+  // "un cran d'avance" (voir doc ci-dessus / grid.js: appliedRotation).
+  // 0 ET 1 lumière donnent la même couleur (max(0, count-1) vaut 0 dans les
+  // deux cas) — donc pas de rotation lors de la 1ère pose, seulement à
+  // partir de la 2e.
+  const deg = Math.max(0, (cell._prismAdjacentCount || 0) - 1) * 90;
   // Retour utilisateur: "tant qu'on n'a pas posé de lumière qui active le
   // prisme, on peut le laisser sans animation de rotation interne, juste
   // l'animation de respiration" — avant toute lumière en portée, le disque
@@ -1025,7 +1040,9 @@ export function createBoardRenderer(boardEl, options = {}) {
   // supprimerait l'animation (c'était le bug signalé).
   function renderPrismIcon(icon, cellData) {
     if (!icon) return;
-    const deg = (cellData._prismAdjacentCount || 0) * 90;
+    // Même formule que prismIcon() (voir sa doc): rotation RÉELLE, pas la
+    // prévision — 0 et 1 lumière ne pivotent pas (max(0, count-1) = 0).
+    const deg = Math.max(0, (cellData._prismAdjacentCount || 0) - 1) * 90;
     const rotor = icon.querySelector(".prism-rotor");
     // Le thème (lisse/pixel) peut changer entre deux frames (Options ->
     // toggle PixelArt pendant qu'un plateau est déjà affiché en mémoire,
