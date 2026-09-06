@@ -15,7 +15,7 @@
 // heure locale de l'appareil), jamais CE QUI est généré.
 import { requestLevel } from "./infiniteClient.js";
 import { DAILY_CHALLENGE_SIZE_BOOST, DAILY_CHALLENGE_MIN_BRANCH_COUNT } from "./generator.js";
-import { loadDailyChallenge, saveDailyChallenge, loadStars, addStars } from "./storage.js";
+import { loadDailyChallenge, saveDailyChallenge, loadStars, saveStars, addStars } from "./storage.js";
 import { trackEvent } from "./analytics.js";
 
 // Budget généreux (voir generator.js: DAILY_CHALLENGE_SIZE_BOOST) — cette
@@ -142,4 +142,18 @@ export const STAR_BADGE_DEFS = [
 export function getStarBadges() {
   const stars = loadStars();
   return STAR_BADGE_DEFS.map((def) => ({ name: def.name, earned: stars >= def.cost, tier: def.tier }));
+}
+
+/** Débogage: force le déverrouillage des bannières Étoiles (Comète,
+ * Supernova) sans avoir à enchaîner les Défis Quotidiens — même bouton que
+ * debugUnlockPixelArt (sommation.js: tiers 1-5), retour utilisateur: "ajoute
+ * les deux [bannières Étoiles] sur le bouton admin". Fait avancer le VRAI
+ * solde d'étoiles (jamais en arrière si déjà plus haut, même garde que
+ * spendStars/addStars) jusqu'au coût du palier le plus cher — réutilise tel
+ * quel le chemin normal (getStarBadges lit le même solde), donc rien à
+ * dupliquer/désynchroniser ailleurs. Effet de bord acceptable pour un
+ * bouton de test: ça crédite aussi de vraies étoiles dépensables. */
+export function debugUnlockStarBadges() {
+  const maxCost = Math.max(...STAR_BADGE_DEFS.map((def) => def.cost));
+  if (loadStars() < maxCost) saveStars(maxCost);
 }
