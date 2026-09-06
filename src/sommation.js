@@ -1195,6 +1195,25 @@ export function initSommation(pointsApi) {
     return item.type === "light" && sameChannels(item.ch, COLOR_CH[r.color]) && item.tier === r.tier;
   }
 
+  /** Nombre de générateurs blancs actuellement sur le plateau — le blanc est
+   * le SEUL générateur qui peut apparaître autrement qu'en fusionnant deux
+   * générateurs identiques (voir le générateur de départ plus haut), donc
+   * c'est la seule source de nouveaux morceaux/générateurs pour le joueur.
+   * Utilisé pour empêcher de recycler le DERNIER, ce qui bloquerait
+   * définitivement la partie (retour utilisateur: "il ne faut pas qu'on
+   * puisse recycler un générateur si c'est le dernier générateur blanc sur
+   * la grille, sinon le jeu serait bloqué"). */
+  function countWhiteGenerators() {
+    let count = 0;
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const cell = board[r][c];
+        if (cell?.type === "gen" && cell.color === "w") count++;
+      }
+    }
+    return count;
+  }
+
   /** Nourrir l'objectif — retour utilisateur: "l'objectif est multiple et
    * précis" (exigences exactes couleur+rang) ET "on doit pouvoir nourrir
    * l'objectif avec les générateurs mais ça ne rapporte rien du tout, ça
@@ -1206,6 +1225,15 @@ export function initSommation(pointsApi) {
   function doDropOnObjective(coord) {
     const item = board[coord.r][coord.c];
     const req = objectiveState.requirements.find((r) => matchesRequirement(item, r));
+    if (!req && item.type === "gen" && item.color === "w" && countWhiteGenerators() <= 1) {
+      // Retour utilisateur: recycler le DERNIER générateur blanc bloquerait
+      // la partie (plus aucun moyen d'obtenir de nouveaux morceaux/
+      // générateurs) — on refuse le dépôt: le générateur reste en place,
+      // seul un retour visuel/haptique d'échec signale le refus.
+      playTargetLost();
+      hapticWarning();
+      return { ok: true, fx: "obj-fail" };
+    }
     board[coord.r][coord.c] = null;
     if (!req) {
       if (item.type !== "light") {
@@ -1281,7 +1309,23 @@ export function initSommation(pointsApi) {
       // matchesRequirement/genReq).
       if (srcCell.type !== "light") {
         const genReqMatch = srcCell.type === "gen" && objectiveState.requirements.find((r) => matchesRequirement(srcCell, r));
-        return genReqMatch ? { valid: true, label: "Nourrir l'objectif" } : { valid: true, label: "Recycler (aucun gain)" };
+        if (genReqMatch) return { valid: true, label: "Nourrir l'objectif" };
+        // Retour utilisateur: "il ne faut pas qu'on puisse recycler un
+        // générateur si c'est le dernier générateur blanc [...] le jeu
+        // serait bloqué" — voir doDropOnObjective/countWhiteGenerators, qui
+        // refuse réellement ce dépôt: l'aperçu doit prévenir AVANT le
+        // lâcher plutôt que laisser croire à un recyclage normal.
+        if (srcCell.type === "gen" && srcCell.color === "w" && countWhiteGenerators() <= 1) {
+          return { valid: false, label: "Impossible — dernier générateur blanc" };
+        }
+        // Retour utilisateur: "lorsqu'on s'apprête à recycler un générateur
+        // l'objectif s'éclaire en vert alors qu'on n'a aucun gain [...] ça
+        // devrait être en rouge sauf si l'objectif est un générateur
+        // correspondant" — valid:true ne doit s'appliquer QUE si ça nourrit
+        // vraiment l'objectif (genReqMatch); un simple recyclage (aucun
+        // gain) doit être signalé comme invalide (rouge), même si l'action
+        // reste autorisée (voir handleDrop, qui ne bloque pas ce cas).
+        return { valid: false, label: "Recycler (aucun gain)" };
       }
       const req = objectiveState.requirements.find((r) => matchesRequirement(srcCell, r));
       return req ? { valid: true, label: "Nourrir l'objectif" } : { valid: false, label: "Ne correspond à rien — recyclage" };
@@ -1546,9 +1590,16 @@ export function initSommation(pointsApi) {
     // matchesRequirement/predictDrop) déclenche la confirmation ; un
     // générateur qui nourrit l'objectif final, ou une lumière/un morceau
     // recyclé, restent immédiats (geste peu coûteux ou volontaire).
+    // Retour utilisateur (round suivant): le DERNIER générateur blanc ne
+    // doit jamais pouvoir être recyclé (softlock) — pas besoin de modale de
+    // confirmation dans ce cas puisque le dépôt est de toute façon refusé
+    // (voir doDropOnObjective/countWhiteGenerators): on laisse handleDrop
+    // gérer l'échec immédiatement, comme un dépôt normal.
+    const isLastWhiteGen = srcCell?.type === "gen" && srcCell.color === "w" && countWhiteGenerators() <= 1;
     const wouldRecycleGenerator =
       target?.objective &&
       srcCell?.type === "gen" &&
+      !isLastWhiteGen &&
       !objectiveState.requirements.some((req) => matchesRequirement(srcCell, req));
     if (wouldRecycleGenerator) {
       pendingRecycleDrop = { src: { r, c }, target };

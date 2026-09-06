@@ -286,15 +286,6 @@
   text-align: center;
 }
 
-.mechanic-schema-kicker {
-  margin: 0;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
 /* `.cell.cell--empty` (voir board.css) donne déjà le fond/bordure/rayon
    IDENTIQUES à une case du plateau — cette classe agrandit juste la taille
    pour la mise en avant dans la modale (l'icône elle-même vient de
@@ -308,6 +299,83 @@
 
 .mechanic-schema-title,
 .mechanic-schema-text {
+  text-align: center;
+}
+
+/* BUG CORRIGÉ (retour utilisateur: "le titre (nom de la mécanique) n'est
+   pas bien centré") — `.modal-title` (règle générique, voir plus haut)
+   réserve `padding-right: 24px` pour laisser la place à la croix de
+   fermeture des AUTRES modales ; cette modale n'en a plus (voir
+   index.html: bouton .modal-close-x retiré, fermeture uniquement via
+   "Compris !"), donc ce padding asymétrique décalait visuellement le texte
+   centré vers la gauche sans plus aucune raison de le faire. */
+.mechanic-schema-title {
+  padding-right: 0;
+}
+
+/* ---------- Aide-mémoire "Mécaniques découvertes" (Options) ----------
+   Voir index.html: #mechanics-reference-modal, main.js:
+   renderMechanicsReference(). Contrairement à .mechanic-schema-card
+   (une seule mécanique, plein écran, fermeture forcée), celle-ci liste
+   TOUTES les mécaniques déjà vues à la fois — carte plus large et
+   scrollable plutôt que centrée/compacte. */
+.mechanics-reference-card {
+  width: min(420px, 100%);
+  max-height: min(560px, 80vh);
+}
+
+.mechanics-reference-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* Compense le padding du bouton croix (voir .modal-close-x) comme
+     .modal-title le fait déjà pour un titre — évite que la première ligne
+     de la liste passe SOUS la croix plutôt qu'à côté. */
+  padding-right: 2px;
+}
+
+.mechanics-reference-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #2a3040;
+}
+
+.mechanics-reference-item:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* Même logique que .mechanic-schema-icon (case de plateau agrandie,
+   .cell.cell--empty déjà fourni par board.css) mais plus petite: ici
+   l'icône est un simple repère au sein d'une liste, pas la pièce maîtresse
+   d'une modale plein écran. */
+.mechanics-reference-icon {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  cursor: default;
+}
+
+.mechanics-reference-copy h4 {
+  margin: 0 0 2px;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+.mechanics-reference-copy p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.mechanics-reference-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
   text-align: center;
 }
 

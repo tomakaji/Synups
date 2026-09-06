@@ -394,6 +394,18 @@
             <p id="options-playgames-hint" class="options-hint">Connecte-toi pour sauvegarder ta progression dans le cloud.</p>
           </div>
 
+          <!-- Retour utilisateur: "il faudrait pouvoir retrouver toutes les
+               mécaniques dans un des onglets au cas où on oublie" — liste
+               en lecture seule des modales pédagogiques déjà vues (voir
+               main.js: MECHANIC_SCHEMAS/seenMechanics/
+               renderMechanicsReference), jamais celles pas encore
+               découvertes (pas de spoil de la progression Histoire). -->
+          <div class="options-section">
+            <span class="options-label">Mécaniques</span>
+            <button id="btn-mechanics-reference" class="options-btn">Voir les mécaniques découvertes</button>
+            <p class="options-hint">Retrouve les explications déjà débloquées en Histoire, au cas où tu en aurais oublié une.</p>
+          </div>
+
           <!-- Mode daltonien (retour utilisateur: "intégrer un mode Daltonien
                tout en gardant la logique RGB des lumières") — voir
                colorblind.js: purement un calque d'affichage (repère
@@ -973,23 +985,42 @@
            expliquent les mécaniques de façon très simplifiée à chaque
            nouveau composant ajouté" — icône réutilisée telle quelle
            (FEATURE_ICON_HTML, voir main.js) dans une case de plateau
-           .cell.cell--empty agrandie, + un texte court. Fermable comme
-           #hint-modal (croix + clic en dehors), et enchaîne sur la
+           .cell.cell--empty agrandie, + un texte court. Retour utilisateur
+           (round suivant): "cette modale ne doit pas pouvoir être fermée en
+           cliquant en dehors, ça évite les accidents de missclick, on doit
+           cliquer sur 'Compris'" — contrairement à #hint-modal, ni le fond
+           (.modal-backdrop, gardé pour l'assombrissement visuel mais sans
+           `data-mechanic-schema-close`) ni une croix ne ferment la modale:
+           seul le bouton "Compris !" porte cet attribut. Enchaîne sur la
            mécanique suivante si plusieurs sont découvertes d'un coup (voir
            main.js: showNextMechanicSchema). -->
       <div id="mechanic-schema-modal" class="modal mechanic-schema-modal hidden">
-        <div class="modal-backdrop" data-mechanic-schema-close></div>
+        <div class="modal-backdrop"></div>
         <div class="modal-card mechanic-schema-card">
-          <button type="button" class="modal-close-x" data-mechanic-schema-close aria-label="Fermer">
-            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          </button>
-          <p class="mechanic-schema-kicker">Nouvelle mécanique</p>
           <div id="mechanic-schema-icon" class="cell cell--empty mechanic-schema-icon"></div>
           <h3 class="modal-title mechanic-schema-title" id="mechanic-schema-title"></h3>
           <p class="modal-text mechanic-schema-text" id="mechanic-schema-text"></p>
           <div class="modal-actions">
             <button type="button" class="options-btn options-btn--accent" data-mechanic-schema-close>Compris !</button>
           </div>
+        </div>
+      </div>
+
+      <!-- Retour utilisateur (Options: "voir les mécaniques découvertes") —
+           aide-mémoire en lecture seule, jamais forcée: contrairement à
+           #mechanic-schema-modal ci-dessus, fermable par la croix ET par un
+           clic en dehors (pas de contenu "à ne pas manquer" ici, juste un
+           rappel consulté volontairement). Liste peuplée dynamiquement par
+           main.js: renderMechanicsReference(), uniquement les mécaniques
+           déjà présentes dans `seenMechanics` — jamais celles à venir. -->
+      <div id="mechanics-reference-modal" class="modal mechanics-reference-modal hidden">
+        <div class="modal-backdrop" data-mechanics-reference-close></div>
+        <div class="modal-card mechanics-reference-card">
+          <button type="button" class="modal-close-x" data-mechanics-reference-close aria-label="Fermer">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+          <h3 class="modal-title">Mécaniques découvertes</h3>
+          <div id="mechanics-reference-list" class="mechanics-reference-list"></div>
         </div>
       </div>
 

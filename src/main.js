@@ -1390,8 +1390,9 @@ const FEATURE_ICON_HTML = {
   // (sans couleur)" — dédiée, séparée de "base" (qui n'explique que la
   // règle de pose de l'impulsion) : un neurone satisfait SANS couleur
   // (aucune clé `color`), même rendu que sur le plateau (voir render.js:
-  // chargeIcon). Comme "base", forcée dans queueNewMechanicSchemas plutôt
-  // que détectée (un neurone est présent dès le niveau 1).
+  // chargeIcon). Déclenchée par détection réelle (voir
+  // queueNewMechanicSchemas: hasPlainNeuron), pas forcée — le premier
+  // neurone n'apparaît qu'au niveau 3, jamais au niveau 1.
   neuron: chargeIcon({ number: 2, _adjacentLights: 2 }),
   forbidden: synapseIcon("intact"),
   // "Couleur (charges + cibles)": une charge colorée satisfaite (glow +
@@ -1555,6 +1556,36 @@ function showNextMechanicSchema() {
   mechanicSchemaModal.classList.remove("hidden");
 }
 
+/** Vrai si `cells` contient au moins un neurone à charge SANS couleur (un
+ * simple chiffre 1-4 — jamais "0", réservé à "case interdite", ni un token
+ * à 2+ caractères type "2r", réservé à detectMechanics/"color"). Même
+ * tokenisation compacte-vs-espacée que detectMechanics ci-dessus (voir son
+ * commentaire) pour rester cohérent avec le vrai parseur du jeu (grid.js).
+ *
+ * BUG CORRIGÉ (retour utilisateur: "la description du neurone arrive au
+ * lvl 1 alors qu'elle devrait arriver au level 3") : `queueNewMechanicSchemas`
+ * forçait "neuron" en tête de liste dès le tout premier niveau, sur la foi
+ * d'un commentaire ("un neurone est présent dès le niveau 1") qui s'est
+ * révélé faux — le niveau 1 (`["..", ".."]`) n'a AUCUN chiffre, le premier
+ * neurone n'apparaît qu'au niveau 3 (`["..2..", ".XXXX"]`, voir levels.js).
+ * Remplacé par cette détection réelle, exactement comme "color" avait déjà
+ * dû l'être plus haut pour un bug similaire (voir le commentaire de
+ * detectMechanics: "la popup [...] arrive au niveau 4 alors que [...]
+ * seulement au niveau 9"). */
+function hasPlainNeuron(cells) {
+  for (const row of cells) {
+    const tokens = Array.isArray(row)
+      ? row
+      : String(row).includes(" ")
+      ? String(row).trim().split(/\s+/)
+      : String(row).trim().split("");
+    for (const token of tokens) {
+      if (/^[1-4]$/.test(token)) return true;
+    }
+  }
+  return false;
+}
+
 /** Appelée par loadLevel() (mode Histoire uniquement): compare les
  * mécaniques de la grille qui vient de charger à celles déjà vues (voir
  * storage.js: loadSeenMechanics/saveSeenMechanics), enfile les nouvelles et
@@ -1562,11 +1593,12 @@ function showNextMechanicSchema() {
  * modale — même si le joueur quitte l'écran sans la fermer, elle ne doit
  * jamais réapparaître pour la même mécanique). */
 function queueNewMechanicSchemas(cells) {
-  // "base"/"neuron" ne sont jamais renvoyées par detectMechanics (voir
-  // MECHANIC_SCHEMAS ci-dessus) — ajoutées systématiquement en tête de
-  // liste, `seenMechanics` (juste en dessous) se charge seule de ne montrer
-  // chacune qu'une fois.
-  const found = ["base", "neuron", ...detectMechanics(cells)];
+  // "base" ne dépend d'aucune détection (toujours pertinente dès la
+  // première case vide, donc toujours en tête) — "neuron", elle, doit
+  // attendre la première VRAIE apparition d'un neurone sans couleur (voir
+  // hasPlainNeuron ci-dessus), jamais forcée. `seenMechanics` (juste en
+  // dessous) se charge seule de ne montrer chacune qu'une fois passé ce cap.
+  const found = ["base", ...(hasPlainNeuron(cells) ? ["neuron"] : []), ...detectMechanics(cells)];
   const fresh = found.filter((key) => MECHANIC_SCHEMAS[key] && !seenMechanics.has(key));
   if (fresh.length === 0) return;
   for (const key of fresh) seenMechanics.add(key);
@@ -1578,6 +1610,55 @@ function queueNewMechanicSchemas(cells) {
 
 document.querySelectorAll("[data-mechanic-schema-close]").forEach((el) => {
   el.onclick = showNextMechanicSchema; // ferme celle-ci, enchaîne sur la suivante s'il y en a une
+});
+
+// ---------- Aide-mémoire "Mécaniques découvertes" (Options) ----------
+// Retour utilisateur: "il faudrait pouvoir retrouver toutes les mécaniques
+// dans un des onglets au cas où on oublie" — liste en lecture seule des
+// modales pédagogiques ci-dessus (MECHANIC_SCHEMAS) déjà vues par le joueur
+// (voir seenMechanics), jamais celles à venir (pas de spoil de la
+// progression Histoire). Contrairement à mechanic-schema-modal, purement
+// consultée à la demande: fermable par la croix ET par un clic en dehors
+// (voir index.html), rien à protéger d'un misclick ici.
+const mechanicsReferenceModal = document.getElementById("mechanics-reference-modal");
+const mechanicsReferenceListEl = document.getElementById("mechanics-reference-list");
+const btnMechanicsReference = document.getElementById("btn-mechanics-reference");
+
+function renderMechanicsReference() {
+  mechanicsReferenceListEl.innerHTML = "";
+  // Même ordre que la déclaration de MECHANIC_SCHEMAS (stable, pas l'ordre
+  // de découverte du joueur) — filtré à `seenMechanics` uniquement.
+  const keys = Object.keys(MECHANIC_SCHEMAS).filter((key) => seenMechanics.has(key));
+  if (keys.length === 0) {
+    mechanicsReferenceListEl.innerHTML =
+      '<p class="mechanics-reference-empty">Aucune mécanique découverte pour l\'instant — elles apparaîtront ici au fil de ta progression en Histoire.</p>';
+    return;
+  }
+  for (const key of keys) {
+    const schema = MECHANIC_SCHEMAS[key];
+    const item = document.createElement("div");
+    item.className = "mechanics-reference-item";
+    const icon = document.createElement("div");
+    icon.className = "cell cell--empty mechanics-reference-icon";
+    icon.innerHTML = FEATURE_ICON_HTML[key] ?? "";
+    const copy = document.createElement("div");
+    copy.className = "mechanics-reference-copy";
+    const h4 = document.createElement("h4");
+    h4.textContent = schema.title;
+    const p = document.createElement("p");
+    p.textContent = schema.text;
+    copy.append(h4, p);
+    item.append(icon, copy);
+    mechanicsReferenceListEl.appendChild(item);
+  }
+}
+
+btnMechanicsReference.onclick = () => {
+  renderMechanicsReference();
+  mechanicsReferenceModal.classList.remove("hidden");
+};
+document.querySelectorAll("[data-mechanics-reference-close]").forEach((el) => {
+  el.onclick = () => mechanicsReferenceModal.classList.add("hidden");
 });
 
 // Amorce le buffer de niveaux Infini dès le chargement de l'app (pas

@@ -27,9 +27,22 @@
    centré que le titre. Même largeur EXPLICITE que .community-feed ici:
    garantit que titre et contenu partagent TOUJOURS exactement la même
    boîte, sans dépendre du calcul shrink-to-fit du navigateur. */
+/* Retour utilisateur (round suivant): "le contenu des rubriques (Mes
+   grilles publiées et Mes favoris) doivent être centrés. Pareil pour les
+   bannieres et on peut ajouter un peu de marge en X (horizontale)". Sur
+   téléphone, min(560px, 100%) vaut quasiment toujours 100%: le contenu va
+   donc bord à bord jusqu'au padding de #app (16px), sans respirer par
+   rapport au reste de l'écran. Le padding horizontal ici (box-sizing:
+   border-box, voir base.css) réduit la boîte de CONTENU de .options-section
+   — .options-label/.community-feed/.community-empty/.profile-badges-teasers
+   étant tous en width:min(560px,100%), leur "100%" se recalcule
+   automatiquement contre cette boîte réduite: titre, grilles publiées,
+   favoris ET bannières héritent donc tous du même retrait, dans cette seule
+   règle, sans dupliquer la marge partout. */
 #view-community-profile > .options-section {
   width: min(560px, 100%);
   margin-top: 24px;
+  padding: 0 8px;
 }
 
 /* Round 19 (retour utilisateur): "pas besoin de réafficher l'avatar a coté

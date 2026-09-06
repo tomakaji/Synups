@@ -19,10 +19,25 @@
    sur un écran large, minmax(64px,1fr) se limitant juste à ne pas rétrécir
    sous 64px) par exactement 3 colonnes fixes, quelle que soit la largeur
    disponible. */
+/* Retour utilisateur (round suivant): "le contenu [...] doit être centré,
+   pareil pour les bannieres" — en display:grid à 3 colonnes fixes, une
+   dernière ligne incomplète (ou un total < 3 bannières débloquées) se
+   plaquait toujours à GAUCHE (les colonnes vides restaient à droite): CSS
+   Grid ne sait pas centrer une ligne partielle. Passage à flex + wrap avec
+   une largeur de bannière calculée pour tenir exactement 3 par ligne
+   (comme avant) mais où justify-content:center recentre une ligne
+   incomplète — et centre même un total de 1-2 bannières sur une ligne
+   unique, au lieu de les coller à gauche. */
 .profile-badges-teasers {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
+}
+
+.profile-badges-teasers > * {
+  flex: 0 0 calc((100% - 16px) / 3);
+  max-width: calc((100% - 16px) / 3);
 }
 
 .profile-badges-header {
