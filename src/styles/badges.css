@@ -79,8 +79,19 @@
   transform: translateY(-1px);
 }
 
+/* `outline` plutôt que `box-shadow`: plusieurs tiers (.badge-teaser--tier-
+   2/3/4/5/7.earned ci-dessous) posent DÉJÀ leur propre box-shadow ambiant
+   (lueur de couleur) directement sur .badge-teaser, à la même spécificité
+   (2 classes) — s'ils sont plus bas dans ce fichier, ils écrasaient
+   silencieusement l'anneau de sélection pour ces tiers-là (seuls les tiers
+   1 et 6, qui ne touchent pas box-shadow sur l'élément principal,
+   affichaient un vrai retour visuel). `outline` est une couche de peinture
+   séparée: jamais de conflit de spécificité avec ces lueurs, quel que soit
+   le tier — retour utilisateur: "la bannière sélectionnée doit être
+   encadrée afin qu'on ait un retour visuel". */
 .badge-teaser.selected {
-  box-shadow: 0 0 0 2px var(--accent), 0 0 14px -4px var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .badge-teaser.locked {
