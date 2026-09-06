@@ -31,7 +31,7 @@
            main.js: setMuted) — les deux sont deux apparences du même bouton,
            jamais deux états indépendants. Le réglage de volume et le mute
            musique-seule (#btn-music-toggle) restent, eux, indépendants. -->
-      <button id="btn-global-mute" class="global-mute-btn" aria-label="Couper/rétablir le son" title="Couper/rétablir le son">
+      <button data-i18n-attr="title:common.couperretablir_le_son;aria-label:common.couperretablir_le_son" id="btn-global-mute" class="global-mute-btn" aria-label="Couper/rétablir le son" title="Couper/rétablir le son">
         <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"></polygon>
           <path class="icon-wave icon-wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
@@ -82,7 +82,7 @@
              est déjà fait — d'où le flash. Par défaut "caché" (donc "fait"),
              JS ne le révèle (et ne joue l'animation) QUE s'il découvre que
              ce n'est pas le cas — jamais l'inverse. -->
-        <button id="btn-daily-challenge" class="daily-challenge-fab hidden" type="button" title="Défi Quotidien">
+        <button data-i18n-attr="title:common.defi_quotidien" id="btn-daily-challenge" class="daily-challenge-fab hidden" type="button" title="Défi Quotidien">
           <!-- Retour utilisateur (renommage monnaie): l'ancienne monnaie
                "étoiles" du Défi Quotidien s'appelle désormais "Énergie" —
                icône éclair (au lieu d'étoile) à la même place, même couleur
@@ -91,7 +91,7 @@
           <svg viewBox="0 0 24 24" class="daily-challenge-fab-bolt" fill="currentColor" stroke="none">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
           </svg>
-          <span class="daily-challenge-fab-label">Défi quotidien</span>
+          <span data-i18n="btn-daily-challenge.label" class="daily-challenge-fab-label">Défi quotidien</span>
           <span id="daily-challenge-fab-badge" class="daily-challenge-fab-badge hidden"></span>
         </button>
 
@@ -100,8 +100,8 @@
              commentaire <head> plus haut), affichée ici en grand une seule
              fois dans le menu titre plutôt qu'un nouvel asset dédié. -->
         <img class="game-logo-mark" src="/icon-192.png" alt="" aria-hidden="true" />
-        <h1 class="game-logo">Synups</h1>
-        <p class="game-tagline">Reconnecte le réseau</p>
+        <h1 data-i18n="misc.synups" class="game-logo">Synups</h1>
+        <p data-i18n="misc.reconnecte_le_reseau" class="game-tagline">Reconnecte le réseau</p>
 
         <nav class="menu-cards">
           <button id="menu-story" class="menu-card menu-card--story">
@@ -110,7 +110,7 @@
                 <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
                 <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
               </svg>
-              <span class="menu-card-label">Histoire</span>
+              <span data-i18n="menu-story.label" class="menu-card-label">Histoire</span>
             </span>
             <span class="menu-card-progress" aria-hidden="true">
               <span id="story-progress-fill" class="menu-card-progress-fill"></span>
@@ -123,9 +123,9 @@
               <svg viewBox="0 0 24 24" class="menu-card-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18.18 8a4 4 0 1 0 0 8 6 6 0 0 0 0-12 8 8 0 0 0-8 8 6 6 0 0 1-6 6 4 4 0 1 1 0-8 6 6 0 0 1 6 6 8 8 0 0 0 8-8 6 6 0 0 0-6-6 4 4 0 0 0-4 4"></path>
               </svg>
-              <span class="menu-card-label">Infini</span>
+              <span data-i18n="menu-infinite.label" class="menu-card-label">Infini</span>
             </span>
-            <span class="menu-card-sub">Un niveau différent à chaque partie</span>
+            <span data-i18n="menu-infinite.sub" class="menu-card-sub">Un niveau différent à chaque partie</span>
           </button>
 
           <button id="menu-community" class="menu-card menu-card--community">
@@ -136,9 +136,9 @@
                 <circle cx="17.5" cy="8.5" r="2.5"></circle>
                 <path d="M16 13.2a4.3 4.3 0 0 1 5.5 4.1V18"></path>
               </svg>
-              <span class="menu-card-label">Communauté</span>
+              <span data-i18n="menu-community.label" class="menu-card-label">Communauté</span>
             </span>
-            <span class="menu-card-sub">Crée, partage et joue les grilles des autres joueurs</span>
+            <span data-i18n="menu-community.sub" class="menu-card-sub">Crée, partage et joue les grilles des autres joueurs</span>
           </button>
 
           <button id="menu-remember" class="menu-card menu-card--remember">
@@ -147,7 +147,7 @@
                 <circle cx="7.5" cy="15.5" r="5.5"></circle>
                 <path d="M11.6 11.6 21 2.3M21 2.3v5M21 2.3h-5M15 7l3 3"></path>
               </svg>
-              <span class="menu-card-label">Remember</span>
+              <span data-i18n="menu-remember.label" class="menu-card-label">Remember</span>
             </span>
             <span id="menu-points-badge" class="menu-card-sub menu-card-points">0</span>
           </button>
@@ -158,7 +158,7 @@
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
               </svg>
-              <span class="menu-card-label">Options</span>
+              <span data-i18n="menu-options.label" class="menu-card-label">Options</span>
             </span>
           </button>
         </nav>
@@ -167,10 +167,10 @@
       <!-- ================= SÉLECTION DE NIVEAU ================= -->
       <section id="view-story-select" class="screen hidden">
         <header class="screen-header">
-          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+          <button data-i18n-attr="title:common.retour;aria-label:common.retour" class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
-          <h2 class="screen-title">Sélection de niveau</h2>
+          <h2 data-i18n="view-story-select.title" class="screen-title">Sélection de niveau</h2>
         </header>
         <div id="level-grid" class="level-grid"></div>
       </section>
@@ -178,7 +178,7 @@
       <!-- ================= JEU (partagé Histoire / Infini) ================= -->
       <section id="view-play" class="screen hidden">
         <header class="screen-header">
-          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+          <button data-i18n-attr="title:common.retour;aria-label:common.retour" class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
           <!-- Retour utilisateur (round 28): "on va plutôt placer les
@@ -189,10 +189,10 @@
                screen-header.css: margin-left:auto déplacé sur
                .play-controls). -->
           <div class="header-actions">
-            <button id="btn-level-grid" class="icon-btn" aria-label="Sélection de niveau" title="Sélection de niveau">
+            <button data-i18n-attr="title:view-story-select.title;aria-label:view-story-select.title" id="btn-level-grid" class="icon-btn" aria-label="Sélection de niveau" title="Sélection de niveau">
               <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>
             </button>
-            <button id="btn-infinite-settings" class="icon-btn hidden" aria-label="Réglages" title="Réglages">
+            <button data-i18n-attr="title:common.reglages;aria-label:common.reglages" id="btn-infinite-settings" class="icon-btn hidden" aria-label="Réglages" title="Réglages">
               <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -202,7 +202,7 @@
                  (retour utilisateur: illustre mieux "nouvelle grille" que
                  les flèches diagonales précédentes) — voir btn-reset
                  ci-dessous pour son remplacement. -->
-            <button id="btn-infinite-next" class="icon-btn hidden" aria-label="Nouveau niveau" title="Nouveau niveau">
+            <button data-i18n-attr="title:common.nouveau_niveau;aria-label:common.nouveau_niveau" id="btn-infinite-next" class="icon-btn hidden" aria-label="Nouveau niveau" title="Nouveau niveau">
               <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="23 4 23 10 17 10"></polyline>
                 <polyline points="1 20 1 14 7 14"></polyline>
@@ -215,9 +215,9 @@
               <!-- Prev/Suivant: gardés pour le confort du développement, seront
                    retirés à terme (voir demande utilisateur) une fois la
                    sélection de niveau jugée suffisante pour naviguer. -->
-              <button id="btn-prev" aria-label="Niveau précédent" title="Précédent (dev)">&larr;</button>
+              <button data-i18n-attr="title:common.precedent_dev;aria-label:common.niveau_precedent" id="btn-prev" aria-label="Niveau précédent" title="Précédent (dev)">&larr;</button>
               <span id="level-name">1</span>
-              <button id="btn-next" aria-label="Niveau suivant" title="Suivant (dev)">&rarr;</button>
+              <button data-i18n-attr="title:common.suivant_dev;aria-label:common.niveau_suivant" id="btn-next" aria-label="Niveau suivant" title="Suivant (dev)">&rarr;</button>
             </span>
             <!-- Retour utilisateur: "retire le bloc qui indique la
                  difficulté et montre le caractère infini [...] plutôt
@@ -230,9 +230,9 @@
                  mode-infinite.css: .infinite-points-stack). -->
             <span id="nav-infinite" class="nav-group hidden">
               <span id="infinite-level-label"></span>
-              <span id="infinite-badge" class="infinite-badge hidden" title="Ce niveau n'a pas de solution unique confirmée — plusieurs façons de le résoudre existent peut-être">variante multiple</span>
+              <span data-i18n="infinite-badge" id="infinite-badge" class="infinite-badge hidden" title="Ce niveau n'a pas de solution unique confirmée — plusieurs façons de le résoudre existent peut-être">variante multiple</span>
               <span class="infinite-points-row">
-                <span id="infinite-points" class="infinite-points" title="Étoiles gagnées en mode Infini">0</span>
+                <span data-i18n-attr="title:common.etoiles_gagnees_en_mode_infi" id="infinite-points" class="infinite-points" title="Étoiles gagnées en mode Infini">0</span>
                 <span id="infinite-gain" class="infinite-gain"></span>
               </span>
             </span>
@@ -244,7 +244,7 @@
                  loadDailyChallengeLevel(). Pas de bouton "sélection de
                  niveau"/"suivant" ici: une seule grille par jour. -->
             <span id="nav-daily" class="nav-group hidden">
-              <span class="nav-daily-label">⚡ Défi Quotidien</span>
+              <span data-i18n="nav-daily.label" class="nav-daily-label">⚡ Défi Quotidien</span>
             </span>
           </div>
         </header>
@@ -259,7 +259,7 @@
                  générateur réponde, jamais lors du chemin buffer instantané. -->
             <div id="board-generating-overlay" class="board-generating-overlay hidden" aria-live="polite">
               <span class="infinite-spinner infinite-spinner--lg" aria-hidden="true"></span>
-              <span>Génération d'une nouvelle grille…</span>
+              <span data-i18n="board-generating-overlay.t">Génération d'une nouvelle grille…</span>
             </div>
           </main>
         </div>
@@ -270,12 +270,12 @@
              #view-play : masquée automatiquement avec le reste de l'écran
              (voir style.css/.screen.hidden), sans logique JS séparée. -->
         <div class="play-action-bar">
-          <button id="btn-community-like" class="icon-btn community-like-btn hidden" aria-label="Aimer cette grille" title="Aimer cette grille">
+          <button data-i18n-attr="title:common.aimer_cette_grille;aria-label:common.aimer_cette_grille" id="btn-community-like" class="icon-btn community-like-btn hidden" aria-label="Aimer cette grille" title="Aimer cette grille">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20.8 4.9a5.5 5.5 0 0 0-7.8 0L12 5.9l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21.5l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8Z"></path>
             </svg>
           </button>
-          <button id="btn-hint" class="icon-btn hint-btn" aria-label="Indice" title="Indice">
+          <button data-i18n-attr="title:common.indice;aria-label:common.indice" id="btn-hint" class="icon-btn hint-btn" aria-label="Indice" title="Indice">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M9 18h6"></path>
               <path d="M10 21h4"></path>
@@ -283,13 +283,13 @@
             </svg>
             <span id="hint-count" class="hint-count">5</span>
           </button>
-          <button id="btn-undo" class="icon-btn" disabled aria-label="Annuler" title="Annuler">
+          <button data-i18n-attr="title:btn-som-recycle-cancel;aria-label:btn-som-recycle-cancel" id="btn-undo" class="icon-btn" disabled aria-label="Annuler" title="Annuler">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="1 4 1 10 7 10"></polyline>
               <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
             </svg>
           </button>
-          <button id="btn-reset" class="icon-btn" aria-label="Réinitialiser" title="Réinitialiser">
+          <button data-i18n-attr="title:btn-reset-confirm;aria-label:btn-reset-confirm" id="btn-reset" class="icon-btn" aria-label="Réinitialiser" title="Réinitialiser">
             <!-- Gomme: efface les lumières posées sur CE niveau sans rien
                  supprimer de définitif (retour utilisateur: une croix/
                  poubelle suggérerait plutôt "annuler"/"supprimer le
@@ -306,10 +306,10 @@
       <!-- ================= MODE INFINI : RÉGLAGES ================= -->
       <section id="view-infinite-config" class="screen hidden">
         <header class="screen-header">
-          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+          <button data-i18n-attr="title:common.retour;aria-label:common.retour" class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
-          <h2 class="screen-title">Infini</h2>
+          <h2 data-i18n="view-infinite-config.title" class="screen-title">Infini</h2>
         </header>
         <div id="infinite-config-view">
           <div class="infinite-config">
@@ -320,15 +320,15 @@
                  calculer le gain réel) plutôt que dupliqué en dur ici, pour
                  ne jamais désynchroniser l'affichage du vrai barème. -->
             <div id="infinite-difficulty" class="infinite-difficulty">
-              <button data-difficulty="1" class="infinite-star-btn active" aria-label="1 étoile">
+              <button data-i18n-attr="aria-label:common.1_etoile" data-difficulty="1" class="infinite-star-btn active" aria-label="1 étoile">
                 <span class="infinite-star-glyph">★☆☆</span>
                 <span class="infinite-star-points"></span>
               </button>
-              <button data-difficulty="2" class="infinite-star-btn" aria-label="2 étoiles">
+              <button data-i18n-attr="aria-label:common.2_etoiles" data-difficulty="2" class="infinite-star-btn" aria-label="2 étoiles">
                 <span class="infinite-star-glyph">★★☆</span>
                 <span class="infinite-star-points"></span>
               </button>
-              <button data-difficulty="3" class="infinite-star-btn" aria-label="3 étoiles">
+              <button data-i18n-attr="aria-label:common.3_etoiles" data-difficulty="3" class="infinite-star-btn" aria-label="3 étoiles">
                 <span class="infinite-star-glyph">★★★</span>
                 <span class="infinite-star-points"></span>
               </button>
@@ -336,7 +336,7 @@
 
             <div id="infinite-features" class="infinite-features"></div>
 
-            <button id="btn-infinite-generate" class="infinite-generate-btn">Générer</button>
+            <button data-i18n="btn-infinite-generate" id="btn-infinite-generate" class="infinite-generate-btn">Générer</button>
             <p id="infinite-status" class="infinite-status" aria-live="polite"></p>
           </div>
         </div>
@@ -345,21 +345,21 @@
       <!-- ================= OPTIONS ================= -->
       <section id="view-options" class="screen hidden">
         <header class="screen-header">
-          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+          <button data-i18n-attr="title:common.retour;aria-label:common.retour" class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
-          <h2 class="screen-title">Options</h2>
+          <h2 data-i18n="view-options.title" class="screen-title">Options</h2>
         </header>
 
         <div class="options-panel">
           <div class="options-section">
-            <span class="options-label">Son</span>
+            <span data-i18n="misc.son" class="options-label">Son</span>
             <div class="audio-toggles-row">
               <!-- Round 19 (retour utilisateur): identique au bouton flottant
                    (#btn-global-mute) — même variable, coupe son ET musique.
                    Volontairement redondant avec lui (accessible aussi depuis
                    Options), pas un mute "sons seuls" distinct. -->
-              <button id="btn-sound-toggle" class="icon-toggle" aria-label="Couper/rétablir le son" title="Couper le son">
+              <button data-i18n-attr="title:common.couper_le_son;aria-label:common.couperretablir_le_son" id="btn-sound-toggle" class="icon-toggle" aria-label="Couper/rétablir le son" title="Couper le son">
                 <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"></polygon>
                   <path class="icon-wave icon-wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
@@ -367,7 +367,7 @@
                   <line class="icon-mute-slash" x1="2" y1="2" x2="22" y2="22"></line>
                 </svg>
               </button>
-              <button id="btn-music-toggle" class="icon-toggle" aria-label="Activer/couper la musique" title="Musique">
+              <button data-i18n-attr="title:common.musique;aria-label:common.activercouper_la_musique" id="btn-music-toggle" class="icon-toggle" aria-label="Activer/couper la musique" title="Musique">
                 <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M9 18V5l12-2v13"></path>
                   <circle cx="6" cy="18" r="3"></circle>
@@ -375,7 +375,7 @@
                   <line class="icon-mute-slash" x1="2" y1="2" x2="22" y2="22"></line>
                 </svg>
               </button>
-              <input id="volume-slider" class="volume-slider-full" type="range" min="0" max="100" value="80" step="1" aria-label="Volume (sons et musique)" />
+              <input data-i18n-attr="aria-label:common.volume_sons_et_musique" id="volume-slider" class="volume-slider-full" type="range" min="0" max="100" value="80" step="1" aria-label="Volume (sons et musique)" />
             </div>
           </div>
 
@@ -385,13 +385,13 @@
                playGamesServices.js. Android uniquement: section masquée
                ailleurs (voir main.js: renderPlayGamesSection). -->
           <div id="options-playgames-section" class="options-section hidden">
-            <span class="options-label">Compte Google Play</span>
-            <button id="btn-playgames-signin" class="options-btn">Se connecter</button>
+            <span data-i18n="options-playgames-section.label" class="options-label">Compte Google Play</span>
+            <button data-i18n="btn-playgames-signin" id="btn-playgames-signin" class="options-btn">Se connecter</button>
             <div id="playgames-sync-actions" class="options-inline-actions hidden">
-              <button id="btn-playgames-save" class="options-btn">Sauvegarder</button>
-              <button id="btn-playgames-restore" class="options-btn">Restaurer</button>
+              <button data-i18n="btn-playgames-save" id="btn-playgames-save" class="options-btn">Sauvegarder</button>
+              <button data-i18n="btn-playgames-restore" id="btn-playgames-restore" class="options-btn">Restaurer</button>
             </div>
-            <p id="options-playgames-hint" class="options-hint">Connecte-toi pour sauvegarder ta progression dans le cloud.</p>
+            <p data-i18n="options-playgames-hint" id="options-playgames-hint" class="options-hint">Connecte-toi pour sauvegarder ta progression dans le cloud.</p>
           </div>
 
           <!-- Retour utilisateur: "il faudrait pouvoir retrouver toutes les
@@ -401,9 +401,9 @@
                renderMechanicsReference), jamais celles pas encore
                découvertes (pas de spoil de la progression Histoire). -->
           <div class="options-section">
-            <span class="options-label">Mécaniques</span>
-            <button id="btn-mechanics-reference" class="options-btn">Voir les mécaniques découvertes</button>
-            <p class="options-hint">Retrouve les explications déjà débloquées en Histoire, au cas où tu en aurais oublié une.</p>
+            <span data-i18n="misc.mecaniques" class="options-label">Mécaniques</span>
+            <button data-i18n="btn-mechanics-reference" id="btn-mechanics-reference" class="options-btn">Voir les mécaniques découvertes</button>
+            <p data-i18n="misc.retrouve_les_explication" class="options-hint">Retrouve les explications déjà débloquées en Histoire, au cas où tu en aurais oublié une.</p>
           </div>
 
           <!-- Mode daltonien (retour utilisateur: "intégrer un mode Daltonien
@@ -413,9 +413,9 @@
                restent inchangés. Toujours disponible (pas de déblocage),
                contrairement à la section PixelArt juste en dessous. -->
           <div class="options-section">
-            <span class="options-label">Accessibilité</span>
-            <button id="btn-colorblind-toggle" class="options-btn">Désactivé</button>
-            <p class="options-hint">Ajoute un repère texte (R/G/B...) sur les couleurs, en plus de la teinte.</p>
+            <span data-i18n="misc.accessibilite" class="options-label">Accessibilité</span>
+            <button data-i18n="btn-colorblind-toggle" id="btn-colorblind-toggle" class="options-btn">Désactivé</button>
+            <p data-i18n="misc.ajoute_un_repere_texte_r" class="options-hint">Ajoute un repère texte (R/G/B...) sur les couleurs, en plus de la teinte.</p>
           </div>
 
           <!-- 5e/dernière récompense de Remember (voir sommation.js:
@@ -424,28 +424,28 @@
                'Remember ?'". Le contenu réel (nom, hint, bouton actif) n'est
                révélé qu'une fois débloqué, voir renderPixelArtOption(). -->
           <div id="options-pixelart-section" class="options-section">
-            <span id="options-pixelart-label" class="options-label">Remember ?</span>
-            <button id="btn-pixelart-toggle" class="options-btn" disabled>Verrouillé</button>
-            <p id="options-pixelart-hint" class="options-hint">Débloqué à la 5e récompense de Remember.</p>
+            <span data-i18n="options-pixelart-label" id="options-pixelart-label" class="options-label">Remember ?</span>
+            <button data-i18n="btn-pixelart-toggle" id="btn-pixelart-toggle" class="options-btn" disabled>Verrouillé</button>
+            <p data-i18n="options-pixelart-hint" id="options-pixelart-hint" class="options-hint">Débloqué à la 5e récompense de Remember.</p>
             <!-- Débug: force le déverrouillage pour tester le thème sans finir
                  le mini-jeu Remember à chaque fois (retour utilisateur round
                  11) — voir sommation.js: debugUnlockPixelArt. Même esprit que
                  #som-debug-points (+500 pts), texte discret plutôt qu'un
                  bouton mis en avant. -->
-            <button id="btn-pixelart-debug-unlock" class="som-debug-btn" type="button">Débloquer (débug)</button>
+            <button data-i18n="btn-pixelart-debug-unlock" id="btn-pixelart-debug-unlock" class="som-debug-btn" type="button">Débloquer (débug)</button>
           </div>
 
           <div class="options-section">
-            <span class="options-label">Le jeu</span>
+            <span data-i18n="misc.le_jeu" class="options-label">Le jeu</span>
             <button id="btn-buy-game" class="options-btn options-btn--accent">
               Débloquer la version complète <span class="options-btn-sub">retire les publicités</span>
             </button>
           </div>
 
           <div class="options-section">
-            <span class="options-label">Données</span>
-            <button id="btn-reset-save" class="options-btn options-btn--danger">Réinitialiser le jeu</button>
-            <p class="options-hint">Efface la progression Histoire, les étoiles/l'Énergie et les réglages. Impossible à annuler.</p>
+            <span data-i18n="misc.donnees" class="options-label">Données</span>
+            <button data-i18n="btn-reset-save" id="btn-reset-save" class="options-btn options-btn--danger">Réinitialiser le jeu</button>
+            <p data-i18n="misc.efface_la_progression_hi" class="options-hint">Efface la progression Histoire, les étoiles/l'Énergie et les réglages. Impossible à annuler.</p>
           </div>
         </div>
       </section>
@@ -453,15 +453,15 @@
       <!-- ================= REMEMBER (ex-Sommation, remplace Secrets) ================= -->
       <section id="view-sommation" class="screen hidden">
         <header class="screen-header">
-          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+          <button data-i18n-attr="title:common.retour;aria-label:common.retour" class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
-          <h2 class="screen-title">Remember</h2>
+          <h2 data-i18n="view-sommation.title" class="screen-title">Remember</h2>
           <span id="sommation-points" class="infinite-points">0</span>
           <!-- Outil de test: injecte des étoiles dans le solde PARTAGÉ avec
                Infini (voir main.js: spendSharedPoints/addSharedPoints) —
                retour utilisateur: "pour pouvoir tester à l'infini". -->
-          <button id="som-debug-points" class="som-debug-btn" type="button" title="Débug: +500 étoiles">+500 étoiles</button>
+          <button data-i18n="som-debug-points" id="som-debug-points" class="som-debug-btn" type="button" title="Débug: +500 étoiles">+500 étoiles</button>
         </header>
 
         <!-- État "terminé" (round 12, réécrit round 18): une fois PixelArt
@@ -475,8 +475,8 @@
              ici". -->
         <div id="som-done-state" class="som-done-state hidden">
           <div class="som-done-icon" aria-hidden="true">✓</div>
-          <p class="som-done-title">Bravo, Remember est terminé !</p>
-          <p class="som-done-message">Toutes les récompenses ont été débloquées. Il n'y a plus rien à faire ici.</p>
+          <p data-i18n="som-done-state.title" class="som-done-title">Bravo, Remember est terminé !</p>
+          <p data-i18n="som-done-state.message" class="som-done-message">Toutes les récompenses ont été débloquées. Il n'y a plus rien à faire ici.</p>
           <!-- Round 19 (retour utilisateur): "on peut ajouter un bouton qui
                fasse lien vers le profil en dessous (exactement la même chose
                que dans 'Menu')" — réutilise telle quelle la bannière
@@ -488,7 +488,7 @@
           </button>
         </div>
 
-        <div class="som-progress-wrap" title="Progression vers la prochaine récompense">
+        <div data-i18n-attr="title:common.progression_vers_la_prochain" class="som-progress-wrap" title="Progression vers la prochaine récompense">
           <!-- Teaser de la prochaine récompense — retour utilisateur round 11:
                "au dessus de la barre de progression, il faut teaser le
                joueur en affichant la prochaine récompense à débloquer".
@@ -518,27 +518,27 @@
       <!-- ================= COMMUNAUTÉ (fil, tout local) ================= -->
       <section id="view-community" class="screen hidden">
         <header class="screen-header">
-          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+          <button data-i18n-attr="title:common.retour;aria-label:common.retour" class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
           <!-- Retour utilisateur (round 28): bouton d'action juste après
                Retour plutôt que poussé à droite. Le titre "Communauté" qui
                suit juste après reste aligné à gauche (voir community.css). -->
-          <button id="btn-community-profile" class="icon-btn" aria-label="Mon profil" title="Mon profil">
+          <button data-i18n-attr="title:view-community-profile.title;aria-label:view-community-profile.title" id="btn-community-profile" class="icon-btn" aria-label="Mon profil" title="Mon profil">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="8" r="4"></circle>
               <path d="M4 20v-.5A6.5 6.5 0 0 1 10.5 13h3A6.5 6.5 0 0 1 20 19.5V20"></path>
             </svg>
           </button>
-          <h2 class="screen-title">Communauté</h2>
+          <h2 data-i18n="view-community.title" class="screen-title">Communauté</h2>
         </header>
 
         <div class="community-toolbar">
-          <input id="community-search" type="search" class="community-search" placeholder="Rechercher un titre ou un auteur…" />
+          <input data-i18n-attr="placeholder:common.rechercher_un_titre_ou_un_au" id="community-search" type="search" class="community-search" placeholder="Rechercher un titre ou un auteur…" />
           <select id="community-sort" class="community-sort">
-            <option value="recent">Plus récentes</option>
-            <option value="likes">Plus aimées</option>
-            <option value="plays">Plus jouées</option>
+            <option data-i18n="community-sort.opt_recent" value="recent">Plus récentes</option>
+            <option data-i18n="community-sort.opt_likes" value="likes">Plus aimées</option>
+            <option data-i18n="community-sort.opt_plays" value="plays">Plus jouées</option>
           </select>
         </div>
 
@@ -547,7 +547,7 @@
              copier le code" — bouton "Importer un code" retiré, "Créer une
              grille" reste seul et prend 75% de la ligne (voir community.css). -->
         <div class="community-actions-row">
-          <button id="btn-community-create" class="options-btn options-btn--accent">Créer une grille</button>
+          <button data-i18n="btn-community-create" id="btn-community-create" class="options-btn options-btn--accent">Créer une grille</button>
         </div>
 
         <!-- Seule cette zone défile (retour utilisateur: "le scroll doit se
@@ -556,17 +556,17 @@
              fixes au-dessus, voir style.css: #view-community/.community-scroll. -->
         <div class="community-scroll">
           <div id="community-feed" class="community-feed"></div>
-          <p id="community-empty" class="community-empty hidden">Aucune grille ne correspond à cette recherche.</p>
+          <p data-i18n="community-empty" id="community-empty" class="community-empty hidden">Aucune grille ne correspond à cette recherche.</p>
         </div>
       </section>
 
       <!-- ================= COMMUNAUTÉ : MON PROFIL ================= -->
       <section id="view-community-profile" class="screen hidden">
         <header class="screen-header">
-          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+          <button data-i18n-attr="title:common.retour;aria-label:common.retour" class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
-          <h2 class="screen-title">Mon profil</h2>
+          <h2 data-i18n="view-community-profile.title" class="screen-title">Mon profil</h2>
         </header>
 
         <!-- Round 19 (retour utilisateur): avatar, pseudo et badge forment UN
@@ -594,15 +594,15 @@
                  posé sur tout l'ensemble #profile-pseudo-text (voir main.js),
                  jamais sur l'icône seule. -->
             <div class="profile-pseudo-wrap">
-              <span id="profile-pseudo-text" class="profile-pseudo-text" role="button" tabindex="0" title="Modifier le pseudo">
+              <span data-i18n-attr="title:common.modifier_le_pseudo" id="profile-pseudo-text" class="profile-pseudo-text" role="button" tabindex="0" title="Modifier le pseudo">
                 <span id="profile-pseudo-label"></span>
                 <span class="profile-pseudo-edit-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>
                 </span>
               </span>
               <span id="profile-pseudo-edit" class="profile-pseudo-edit hidden">
-                <input id="profile-pseudo-input" class="profile-pseudo-input" type="text" maxlength="20" placeholder="Ton pseudo" />
-                <button id="btn-profile-pseudo-confirm" class="icon-btn icon-btn--accent" type="button" aria-label="Valider le pseudo" title="Valider">
+                <input data-i18n-attr="placeholder:common.ton_pseudo" id="profile-pseudo-input" class="profile-pseudo-input" type="text" maxlength="20" placeholder="Ton pseudo" />
+                <button data-i18n-attr="title:common.valider;aria-label:common.valider_le_pseudo" id="btn-profile-pseudo-confirm" class="icon-btn icon-btn--accent" type="button" aria-label="Valider le pseudo" title="Valider">
                   <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 </button>
               </span>
@@ -614,7 +614,7 @@
                  ne pas toucher à AVATARS/getAvatarSvg/etc. dans
                  community-store.js sans valeur ajoutée). -->
             <div class="profile-avatar-section">
-              <span class="options-label">Badges</span>
+              <span data-i18n="misc.badges" class="options-label">Badges</span>
               <div id="profile-avatar-picker" class="profile-avatar-picker"></div>
               <!-- Round 22 (retour utilisateur): 4 avatars s'achètent avec des
                    points en cliquant dessus (100/200/400/1000) — feedback
@@ -636,46 +636,46 @@
              l'en-tête de jeu. -->
         <div class="options-section">
           <div class="profile-badges-header">
-            <span class="options-label">Bannières</span>
+            <span data-i18n="misc.bannieres" class="options-label">Bannières</span>
             <!-- Round 17 (retour utilisateur): bouton admin temporaire pour
                  tester l'affichage des bannières sans finir Remember —
                  réutilise debugUnlockPixelArt (voir sommation.js), déjà
                  câblé à un bouton équivalent dans Options (même esprit,
                  même fonction, effet de bord "PixelArt aussi débloqué"
                  accepté là-bas). -->
-            <button id="btn-profile-badges-debug-unlock" class="som-debug-btn" type="button">Déverrouiller (admin)</button>
+            <button data-i18n="btn-profile-badges-debug-unlock" id="btn-profile-badges-debug-unlock" class="som-debug-btn" type="button">Déverrouiller (admin)</button>
           </div>
           <div id="profile-sommation-badges" class="profile-badges-teasers"></div>
         </div>
 
         <div class="options-section">
-          <span class="options-label">Mes grilles publiées</span>
+          <span data-i18n="misc.mes_grilles_publiees" class="options-label">Mes grilles publiées</span>
           <div id="profile-published" class="community-feed community-feed--compact"></div>
-          <p id="profile-published-empty" class="community-empty hidden">Tu n'as encore rien publié.</p>
+          <p data-i18n="profile-published-empty" id="profile-published-empty" class="community-empty hidden">Tu n'as encore rien publié.</p>
         </div>
 
         <div class="options-section">
-          <span class="options-label">Mes favoris</span>
+          <span data-i18n="misc.mes_favoris" class="options-label">Mes favoris</span>
           <div id="profile-liked" class="community-feed community-feed--compact"></div>
-          <p id="profile-liked-empty" class="community-empty hidden">Aucun favori pour l'instant.</p>
+          <p data-i18n="profile-liked-empty" id="profile-liked-empty" class="community-empty hidden">Aucun favori pour l'instant.</p>
         </div>
       </section>
 
       <!-- ================= ÉDITEUR (création de grille) ================= -->
       <section id="view-editor" class="screen hidden">
         <header class="screen-header">
-          <button class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+          <button data-i18n-attr="title:common.retour;aria-label:common.retour" class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
-          <h2 class="screen-title">Éditeur</h2>
+          <h2 data-i18n="view-editor.title" class="screen-title">Éditeur</h2>
           <div class="header-actions">
-            <button id="ed-solve" class="icon-btn hidden" aria-label="Résoudre" title="Trouve et pose automatiquement une solution">
+            <button data-i18n-attr="title:common.trouve_et_pose_automatiqueme;aria-label:common.resoudre" id="ed-solve" class="icon-btn hidden" aria-label="Résoudre" title="Trouve et pose automatiquement une solution">
               <svg viewBox="0 0 24 24" class="icon-svg" fill="currentColor" stroke="none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
             </button>
-            <button id="ed-test-reset" class="icon-btn hidden" aria-label="Réinitialiser le test" title="Réinitialiser le test">
+            <button data-i18n-attr="title:common.reinitialiser_le_test;aria-label:common.reinitialiser_le_test" id="ed-test-reset" class="icon-btn hidden" aria-label="Réinitialiser le test" title="Réinitialiser le test">
               <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>
             </button>
-            <button id="ed-test" class="icon-btn" aria-label="Tester" title="Tester">
+            <button data-i18n-attr="title:common.tester;aria-label:common.tester" id="ed-test" class="icon-btn" aria-label="Tester" title="Tester">
               <svg viewBox="0 0 24 24" class="icon-svg" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
             </button>
           </div>
@@ -703,37 +703,37 @@
               <input id="ed-cols" type="hidden" value="5" />
               <div class="resize-frame">
                 <div class="resize-edge-duo" data-edge="top">
-                  <button id="ed-remove-row-top" class="frame-btn" title="Retirer la ligne du haut" aria-label="Retirer la ligne du haut">
+                  <button data-i18n-attr="title:common.retirer_la_ligne_du_haut;aria-label:common.retirer_la_ligne_du_haut" id="ed-remove-row-top" class="frame-btn" title="Retirer la ligne du haut" aria-label="Retirer la ligne du haut">
                     <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                   </button>
-                  <button id="ed-insert-row-top" class="frame-btn" title="Insérer une ligne en haut" aria-label="Insérer une ligne en haut">
+                  <button data-i18n-attr="title:common.inserer_une_ligne_en_haut;aria-label:common.inserer_une_ligne_en_haut" id="ed-insert-row-top" class="frame-btn" title="Insérer une ligne en haut" aria-label="Insérer une ligne en haut">
                     <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                   </button>
                 </div>
                 <div class="resize-row-middle">
                   <div class="resize-edge-duo" data-edge="left">
-                    <button id="ed-remove-col-left" class="frame-btn" title="Retirer la colonne de gauche" aria-label="Retirer la colonne de gauche">
+                    <button data-i18n-attr="title:common.retirer_la_colonne_de_gauche;aria-label:common.retirer_la_colonne_de_gauche" id="ed-remove-col-left" class="frame-btn" title="Retirer la colonne de gauche" aria-label="Retirer la colonne de gauche">
                       <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     </button>
-                    <button id="ed-insert-col-left" class="frame-btn" title="Insérer une colonne à gauche" aria-label="Insérer une colonne à gauche">
+                    <button data-i18n-attr="title:common.inserer_une_colonne_a_gauche;aria-label:common.inserer_une_colonne_a_gauche" id="ed-insert-col-left" class="frame-btn" title="Insérer une colonne à gauche" aria-label="Insérer une colonne à gauche">
                       <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     </button>
                   </div>
                   <span class="resize-frame-center" id="ed-size-readout" aria-hidden="true">5×5</span>
                   <div class="resize-edge-duo" data-edge="right">
-                    <button id="ed-remove-col-right" class="frame-btn" title="Retirer la colonne de droite" aria-label="Retirer la colonne de droite">
+                    <button data-i18n-attr="title:common.retirer_la_colonne_de_droite;aria-label:common.retirer_la_colonne_de_droite" id="ed-remove-col-right" class="frame-btn" title="Retirer la colonne de droite" aria-label="Retirer la colonne de droite">
                       <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     </button>
-                    <button id="ed-insert-col-right" class="frame-btn" title="Insérer une colonne à droite" aria-label="Insérer une colonne à droite">
+                    <button data-i18n-attr="title:common.inserer_une_colonne_a_droite;aria-label:common.inserer_une_colonne_a_droite" id="ed-insert-col-right" class="frame-btn" title="Insérer une colonne à droite" aria-label="Insérer une colonne à droite">
                       <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     </button>
                   </div>
                 </div>
                 <div class="resize-edge-duo" data-edge="bottom">
-                  <button id="ed-remove-row-bottom" class="frame-btn" title="Retirer la ligne du bas" aria-label="Retirer la ligne du bas">
+                  <button data-i18n-attr="title:common.retirer_la_ligne_du_bas;aria-label:common.retirer_la_ligne_du_bas" id="ed-remove-row-bottom" class="frame-btn" title="Retirer la ligne du bas" aria-label="Retirer la ligne du bas">
                     <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                   </button>
-                  <button id="ed-insert-row-bottom" class="frame-btn" title="Insérer une ligne en bas" aria-label="Insérer une ligne en bas">
+                  <button data-i18n-attr="title:common.inserer_une_ligne_en_bas;aria-label:common.inserer_une_ligne_en_bas" id="ed-insert-row-bottom" class="frame-btn" title="Insérer une ligne en bas" aria-label="Insérer une ligne en bas">
                     <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                   </button>
                 </div>
@@ -742,81 +742,81 @@
 
             <section class="editor-tab hidden" id="ed-tab-features" data-tab="features">
               <div class="tool-palette" id="ed-tools">
-                <button data-tool="empty" class="tool-btn active" title="Normal">
+                <button data-i18n-attr="title:ed-tools.label" data-tool="empty" class="tool-btn active" title="Normal">
                   <svg class="tool-icon" viewBox="0 0 100 100"><rect x="18" y="18" width="64" height="64" rx="10" fill="none" stroke="#c9d3e6" stroke-width="7"/></svg>
-                  <span class="tool-label">Normal</span>
+                  <span data-i18n="ed-tools.label" class="tool-label">Normal</span>
                 </button>
-                <button data-tool="void" class="tool-btn" title="Void">
+                <button data-i18n-attr="title:ed-tools.label_2" data-tool="void" class="tool-btn" title="Void">
                   <svg class="tool-icon" viewBox="0 0 100 100">
                     <rect x="18" y="18" width="64" height="64" rx="10" fill="none" stroke="#5a6478" stroke-width="6" stroke-dasharray="9 7"/>
                     <line x1="26" y1="26" x2="74" y2="74" stroke="#5a6478" stroke-width="5"/>
                     <line x1="74" y1="26" x2="26" y2="74" stroke="#5a6478" stroke-width="5"/>
                   </svg>
-                  <span class="tool-label">Void</span>
+                  <span data-i18n="ed-tools.label_2" class="tool-label">Void</span>
                 </button>
-                <button data-tool="wall" class="tool-btn" title="Mur">
+                <button data-i18n-attr="title:ed-tools.label_3" data-tool="wall" class="tool-btn" title="Mur">
                   <svg class="tool-icon" viewBox="0 0 100 100">
                     <rect x="12" y="12" width="76" height="76" rx="8" fill="none" stroke="#7a86a0" stroke-width="6"/>
                     <path d="M12,38 L38,12 M12,64 L64,12 M12,88 L88,12 M38,88 L88,38 M64,88 L88,64" stroke="#7a86a0" stroke-width="6"/>
                   </svg>
-                  <span class="tool-label">Mur</span>
+                  <span data-i18n="ed-tools.label_3" class="tool-label">Mur</span>
                 </button>
-                <button data-tool="forbidden" class="tool-btn" title="Synapse">
+                <button data-i18n-attr="title:ed-tools.label_4" data-tool="forbidden" class="tool-btn" title="Synapse">
                   <svg class="tool-icon" viewBox="0 0 100 100">
                     <circle cx="32" cy="32" r="15" fill="none" stroke="#8a97a3" stroke-width="6"/>
                     <circle cx="68" cy="68" r="15" fill="none" stroke="#8a97a3" stroke-width="6"/>
                     <line x1="42" y1="42" x2="58" y2="58" stroke="#8a97a3" stroke-width="5" stroke-dasharray="4 5"/>
                   </svg>
-                  <span class="tool-label">Synapse</span>
+                  <span data-i18n="ed-tools.label_4" class="tool-label">Synapse</span>
                 </button>
-                <button data-tool="charge" class="tool-btn" title="Neurone">
+                <button data-i18n-attr="title:ed-tools.label_5" data-tool="charge" class="tool-btn" title="Neurone">
                   <svg class="tool-icon" viewBox="0 0 100 100">
                     <circle cx="50" cy="50" r="27" fill="none" stroke="#3a8fa0" stroke-width="7"/>
                     <circle cx="50" cy="50" r="10" fill="#3a8fa0"/>
                   </svg>
-                  <span class="tool-label">Neurone</span>
+                  <span data-i18n="ed-tools.label_5" class="tool-label">Neurone</span>
                 </button>
-                <button data-tool="target" class="tool-btn" title="ColorTarget">
+                <button data-i18n-attr="title:common.colortarget" data-tool="target" class="tool-btn" title="ColorTarget">
                   <svg class="tool-icon" viewBox="0 0 100 100">
                     <path d="M16,30 V16 H30 M70,16 H84 V30 M84,70 V84 H70 M30,84 H16 V70" fill="none" stroke="#c9d3e6" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
-                  <span class="tool-label">Cible couleur</span>
+                  <span data-i18n="ed-tools.label_6" class="tool-label">Cible couleur</span>
                 </button>
-                <button data-tool="mirror" class="tool-btn" title="Miroir">
+                <button data-i18n-attr="title:ed-tools.label_7" data-tool="mirror" class="tool-btn" title="Miroir">
                   <svg class="tool-icon" viewBox="0 0 100 100">
                     <line x1="18" y1="18" x2="82" y2="82" stroke="#9fb4d8" stroke-width="7" stroke-linecap="round"/>
                   </svg>
-                  <span class="tool-label">Miroir</span>
+                  <span data-i18n="ed-tools.label_7" class="tool-label">Miroir</span>
                 </button>
                 <!-- Round 17 (retour utilisateur): tuiles auparavant sous un
                      onglet "Expérimentales" séparé, fusionnées ici dans le
                      même onglet/palette que les tuiles normales (le texte
                      d'avertissement dédié est retiré). -->
-                <button data-tool="prism" class="tool-btn" title="Prisme">
+                <button data-i18n-attr="title:ed-tools.label_8" data-tool="prism" class="tool-btn" title="Prisme">
                   <svg class="tool-icon" viewBox="0 0 100 100">
                     <polygon points="50,50 50,10 90,50" fill="#ff5d6c"/>
                     <polygon points="50,50 90,50 50,90" fill="#59e39d"/>
                     <polygon points="50,50 50,90 10,50" fill="#5da9ff"/>
                     <polygon points="50,50 10,50 50,10" fill="#eef1f8"/>
                   </svg>
-                  <span class="tool-label">Prisme</span>
+                  <span data-i18n="ed-tools.label_8" class="tool-label">Prisme</span>
                 </button>
-                <button data-tool="mirror_neuron" class="tool-btn" title="Neurone miroir">
+                <button data-i18n-attr="title:ed-tools.label_9" data-tool="mirror_neuron" class="tool-btn" title="Neurone miroir">
                   <svg class="tool-icon" viewBox="0 0 100 100">
                     <line x1="50" y1="10" x2="50" y2="90" stroke="#b98fe0" stroke-width="5" stroke-dasharray="7 6" stroke-linecap="round"/>
                     <circle cx="26" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
                     <circle cx="74" cy="50" r="12" fill="none" stroke="#b98fe0" stroke-width="5"/>
                   </svg>
-                  <span class="tool-label">Neurone miroir</span>
+                  <span data-i18n="ed-tools.label_9" class="tool-label">Neurone miroir</span>
                 </button>
-                <button data-tool="pyra" class="tool-btn" title="Pyra">
+                <button data-i18n-attr="title:ed-tools.label_10" data-tool="pyra" class="tool-btn" title="Pyra">
                   <svg class="tool-icon" viewBox="0 0 100 100">
                     <polygon points="50,15 85,80 15,80" fill="none" stroke="#8a97a3" stroke-width="6" stroke-linejoin="round"/>
                     <circle cx="50" cy="15" r="5" fill="#ff5d6c"/>
                     <circle cx="85" cy="80" r="5" fill="#59e39d"/>
                     <circle cx="15" cy="80" r="5" fill="#5da9ff"/>
                   </svg>
-                  <span class="tool-label">Pyra</span>
+                  <span data-i18n="ed-tools.label_10" class="tool-label">Pyra</span>
                 </button>
               </div>
 
@@ -831,10 +831,10 @@
                 </label>
                 <label class="editor-field">Couleur laser
                   <select id="ed-charge-color">
-                    <option value="">aucune</option>
-                    <option value="r">rouge</option>
-                    <option value="g">vert</option>
-                    <option value="b">bleu</option>
+                    <option data-i18n="ed-charge-color.opt_aucune" value="">aucune</option>
+                    <option data-i18n="ed-charge-color.opt_r" value="r">rouge</option>
+                    <option data-i18n="ed-charge-color.opt_g" value="g">vert</option>
+                    <option data-i18n="ed-charge-color.opt_b" value="b">bleu</option>
                   </select>
                 </label>
               </div>
@@ -842,13 +842,13 @@
               <div id="ed-target-options" class="tool-options hidden">
                 <label class="editor-field">Couleur requise
                   <select id="ed-target-color">
-                    <option value="r">rouge</option>
-                    <option value="g">vert</option>
-                    <option value="b">bleu</option>
-                    <option value="y">jaune</option>
-                    <option value="c">cyan</option>
-                    <option value="m">magenta</option>
-                    <option value="w">blanc</option>
+                    <option data-i18n="ed-target-color.opt_r" value="r">rouge</option>
+                    <option data-i18n="ed-target-color.opt_g" value="g">vert</option>
+                    <option data-i18n="ed-target-color.opt_b" value="b">bleu</option>
+                    <option data-i18n="ed-target-color.opt_y" value="y">jaune</option>
+                    <option data-i18n="ed-target-color.opt_c" value="c">cyan</option>
+                    <option data-i18n="ed-target-color.opt_m" value="m">magenta</option>
+                    <option data-i18n="ed-target-color.opt_w" value="w">blanc</option>
                   </select>
                 </label>
               </div>
@@ -856,8 +856,8 @@
               <div id="ed-mirror-options" class="tool-options hidden">
                 <label class="editor-field">Orientation
                   <select id="ed-mirror-orientation">
-                    <option value="/">/ (bas-gauche &harr; haut-droit)</option>
-                    <option value="\">\ (haut-gauche &harr; bas-droit)</option>
+                    <option data-i18n="ed-mirror-orientation.opt_t" value="/">/ (bas-gauche &harr; haut-droit)</option>
+                    <option data-i18n="ed-mirror-orientation.opt_t_2" value="\">\ (haut-gauche &harr; bas-droit)</option>
                   </select>
                 </label>
               </div>
@@ -865,10 +865,10 @@
               <div id="ed-prism-options" class="tool-options hidden">
                 <label class="editor-field">Première couleur (à gauche, dès la 1ère impulsion adjacente)
                   <select id="ed-prism-first-color">
-                    <option value="r">rouge</option>
-                    <option value="g">vert</option>
-                    <option value="b">bleu</option>
-                    <option value="w">blanc</option>
+                    <option data-i18n="ed-prism-first-color.opt_r" value="r">rouge</option>
+                    <option data-i18n="ed-prism-first-color.opt_g" value="g">vert</option>
+                    <option data-i18n="ed-prism-first-color.opt_b" value="b">bleu</option>
+                    <option data-i18n="ed-prism-first-color.opt_w" value="w">blanc</option>
                   </select>
                 </label>
               </div>
@@ -876,7 +876,7 @@
 
             <section class="editor-tab hidden" id="ed-tab-options" data-tab="options">
               <label class="editor-field">Titre
-                <input id="ed-name" type="text" value="" placeholder="Nom du niveau (obligatoire)" />
+                <input data-i18n-attr="placeholder:common.nom_du_niveau_obligatoire" id="ed-name" type="text" value="" placeholder="Nom du niveau (obligatoire)" />
               </label>
 
               <label class="editor-field">Mes niveaux
@@ -884,13 +884,13 @@
               </label>
 
               <div class="options-actions">
-                <button id="ed-new" class="icon-btn" aria-label="Effacer (nouveau niveau)" title="Effacer (nouveau niveau)">
+                <button data-i18n-attr="title:common.effacer_nouveau_niveau;aria-label:common.effacer_nouveau_niveau" id="ed-new" class="icon-btn" aria-label="Effacer (nouveau niveau)" title="Effacer (nouveau niveau)">
                   <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="12" x2="12" y2="18"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
                 </button>
-                <button id="ed-save" class="icon-btn" aria-label="Sauvegarder" title="Sauvegarder">
+                <button data-i18n-attr="title:btn-playgames-save;aria-label:btn-playgames-save" id="ed-save" class="icon-btn" aria-label="Sauvegarder" title="Sauvegarder">
                   <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
                 </button>
-                <button id="ed-delete" class="icon-btn" aria-label="Supprimer" title="Supprimer">
+                <button data-i18n-attr="title:common.supprimer;aria-label:common.supprimer" id="ed-delete" class="icon-btn" aria-label="Supprimer" title="Supprimer">
                   <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
                 </button>
                 <!-- Round 26 (retour utilisateur): "importer un code peut
@@ -899,10 +899,10 @@
                      d'un level pour l'intégrer directement dans le code pour
                      les devs" — Exporter (copie) reste, Importer (collage)
                      retiré ci-dessous avec son panneau. -->
-                <button id="ed-export" class="icon-btn" aria-label="Exporter le code" title="Exporter le code">
+                <button data-i18n-attr="title:common.exporter_le_code;aria-label:common.exporter_le_code" id="ed-export" class="icon-btn" aria-label="Exporter le code" title="Exporter le code">
                   <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
                 </button>
-                <button id="ed-publish" class="icon-btn icon-btn--accent" aria-label="Publier" title="Publie ce niveau dans la Communauté (nécessite qu'il ait une solution)">
+                <button data-i18n-attr="title:common.publie_ce_niveau_dans_la_com;aria-label:btn-editor-publish-confirm" id="ed-publish" class="icon-btn icon-btn--accent" aria-label="Publier" title="Publie ce niveau dans la Communauté (nécessite qu'il ait une solution)">
                   <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
                 </button>
               </div>
@@ -912,13 +912,13 @@
             </div>
 
             <nav class="editor-tabbar" id="editor-tabbar">
-              <button class="editor-tab-btn active" data-tab-target="grid" aria-label="Format grille" title="Format grille">
+              <button data-i18n-attr="title:common.format_grille;aria-label:common.format_grille" class="editor-tab-btn active" data-tab-target="grid" aria-label="Format grille" title="Format grille">
                 <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1"></rect><rect x="13" y="3" width="8" height="8" rx="1"></rect><rect x="3" y="13" width="8" height="8" rx="1"></rect><rect x="13" y="13" width="8" height="8" rx="1"></rect></svg>
               </button>
-              <button class="editor-tab-btn" data-tab-target="features" aria-label="Features" title="Features">
+              <button data-i18n-attr="title:common.features;aria-label:common.features" class="editor-tab-btn" data-tab-target="features" aria-label="Features" title="Features">
                 <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.07"></path><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"></path></svg>
               </button>
-              <button class="editor-tab-btn" data-tab-target="options" aria-label="Options" title="Options">
+              <button data-i18n-attr="title:menu-options.label;aria-label:menu-options.label" class="editor-tab-btn" data-tab-target="options" aria-label="Options" title="Options">
                 <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
               </button>
             </nav>
@@ -938,18 +938,18 @@
                dehors") — le clic en dehors fonctionnait déjà via
                .modal-backdrop ci-dessus (data-hint-modal-close), seule la
                croix manquait; le bouton "Annuler" est retiré. -->
-          <button type="button" class="modal-close-x" data-hint-modal-close aria-label="Fermer">
+          <button data-i18n-attr="aria-label:community-share-modal.btn" type="button" class="modal-close-x" data-hint-modal-close aria-label="Fermer">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
-          <h3 class="modal-title">Plus d'indices</h3>
-          <p class="modal-text">Regarde une pub pour récupérer 5 indices.</p>
+          <h3 data-i18n="hint-modal.title" class="modal-title">Plus d'indices</h3>
+          <p data-i18n="hint-modal.text" class="modal-text">Regarde une pub pour récupérer 5 indices.</p>
           <!-- Round 21 (migration Capacitor/AdMob, même principe que
                #som-ad-status): feedback de chargement/échec de la rewarded ad
                — voir main.js: btnHintWatchAd.onclick. Vide et caché tant qu'il
                n'y a rien à signaler. -->
           <p id="hint-ad-status" class="hint-ad-status hidden"></p>
           <div class="modal-actions">
-            <button id="btn-hint-watch-ad" class="options-btn options-btn--accent">Regarder la pub (+5 indices)</button>
+            <button data-i18n="btn-hint-watch-ad" id="btn-hint-watch-ad" class="options-btn options-btn--accent">Regarder la pub (+5 indices)</button>
           </div>
         </div>
       </div>
@@ -969,12 +969,12 @@
       <div id="cosmetic-unlock-modal" class="modal cosmetic-unlock-modal hidden">
         <div class="modal-backdrop" data-cosmetic-unlock-close></div>
         <div class="modal-card cosmetic-unlock-card">
-          <p class="cosmetic-unlock-kicker" id="cosmetic-unlock-kicker">Nouveau cosmétique débloqué</p>
+          <p data-i18n="cosmetic-unlock-kicker" class="cosmetic-unlock-kicker" id="cosmetic-unlock-kicker">Nouveau cosmétique débloqué</p>
           <div class="cosmetic-unlock-reveal" id="cosmetic-unlock-reveal"></div>
           <h3 class="modal-title cosmetic-unlock-title" id="cosmetic-unlock-title"></h3>
           <p class="modal-text cosmetic-unlock-text" id="cosmetic-unlock-text"></p>
           <div class="modal-actions">
-            <button id="btn-cosmetic-unlock-close" class="options-btn options-btn--accent" data-cosmetic-unlock-close>Génial !</button>
+            <button data-i18n="btn-cosmetic-unlock-close" id="btn-cosmetic-unlock-close" class="options-btn options-btn--accent" data-cosmetic-unlock-close>Génial !</button>
           </div>
         </div>
       </div>
@@ -1001,7 +1001,7 @@
           <h3 class="modal-title mechanic-schema-title" id="mechanic-schema-title"></h3>
           <p class="modal-text mechanic-schema-text" id="mechanic-schema-text"></p>
           <div class="modal-actions">
-            <button type="button" class="options-btn options-btn--accent" data-mechanic-schema-close>Compris !</button>
+            <button data-i18n="mechanic-schema-modal.btn" type="button" class="options-btn options-btn--accent" data-mechanic-schema-close>Compris !</button>
           </div>
         </div>
       </div>
@@ -1016,10 +1016,10 @@
       <div id="mechanics-reference-modal" class="modal mechanics-reference-modal hidden">
         <div class="modal-backdrop" data-mechanics-reference-close></div>
         <div class="modal-card mechanics-reference-card">
-          <button type="button" class="modal-close-x" data-mechanics-reference-close aria-label="Fermer">
+          <button data-i18n-attr="aria-label:community-share-modal.btn" type="button" class="modal-close-x" data-mechanics-reference-close aria-label="Fermer">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
-          <h3 class="modal-title">Mécaniques découvertes</h3>
+          <h3 data-i18n="mechanics-reference-modal.title" class="modal-title">Mécaniques découvertes</h3>
           <div id="mechanics-reference-list" class="mechanics-reference-list"></div>
         </div>
       </div>
@@ -1032,18 +1032,18 @@
           <!-- Round 23 (retour utilisateur): croix de fermeture au lieu du
                bouton "Annuler" — le clic en dehors (backdrop ci-dessus) le
                fait déjà. -->
-          <button type="button" class="modal-close-x" data-som-ad-modal-close aria-label="Fermer">
+          <button data-i18n-attr="aria-label:community-share-modal.btn" type="button" class="modal-close-x" data-som-ad-modal-close aria-label="Fermer">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
-          <h3 class="modal-title">Plus assez d'étoiles</h3>
-          <p class="modal-text">Regarde une pub pour récupérer 200 étoiles.</p>
+          <h3 data-i18n="som-ad-modal.title" class="modal-title">Plus assez d'étoiles</h3>
+          <p data-i18n="som-ad-modal.text" class="modal-text">Regarde une pub pour récupérer 200 étoiles.</p>
           <!-- Round 20 (migration Capacitor/AdMob): feedback de chargement/échec
                de la rewarded ad — voir sommation.js: adWatchBtn.onclick. Vide et
                caché tant qu'il n'y a rien à signaler (pub prête, pas encore
                tentée). -->
           <p id="som-ad-status" class="som-ad-status hidden"></p>
           <div class="modal-actions">
-            <button id="btn-som-ad-watch" class="options-btn options-btn--accent">Regarder la pub (+200)</button>
+            <button data-i18n="btn-som-ad-watch" id="btn-som-ad-watch" class="options-btn options-btn--accent">Regarder la pub (+200)</button>
           </div>
         </div>
       </div>
@@ -1063,15 +1063,15 @@
       <div id="som-genoffer-modal" class="modal hidden">
         <div class="modal-backdrop" data-som-genoffer-modal-close></div>
         <div class="modal-card">
-          <button type="button" class="modal-close-x" data-som-genoffer-modal-close aria-label="Fermer">
+          <button data-i18n-attr="aria-label:community-share-modal.btn" type="button" class="modal-close-x" data-som-genoffer-modal-close aria-label="Fermer">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
-          <h3 class="modal-title">Générateur proposé</h3>
+          <h3 data-i18n="som-genoffer-modal.title" class="modal-title">Générateur proposé</h3>
           <p class="modal-text" id="som-genoffer-text"></p>
           <p id="som-genoffer-status" class="som-ad-status hidden"></p>
           <div class="modal-actions">
-            <button id="btn-som-genoffer-reject" class="options-btn">Refuser</button>
-            <button id="btn-som-genoffer-accept" class="options-btn options-btn--accent">Regarder la pub</button>
+            <button data-i18n="btn-som-genoffer-reject" id="btn-som-genoffer-reject" class="options-btn">Refuser</button>
+            <button data-i18n="btn-som-genoffer-accept" id="btn-som-genoffer-accept" class="options-btn options-btn--accent">Regarder la pub</button>
           </div>
         </div>
       </div>
@@ -1079,11 +1079,11 @@
       <div id="som-recycle-confirm-modal" class="modal hidden">
         <div class="modal-backdrop" data-som-recycle-modal-close></div>
         <div class="modal-card">
-          <h3 class="modal-title">Recycler ce générateur ?</h3>
-          <p class="modal-text">Il sera perdu définitivement — l'objectif ne l'accepte pas.</p>
+          <h3 data-i18n="som-recycle-confirm-modal.title" class="modal-title">Recycler ce générateur ?</h3>
+          <p data-i18n="som-recycle-confirm-modal.text" class="modal-text">Il sera perdu définitivement — l'objectif ne l'accepte pas.</p>
           <div class="modal-actions">
-            <button id="btn-som-recycle-cancel" class="options-btn" data-som-recycle-modal-close>Annuler</button>
-            <button id="btn-som-recycle-confirm" class="options-btn options-btn--accent">Recycler</button>
+            <button data-i18n="btn-som-recycle-cancel" id="btn-som-recycle-cancel" class="options-btn" data-som-recycle-modal-close>Annuler</button>
+            <button data-i18n="btn-som-recycle-confirm" id="btn-som-recycle-confirm" class="options-btn options-btn--accent">Recycler</button>
           </div>
         </div>
       </div>
@@ -1095,11 +1095,11 @@
       <div id="reset-confirm-modal" class="modal hidden">
         <div class="modal-backdrop" data-reset-modal-close></div>
         <div class="modal-card">
-          <h3 class="modal-title">Réinitialiser le jeu ?</h3>
-          <p class="modal-text">Toute la progression (Histoire, Infini, Remember, Défi Quotidien) ainsi que les récompenses débloquées (bannières, badges, thème Rétro) seront définitivement effacées. Tes niveaux et favoris Communauté, tes réglages son et ton pseudo seront conservés.</p>
+          <h3 data-i18n="reset-confirm-modal.title" class="modal-title">Réinitialiser le jeu ?</h3>
+          <p data-i18n="reset-confirm-modal.text" class="modal-text">Toute la progression (Histoire, Infini, Remember, Défi Quotidien) ainsi que les récompenses débloquées (bannières, badges, thème Rétro) seront définitivement effacées. Tes niveaux et favoris Communauté, tes réglages son et ton pseudo seront conservés.</p>
           <div class="modal-actions">
-            <button id="btn-reset-cancel" class="options-btn" data-reset-modal-close>Annuler</button>
-            <button id="btn-reset-confirm" class="options-btn options-btn--danger">Réinitialiser</button>
+            <button data-i18n="btn-reset-cancel" id="btn-reset-cancel" class="options-btn" data-reset-modal-close>Annuler</button>
+            <button data-i18n="btn-reset-confirm" id="btn-reset-confirm" class="options-btn options-btn--danger">Réinitialiser</button>
           </div>
         </div>
       </div>
@@ -1116,15 +1116,15 @@
       <div id="editor-publish-modal" class="modal hidden">
         <div class="modal-backdrop" data-editor-publish-close></div>
         <div class="modal-card">
-          <h3 class="modal-title">Publier dans la Communauté</h3>
+          <h3 data-i18n="editor-publish-modal.title" class="modal-title">Publier dans la Communauté</h3>
           <div id="editor-publish-author-preview" class="badge-frame-preview badge-frame-preview--compact"></div>
           <label class="editor-field">Titre du niveau
-            <input id="editor-publish-title" type="text" maxlength="40" placeholder="Nom du niveau" />
+            <input data-i18n-attr="placeholder:common.nom_du_niveau" id="editor-publish-title" type="text" maxlength="40" placeholder="Nom du niveau" />
           </label>
           <p id="editor-publish-status" class="editor-status"></p>
           <div class="modal-actions">
-            <button class="options-btn" data-editor-publish-close>Annuler</button>
-            <button id="btn-editor-publish-confirm" class="options-btn options-btn--accent">Publier</button>
+            <button data-i18n="editor-publish-modal.btn" class="options-btn" data-editor-publish-close>Annuler</button>
+            <button data-i18n="btn-editor-publish-confirm" id="btn-editor-publish-confirm" class="options-btn options-btn--accent">Publier</button>
           </div>
         </div>
       </div>
@@ -1137,11 +1137,11 @@
       <div id="community-share-modal" class="modal hidden">
         <div class="modal-backdrop" data-community-share-close></div>
         <div class="modal-card">
-          <h3 class="modal-title">Partager cette grille</h3>
-          <p class="modal-text">Code de cette grille — garde-le ou envoie-le à un autre joueur.</p>
+          <h3 data-i18n="community-share-modal.title" class="modal-title">Partager cette grille</h3>
+          <p data-i18n="community-share-modal.text" class="modal-text">Code de cette grille — garde-le ou envoie-le à un autre joueur.</p>
           <textarea id="community-share-output" class="community-code-textarea" rows="4" readonly></textarea>
           <div class="modal-actions">
-            <button class="options-btn" data-community-share-close>Fermer</button>
+            <button data-i18n="community-share-modal.btn" class="options-btn" data-community-share-close>Fermer</button>
           </div>
         </div>
       </div>
@@ -1153,11 +1153,11 @@
       <div id="community-rate-modal" class="modal hidden">
         <div class="modal-backdrop" data-community-rate-skip></div>
         <div class="modal-card">
-          <h3 class="modal-title">Tu as aimé cette grille ?</h3>
+          <h3 data-i18n="community-rate-modal.title" class="modal-title">Tu as aimé cette grille ?</h3>
           <p id="community-rate-text" class="modal-text"></p>
           <div class="modal-actions">
-            <button id="btn-community-rate-skip" class="options-btn" data-community-rate-skip>Passer</button>
-            <button id="btn-community-rate-like" class="options-btn options-btn--accent">❤ J'aime</button>
+            <button data-i18n="btn-community-rate-skip" id="btn-community-rate-skip" class="options-btn" data-community-rate-skip>Passer</button>
+            <button data-i18n="btn-community-rate-like" id="btn-community-rate-like" class="options-btn options-btn--accent">❤ J'aime</button>
           </div>
         </div>
       </div>

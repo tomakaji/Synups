@@ -110,6 +110,17 @@ import {
   initCommunityCloud,
   onLevelsChanged,
 } from "./game/community-store.js";
+import { t, applyI18n } from "./game/i18n.js";
+
+// i18n (retour utilisateur: "il faut extraire tous les textes dans un
+// endroit et les utiliser via des clés") — TOUT PREMIER appel du fichier,
+// avant même le reste de l'init: <script type="module"> est différé par le
+// navigateur (comme `defer`), donc le HTML de index.html est déjà entièrement
+// parsé ici — pas besoin d'attendre un DOMContentLoaded. Écrase le texte
+// français déjà présent dans index.html (data-i18n/data-i18n-attr) par
+// celui de fr.js: à partir d'ici, fr.js est la SEULE source de vérité pour
+// tout texte statique — voir game/i18n.js pour le détail du mécanisme.
+applyI18n();
 
 // Round 24 (retour utilisateur: "retour haptique sur les boutons de
 // navigation en général") — UN SEUL listener délégué plutôt que d'ajouter
@@ -357,8 +368,8 @@ function markStoryLevelCompleted(index) {
     showCosmeticUnlockModal({
       kind: "avatar",
       avatarId: unlockedAvatar.id,
-      title: `Badge « ${unlockedAvatar.label} »`,
-      subtitle: `Débloqué en terminant ${storyProgress.size} niveaux de l'Histoire !`,
+      title: t("cosmeticUnlockBadgeTitle", { name: t(`avatar.${unlockedAvatar.id}`) }),
+      subtitle: t("cosmeticUnlockStorySubtitle", { count: storyProgress.size }),
     });
   }
 }
@@ -1423,8 +1434,14 @@ function buildFeatureChecklist() {
     tile.type = "button";
     tile.className = "cell cell--empty infinite-feature-tile";
     tile.dataset.featureKey = key;
-    tile.setAttribute("aria-label", feature.label);
-    tile.title = feature.label;
+    // i18n: FEATURES (generator.js) reste un module de logique pure, sans
+    // dépendance à i18n.js — `feature.label` (français en dur) n'y sert que
+    // de nom interne/repli; le texte réellement affiché passe par une clé
+    // dédiée "feature.<key>" (voir locales/fr.js) résolue ici, seul endroit
+    // qui consomme ce label pour de l'affichage.
+    const featureLabel = t(`feature.${key}`);
+    tile.setAttribute("aria-label", featureLabel);
+    tile.title = featureLabel;
     tile.innerHTML = `<span class="cell-icon">${FEATURE_ICON_HTML[key] ?? ""}</span>`;
 
     tile.addEventListener("click", () => {
@@ -1494,39 +1511,21 @@ buildFeatureChecklist();
 // renommage reste UNIQUEMENT côté texte/UI : les noms internes (CellType,
 // grid.js, generator.js, `charge`/`light` dans le code) ne sont pas
 // retouchés, seul ce que voit le joueur change.
+// i18n: titre/texte de chaque tuto vivent maintenant dans locales/fr.js
+// (clés "mechanic.<key>.title"/"mechanic.<key>.text") — MECHANIC_SCHEMAS ne
+// garde que la structure (quelles clés existent) et résout via t() au
+// moment de l'affichage (voir showNextMechanicSchema/renderMechanicsReference
+// ci-dessous), pour que modifier un texte de tuto se fasse désormais dans
+// fr.js, jamais ici.
 const MECHANIC_SCHEMAS = {
-  base: {
-    title: "Impulsion",
-    text: "Clique sur une case vide pour y poser une impulsion. Elle éclaire toute sa ligne et sa colonne jusqu'au premier obstacle, et deux impulsions ne doivent jamais s'éclairer l'une l'autre.",
-  },
-  neuron: {
-    title: "Neurone",
-    text: "Un neurone affiche un nombre : il doit être entouré d'exactement ce nombre d'impulsions (en haut, en bas, à gauche et à droite) — ni plus, ni moins.",
-  },
-  forbidden: {
-    title: "Case interdite",
-    text: "Une case interdite ne peut jamais avoir d'impulsion juste à côté (en haut, en bas, à gauche ou à droite).",
-  },
-  color: {
-    title: "Couleurs",
-    text: "Un neurone coloré tire un rayon de sa couleur vers la première impulsion rencontrée. Une case cible attend un mélange précis de rouge/vert/bleu pour s'allumer correctement.",
-  },
-  mirror: {
-    title: "Miroir",
-    text: "Un miroir dévie un rayon coloré de 90°, sans jamais s'allumer lui-même.",
-  },
-  prism: {
-    title: "Prisme",
-    text: "Un prisme teinte automatiquement une impulsion dans chacune de ses 4 directions, dès qu'il en voit une sur sa ligne ou sa colonne.",
-  },
-  pyra: {
-    title: "Pyra",
-    text: "Pyra s'active dès qu'il a entre 1 et 3 impulsions autour de lui (pas besoin d'un compte exact), et tire un rayon dont la couleur dépend de ce nombre.",
-  },
-  mirrorNeuron: {
-    title: "Neurone miroir",
-    text: "Un neurone miroir duplique en symétrie toute impulsion qui l'éclaire directement.",
-  },
+  base: { titleKey: "mechanic.base.title", textKey: "mechanic.base.text" },
+  neuron: { titleKey: "mechanic.neuron.title", textKey: "mechanic.neuron.text" },
+  forbidden: { titleKey: "mechanic.forbidden.title", textKey: "mechanic.forbidden.text" },
+  color: { titleKey: "mechanic.color.title", textKey: "mechanic.color.text" },
+  mirror: { titleKey: "mechanic.mirror.title", textKey: "mechanic.mirror.text" },
+  prism: { titleKey: "mechanic.prism.title", textKey: "mechanic.prism.text" },
+  pyra: { titleKey: "mechanic.pyra.title", textKey: "mechanic.pyra.text" },
+  mirrorNeuron: { titleKey: "mechanic.mirrorNeuron.title", textKey: "mechanic.mirrorNeuron.text" },
 };
 
 const mechanicSchemaModal = document.getElementById("mechanic-schema-modal");
@@ -1551,8 +1550,8 @@ function showNextMechanicSchema() {
     return;
   }
   mechanicSchemaIconEl.innerHTML = FEATURE_ICON_HTML[key] ?? "";
-  mechanicSchemaTitleEl.textContent = schema.title;
-  mechanicSchemaTextEl.textContent = schema.text;
+  mechanicSchemaTitleEl.textContent = t(schema.titleKey);
+  mechanicSchemaTextEl.textContent = t(schema.textKey);
   mechanicSchemaModal.classList.remove("hidden");
 }
 
@@ -1630,8 +1629,10 @@ function renderMechanicsReference() {
   // de découverte du joueur) — filtré à `seenMechanics` uniquement.
   const keys = Object.keys(MECHANIC_SCHEMAS).filter((key) => seenMechanics.has(key));
   if (keys.length === 0) {
-    mechanicsReferenceListEl.innerHTML =
-      '<p class="mechanics-reference-empty">Aucune mécanique découverte pour l\'instant — elles apparaîtront ici au fil de ta progression en Histoire.</p>';
+    const empty = document.createElement("p");
+    empty.className = "mechanics-reference-empty";
+    empty.textContent = t("mechanicsReferenceEmpty");
+    mechanicsReferenceListEl.appendChild(empty);
     return;
   }
   for (const key of keys) {
@@ -1644,9 +1645,9 @@ function renderMechanicsReference() {
     const copy = document.createElement("div");
     copy.className = "mechanics-reference-copy";
     const h4 = document.createElement("h4");
-    h4.textContent = schema.title;
+    h4.textContent = t(schema.titleKey);
     const p = document.createElement("p");
-    p.textContent = schema.text;
+    p.textContent = t(schema.textKey);
     copy.append(h4, p);
     item.append(icon, copy);
     mechanicsReferenceListEl.appendChild(item);
@@ -2387,7 +2388,8 @@ function refreshProfileAvatarPicker() {
       (unlocked ? "" : purchasable ? purchasableClass : " locked");
     btn.innerHTML = avatar.svg;
     btn.disabled = !unlocked && !purchasable;
-    btn.title = unlocked ? avatar.label : `${avatar.label} — ${avatarUnlockLabel(avatar)}`;
+    const avatarLabel = t(`avatar.${avatar.id}`);
+    btn.title = unlocked ? avatarLabel : `${avatarLabel} — ${avatarUnlockLabel(avatar)}`;
     if (purchasable) {
       const price = document.createElement("span");
       price.className = "profile-avatar-price" + (avatar.unlock.type === "star" ? " profile-avatar-price--star" : "");
@@ -2428,10 +2430,10 @@ function refreshProfileAvatarPicker() {
         showCosmeticUnlockModal({
           kind: "avatar",
           avatarId: avatar.id,
-          title: `Badge « ${avatar.label} »`,
+          title: t("cosmeticUnlockBadgeTitle", { name: t(`avatar.${avatar.id}`) }),
           subtitle: isStarUnlock
-            ? `Débloqué pour ${avatar.unlock.cost} Énergie !`
-            : `Débloqué pour ${avatar.unlock.cost} Étoiles !`,
+            ? t("cosmeticUnlockBoltSubtitle", { cost: avatar.unlock.cost })
+            : t("cosmeticUnlockStarSubtitle", { cost: avatar.unlock.cost }),
         });
       });
     }

@@ -1,22 +1,4 @@
-// Grilles communautaires fictives (contenu de seed) — SOURCE DE BUILD
-// UNIQUEMENT, plus jamais importé par l'app à l'exécution (voir
-// community-store.js: listLevels() ne lit désormais QUE Firestore, jamais ce
-// fichier). Généré par scripts/gen-community-seed.mjs (réutilise
-// generateLevel() du vrai générateur Infini: chaque grille ci-dessous est
-// garantie jouable et à solution unique, ce ne sont pas des données
-// inventées à la main).
-//
-// Pipeline complet pour faire vivre ces 16 grilles dans Firestore:
-//   1. node scripts/gen-community-seed.mjs > src/game/community-seed.js
-//      (régénère ce fichier — optionnel, seulement si on veut de nouvelles
-//      grilles/nouveaux auteurs fictifs)
-//   2. npm run build:community-seed-data
-//      (transforme ce fichier vers scripts/community-seed-data.json, le
-//      format "document Firestore" — likesCount/playsCount/ownerUid)
-//   3. npm run seed:firestore
-//      (envoie ces 16 documents vers Firestore — nécessite une clé de
-//      compte de service, voir scripts/seed-firestore.mjs)
-export const SEED_LEVELS = [
+[
   {
     "id": "seed-01",
     "title": "Premier signal",
@@ -39,9 +21,10 @@ export const SEED_LEVELS = [
     ],
     "mechanics": [],
     "difficulty": 1,
-    "createdAt": "2026-08-03T23:21:18.674Z",
-    "baseLikes": 1,
-    "basePlays": 75
+    "ownerUid": "seed-neurosynth",
+    "likesCount": 1,
+    "playsCount": 75,
+    "createdAt": "2026-08-03T23:21:18.674Z"
   },
   {
     "id": "seed-02",
@@ -67,9 +50,10 @@ export const SEED_LEVELS = [
       "forbidden"
     ],
     "difficulty": 1,
-    "createdAt": "2026-08-05T06:33:18.674Z",
-    "baseLikes": 24,
-    "basePlays": 99
+    "ownerUid": "seed-lucie-exe",
+    "likesCount": 24,
+    "playsCount": 99,
+    "createdAt": "2026-08-05T06:33:18.674Z"
   },
   {
     "id": "seed-03",
@@ -96,9 +80,10 @@ export const SEED_LEVELS = [
       "color"
     ],
     "difficulty": 1,
-    "createdAt": "2026-08-06T13:45:18.674Z",
-    "baseLikes": 10,
-    "basePlays": 34
+    "ownerUid": "seed-m-prisme",
+    "likesCount": 10,
+    "playsCount": 34,
+    "createdAt": "2026-08-06T13:45:18.674Z"
   },
   {
     "id": "seed-04",
@@ -121,9 +106,10 @@ export const SEED_LEVELS = [
     ],
     "mechanics": [],
     "difficulty": 1,
-    "createdAt": "2026-08-07T20:57:18.674Z",
-    "baseLikes": 33,
-    "basePlays": 58
+    "ownerUid": "seed-aeon",
+    "likesCount": 33,
+    "playsCount": 58,
+    "createdAt": "2026-08-07T20:57:18.674Z"
   },
   {
     "id": "seed-05",
@@ -151,9 +137,10 @@ export const SEED_LEVELS = [
       "forbidden"
     ],
     "difficulty": 2,
-    "createdAt": "2026-08-09T04:09:18.674Z",
-    "baseLikes": 24,
-    "basePlays": 82
+    "ownerUid": "seed-voltaic",
+    "likesCount": 24,
+    "playsCount": 82,
+    "createdAt": "2026-08-09T04:09:18.674Z"
   },
   {
     "id": "seed-06",
@@ -182,9 +169,10 @@ export const SEED_LEVELS = [
       "forbidden"
     ],
     "difficulty": 2,
-    "createdAt": "2026-08-10T11:21:18.674Z",
-    "baseLikes": 10,
-    "basePlays": 17
+    "ownerUid": "seed-songe",
+    "likesCount": 10,
+    "playsCount": 17,
+    "createdAt": "2026-08-10T11:21:18.674Z"
   },
   {
     "id": "seed-07",
@@ -211,9 +199,10 @@ export const SEED_LEVELS = [
       "color"
     ],
     "difficulty": 1,
-    "createdAt": "2026-08-11T18:33:18.674Z",
-    "baseLikes": 28,
-    "basePlays": 41
+    "ownerUid": "seed-katsu",
+    "likesCount": 28,
+    "playsCount": 41,
+    "createdAt": "2026-08-11T18:33:18.674Z"
   },
   {
     "id": "seed-08",
@@ -242,9 +231,10 @@ export const SEED_LEVELS = [
       "color"
     ],
     "difficulty": 2,
-    "createdAt": "2026-08-13T01:45:18.674Z",
-    "baseLikes": 19,
-    "basePlays": 65
+    "ownerUid": "seed-vortex-9",
+    "likesCount": 19,
+    "playsCount": 65,
+    "createdAt": "2026-08-13T01:45:18.674Z"
   },
   {
     "id": "seed-09",
@@ -272,9 +262,10 @@ export const SEED_LEVELS = [
       "forbidden"
     ],
     "difficulty": 2,
-    "createdAt": "2026-08-14T08:57:18.674Z",
-    "baseLikes": 5,
-    "basePlays": 89
+    "ownerUid": "seed-mira",
+    "likesCount": 5,
+    "playsCount": 89,
+    "createdAt": "2026-08-14T08:57:18.674Z"
   },
   {
     "id": "seed-10",
@@ -305,9 +296,10 @@ export const SEED_LEVELS = [
       "mirror"
     ],
     "difficulty": 3,
-    "createdAt": "2026-08-15T16:09:18.674Z",
-    "baseLikes": 33,
-    "basePlays": 24
+    "ownerUid": "seed-ombre-claire",
+    "likesCount": 33,
+    "playsCount": 24,
+    "createdAt": "2026-08-15T16:09:18.674Z"
   },
   {
     "id": "seed-11",
@@ -336,9 +328,10 @@ export const SEED_LEVELS = [
       "color"
     ],
     "difficulty": 3,
-    "createdAt": "2026-08-16T23:21:18.674Z",
-    "baseLikes": 19,
-    "basePlays": 48
+    "ownerUid": "seed-petit-nex",
+    "likesCount": 19,
+    "playsCount": 48,
+    "createdAt": "2026-08-16T23:21:18.674Z"
   },
   {
     "id": "seed-12",
@@ -366,9 +359,10 @@ export const SEED_LEVELS = [
       "pyra"
     ],
     "difficulty": 1,
-    "createdAt": "2026-08-18T06:33:18.674Z",
-    "baseLikes": 32,
-    "basePlays": 72
+    "ownerUid": "seed-ignis",
+    "likesCount": 32,
+    "playsCount": 72,
+    "createdAt": "2026-08-18T06:33:18.674Z"
   },
   {
     "id": "seed-13",
@@ -400,9 +394,10 @@ export const SEED_LEVELS = [
       "mirror"
     ],
     "difficulty": 3,
-    "createdAt": "2026-08-19T13:45:18.674Z",
-    "baseLikes": 28,
-    "basePlays": 96
+    "ownerUid": "seed-halo",
+    "likesCount": 28,
+    "playsCount": 96,
+    "createdAt": "2026-08-19T13:45:18.674Z"
   },
   {
     "id": "seed-14",
@@ -429,9 +424,10 @@ export const SEED_LEVELS = [
       "color"
     ],
     "difficulty": 2,
-    "createdAt": "2026-08-20T20:57:18.674Z",
-    "baseLikes": 9,
-    "basePlays": 31
+    "ownerUid": "seed-cascade",
+    "likesCount": 9,
+    "playsCount": 31,
+    "createdAt": "2026-08-20T20:57:18.674Z"
   },
   {
     "id": "seed-15",
@@ -457,9 +453,10 @@ export const SEED_LEVELS = [
       "forbidden"
     ],
     "difficulty": 1,
-    "createdAt": "2026-08-22T04:09:18.674Z",
-    "baseLikes": 27,
-    "basePlays": 55
+    "ownerUid": "seed-fable",
+    "likesCount": 27,
+    "playsCount": 55,
+    "createdAt": "2026-08-22T04:09:18.674Z"
   },
   {
     "id": "seed-16",
@@ -490,8 +487,9 @@ export const SEED_LEVELS = [
       "mirror"
     ],
     "difficulty": 3,
-    "createdAt": "2026-08-23T11:21:18.674Z",
-    "baseLikes": 23,
-    "basePlays": 79
+    "ownerUid": "seed-zed",
+    "likesCount": 23,
+    "playsCount": 79,
+    "createdAt": "2026-08-23T11:21:18.674Z"
   }
-];
+]

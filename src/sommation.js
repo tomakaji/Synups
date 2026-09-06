@@ -67,6 +67,7 @@ import { showRewardedAd } from "./game/ads.js";
 // (dépôt), voir handleDrop/doDropOnLock/doDropOnObjective plus bas.
 import { hapticLight, hapticWarning, hapticSuccess } from "./game/haptics.js";
 import { trackEvent } from "./game/analytics.js";
+import { t } from "./game/i18n.js";
 // Sons: un son NEUF, court et étouffé, dédié à la génération (spammable via
 // le double-tap sur un générateur déjà sélectionné — voir spawnFromSelected)
 // ; les autres actions
@@ -102,7 +103,19 @@ const COLOR_CH = {
   w: { r: true, g: true, b: true },
 };
 
-const COLOR_NAMES = { r: "Rouge", g: "Vert", b: "Bleu", y: "Jaune", c: "Cyan", m: "Magenta", w: "Blanc" };
+// i18n: résolu une fois au chargement du module plutôt qu'à chaque appel —
+// suffisant tant qu'une seule langue est active (voir game/i18n.js); si un
+// sélecteur de langue apparaît un jour, ceci devra redevenir une fonction
+// `colorName(letter)` appelant t() à la volée plutôt qu'un objet figé.
+const COLOR_NAMES = {
+  r: t("color.r"),
+  g: t("color.g"),
+  b: t("color.b"),
+  y: t("color.y"),
+  c: t("color.c"),
+  m: t("color.m"),
+  w: t("color.w"),
+};
 
 const MAX_LIGHT_TIER = 10;
 const MIN_LIGHT_TIER_FOR_FRAGMENT = 2;
@@ -256,11 +269,11 @@ const OBJECTIVE_SCRIPT = [
 const OBJECTIVES_PER_BADGE = 10;
 const PIXELART_BADGE_TIER = 5;
 const BADGE_DEFS = [
-  { name: "Étincelle" },
-  { name: "Synapse" },
-  { name: "Réseau" },
-  { name: "Constellation" },
-  { name: "Rétro" },
+  { name: t("badge.etincelle") },
+  { name: t("badge.synapse") },
+  { name: t("badge.reseau") },
+  { name: t("badge.constellation") },
+  { name: t("badge.retro") },
 ];
 
 // Progression globale minimale, PERSISTÉE à part (clé dédiée, hors
@@ -1101,10 +1114,14 @@ export function initSommation(pointsApi) {
     }
     if (genOfferAcceptBtn) {
       genOfferAcceptBtn.disabled = false;
-      genOfferAcceptBtn.textContent = "Regarder la pub";
+      // Réutilise la même clé que le libellé statique du bouton (voir
+      // index.html/fr.js: "btn-som-genoffer-accept") plutôt qu'en dupliquer
+      // une identique — ce texte est juste RÉTABLI ici après un état
+      // temporaire ("Chargement…" pendant la pub, voir plus bas).
+      genOfferAcceptBtn.textContent = t("btn-som-genoffer-accept");
     }
     if (genOfferTextEl) {
-      genOfferTextEl.textContent = `Un générateur ${COLOR_NAMES[cell.color]} niveau ${cell.level} t'est proposé. Regarde une pub pour l'obtenir, ou refuse pour libérer la case.`;
+      genOfferTextEl.textContent = t("somGenOfferText", { color: COLOR_NAMES[cell.color], level: cell.level });
     }
     genOfferModalEl?.classList.remove("hidden");
   }
@@ -1309,14 +1326,14 @@ export function initSommation(pointsApi) {
       // matchesRequirement/genReq).
       if (srcCell.type !== "light") {
         const genReqMatch = srcCell.type === "gen" && objectiveState.requirements.find((r) => matchesRequirement(srcCell, r));
-        if (genReqMatch) return { valid: true, label: "Nourrir l'objectif" };
+        if (genReqMatch) return { valid: true, label: t("somFeedObjective") };
         // Retour utilisateur: "il ne faut pas qu'on puisse recycler un
         // générateur si c'est le dernier générateur blanc [...] le jeu
         // serait bloqué" — voir doDropOnObjective/countWhiteGenerators, qui
         // refuse réellement ce dépôt: l'aperçu doit prévenir AVANT le
         // lâcher plutôt que laisser croire à un recyclage normal.
         if (srcCell.type === "gen" && srcCell.color === "w" && countWhiteGenerators() <= 1) {
-          return { valid: false, label: "Impossible — dernier générateur blanc" };
+          return { valid: false, label: t("somLastWhiteGen") };
         }
         // Retour utilisateur: "lorsqu'on s'apprête à recycler un générateur
         // l'objectif s'éclaire en vert alors qu'on n'a aucun gain [...] ça
@@ -1325,10 +1342,10 @@ export function initSommation(pointsApi) {
         // vraiment l'objectif (genReqMatch); un simple recyclage (aucun
         // gain) doit être signalé comme invalide (rouge), même si l'action
         // reste autorisée (voir handleDrop, qui ne bloque pas ce cas).
-        return { valid: false, label: "Recycler (aucun gain)" };
+        return { valid: false, label: t("somRecycleNoGain") };
       }
       const req = objectiveState.requirements.find((r) => matchesRequirement(srcCell, r));
-      return req ? { valid: true, label: "Nourrir l'objectif" } : { valid: false, label: "Ne correspond à rien — recyclage" };
+      return req ? { valid: true, label: t("somFeedObjective") } : { valid: false, label: t("somRecycleNoMatch") };
     }
     if (!target || (target.r === src.r && target.c === src.c)) return null;
     if (isLocked(target.r, target.c)) {
@@ -1336,45 +1353,47 @@ export function initSommation(pointsApi) {
       // activeLockKey()) accepte un dépôt, et uniquement une lumière qui
       // correspond à une couleur pas encore fournie, au rang requis.
       const key = `${target.r},${target.c}`;
-      if (key !== activeLockKey() || srcCell.type !== "light") return { valid: false, label: "Case verrouillée" };
+      if (key !== activeLockKey() || srcCell.type !== "light") return { valid: false, label: t("somLockedCell") };
       const letter = letterForChannels(srcCell.ch);
       if (!UNLOCK_COLORS.includes(letter) || srcCell.tier !== nextUnlockTier() || lockFill[letter]) {
-        return { valid: false, label: "Case verrouillée" };
+        return { valid: false, label: t("somLockedCell") };
       }
-      return { valid: true, label: "Nourrir le verrou" };
+      return { valid: true, label: t("somFeedLock") };
     }
 
     const dst = board[target.r]?.[target.c];
-    if (!dst) return { valid: true, label: "Déplacer ici" };
+    if (!dst) return { valid: true, label: t("somMoveHere") };
 
     // Toute combinaison qui ne fusionne pas se résout par un échange de
     // position (voir handleDrop()) — donc toujours "valid" ici, seul le
     // libellé change pour distinguer une vraie fusion d'un simple échange.
     if (srcCell.type === "gen" && dst.type === "gen") {
-      if (srcCell.color !== dst.color) return { valid: true, label: "Échanger les positions" };
-      if (srcCell.level !== dst.level) return { valid: true, label: "Échanger les positions" };
-      if (srcCell.level >= MAX_GEN_LEVEL) return { valid: true, label: "Échanger (niveau déjà maximum)" };
-      return { valid: true, label: `Fusionner → niveau ${dst.level + 1}` };
+      if (srcCell.color !== dst.color) return { valid: true, label: t("somSwapPositions") };
+      if (srcCell.level !== dst.level) return { valid: true, label: t("somSwapPositions") };
+      if (srcCell.level >= MAX_GEN_LEVEL) return { valid: true, label: t("somSwapMaxLevel") };
+      return { valid: true, label: t("somMergeLevel", { level: dst.level + 1 }) };
     }
     if (srcCell.type === "light" && dst.type === "light") {
       if (sameChannels(srcCell.ch, dst.ch)) {
-        if (srcCell.tier !== dst.tier) return { valid: true, label: "Échanger les positions" };
-        if (srcCell.tier >= MAX_LIGHT_TIER) return { valid: true, label: "Échanger (rang déjà maximum)" };
-        return { valid: true, label: `Fusionner → rang ${srcCell.tier + 1}` };
+        if (srcCell.tier !== dst.tier) return { valid: true, label: t("somSwapPositions") };
+        if (srcCell.tier >= MAX_LIGHT_TIER) return { valid: true, label: t("somSwapMaxTier") };
+        return { valid: true, label: t("somMergeTier", { tier: srcCell.tier + 1 }) };
       }
       // Mélange réservé à deux couleurs PURES différentes (voir
       // doLightMerge/isPureColor) — blanc ou couleur déjà mélangée: échange.
-      if (!isPureColor(srcCell.ch) || !isPureColor(dst.ch)) return { valid: true, label: "Échanger les positions" };
+      if (!isPureColor(srcCell.ch) || !isPureColor(dst.ch)) return { valid: true, label: t("somSwapPositions") };
       const mixed = mixChannels(srcCell.ch, dst.ch);
       const mixTier = Math.min(srcCell.tier, dst.tier);
-      return { valid: true, label: `Mélanger → ${COLOR_NAMES[letterForChannels(mixed)]} (rang ${mixTier})` };
+      return { valid: true, label: t("somMixColor", { color: COLOR_NAMES[letterForChannels(mixed)], tier: mixTier }) };
     }
     if ((srcCell.type === "light" && dst.type === "frag") || (srcCell.type === "frag" && dst.type === "light")) {
       const light = srcCell.type === "light" ? srcCell : dst;
       const ok = light.tier >= MIN_LIGHT_TIER_FOR_FRAGMENT && isGeneratableColor(light.ch);
-      return ok ? { valid: true, label: `Créer un générateur ${COLOR_NAMES[generatableLetterFor(light.ch)]}` } : { valid: true, label: "Échanger les positions" };
+      return ok
+        ? { valid: true, label: t("somCreateGenerator", { color: COLOR_NAMES[generatableLetterFor(light.ch)] }) }
+        : { valid: true, label: t("somSwapPositions") };
     }
-    return { valid: true, label: "Échanger les positions" };
+    return { valid: true, label: t("somSwapPositions") };
   }
 
   function handleDrop(src, target) {

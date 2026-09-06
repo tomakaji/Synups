@@ -1,14 +1,15 @@
 // Règles de sécurité Firestore — projet "Synups" (console Firebase,
 // synups-3b038). Copie de référence tenue à jour dans le repo ; la version
 // qui fait foi est celle publiée dans la console Firebase (Firestore
-// Database > Règles), voir community-store.js pour le code qui s'appuie
+// Database > Règles), voir game/community-store.js pour le code qui s'appuie
 // dessus.
 //
-// Une seule collection utilisée par l'app : `levels` (le fil communautaire,
-// voir game/community-store.js). Tout le reste (profil, points, options,
-// likes/plays...) reste local à l'appareil (localStorage), jamais dans
-// Firestore — voir échange avec l'utilisateur : seule la Communauté est une
-// vraie donnée multi-joueurs.
+// Deux collections utilisées par l'app : `levels` (le fil communautaire) et
+// `likes` (qui a liké quelle grille, voir game/community-store.js). Tout le
+// reste (profil, points, options, progression Histoire/Remember...) reste
+// local à l'appareil (localStorage), jamais dans Firestore — voir échange
+// avec l'utilisateur : seuls le fil Communauté et ses likes/compteurs sont
+// une vraie donnée multi-joueurs partagée.
 rules_version = '2';
 
 service cloud.firestore {
@@ -27,6 +28,10 @@ service cloud.firestore {
       // l'auteur comme étant l'uid courant (empêche de publier "au nom" de
       // quelqu'un d'autre). Vérifications de forme minimales en plus, pour
       // ne jamais laisser entrer un document manifestement cassé/abusif.
+      // likesCount/playsCount doivent démarrer à 0 : les faire grimper
+      // artificiellement dès la création serait un contournement trivial
+      // des règles d'`update` ci-dessous, qui elles n'autorisent que des pas
+      // de ±1/+1 (voir isCounterOnlyChange).
       allow create: if request.auth != null
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.title is string
@@ -39,16 +44,79 @@ service cloud.firestore {
         && request.resource.data.cols > 0
         && request.resource.data.cols <= 30
         && request.resource.data.cells is list
-        && request.resource.data.author is map;
+        && request.resource.data.author is map
+        && request.resource.data.likesCount == 0
+        && request.resource.data.playsCount == 0;
 
-      // Aucune édition en place : l'app ne propose que "Retirer" + republier
-      // (voir community-store.js, en-tête de fichier) — une grille publiée
-      // est immuable jusqu'à suppression.
-      allow update: if false;
+      // Le contenu d'une grille publiée reste immuable (l'app ne propose que
+      // "Retirer" + republier, voir community-store.js, en-tête de fichier)
+      // — mais deux mutations partielles bien précises sont désormais
+      // permises, chacune réservée à un acteur différent :
+      //
+      //   1. N'IMPORTE QUEL joueur connecté peut faire évoluer les compteurs
+      //      likesCount/playsCount de ±1 à la fois (voir community-store.js:
+      //      toggleLike/markPlayed) — jamais les deux dans la même écriture,
+      //      jamais un autre champ, jamais un saut de plus de 1 (empêche de
+      //      gonfler artificiellement un compteur en une seule requête
+      //      forgée), jamais sous 0.
+      //
+      //   2. SEUL le propriétaire de la grille peut réécrire le champ
+      //      `author` (pseudo/avatar/badge) — voir community-store.js:
+      //      syncAuthorToPublishedLevels, appelé quand le joueur change son
+      //      pseudo/avatar/badge, pour que ses grilles déjà publiées
+      //      affichent la nouvelle identité sans avoir à tout republier.
+      allow update: if request.auth != null && (isCounterStep() || isOwnerAuthorUpdate());
 
       // Retirer une grille (bouton "Retirer" de l'écran "Mon profil") :
       // uniquement le joueur qui l'a publiée.
       allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+
+      function isCounterStep() {
+        let affected = request.resource.data.diff(resource.data).affectedKeys();
+        return (
+          affected.hasOnly(['likesCount']) &&
+          request.resource.data.likesCount is int &&
+          request.resource.data.likesCount >= 0 &&
+          (request.resource.data.likesCount == resource.data.likesCount + 1 ||
+            request.resource.data.likesCount == resource.data.likesCount - 1)
+        ) || (
+          affected.hasOnly(['playsCount']) &&
+          request.resource.data.playsCount is int &&
+          request.resource.data.playsCount == resource.data.playsCount + 1
+        );
+      }
+
+      function isOwnerAuthorUpdate() {
+        return resource.data.ownerUid == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['author']) &&
+          request.resource.data.author is map;
+      }
+    }
+
+    match /likes/{likeId} {
+      // Public en lecture, même logique que `levels` ci-dessus : savoir qui
+      // a liké quoi n'est pas une donnée sensible (uid anonyme, pas
+      // d'identité réelle) et ça simplifie les règles plutôt que de
+      // restreindre `list` à la requête `where("uid","==",auth.uid)` que
+      // fait community-store.js (voir initCommunityCloud).
+      allow read: if true;
+
+      // Liker (voir community-store.js: toggleLike) : le document doit être
+      // déterministe — id `${levelId}_${uid}` — pour empêcher un joueur de
+      // liker plusieurs fois la même grille (voir likeDocId ci-contre côté
+      // client) ; `uid` doit correspondre au joueur connecté (empêche de
+      // liker "au nom" de quelqu'un d'autre).
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.levelId is string
+        && request.resource.data.levelId.size() > 0
+        && likeId == request.resource.data.levelId + '_' + request.resource.data.uid;
+
+      // Un like ne se modifie jamais : on le crée ou on le supprime (unlike).
+      allow update: if false;
+
+      // Retirer son propre like (unlike) : uniquement l'auteur du like.
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
   }
 }
