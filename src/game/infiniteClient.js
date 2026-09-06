@@ -268,6 +268,22 @@ function configSignature({ difficulty, enabledFeatureKeys }) {
 }
 
 /**
+ * Vrai si un niveau est déjà prêt pour cette config, SANS le consommer
+ * (contrairement à `takeBufferedLevel`) — utilisé par main.js (bouton
+ * "Nouvelle grille") pour décider AVANT d'appeler `requestLevel`/
+ * `runGeneration` si le niveau suivant arrivera instantanément (buffer non
+ * vide: rien à afficher, pas besoin de verrouiller quoi que ce soit) ou si
+ * une vraie attente est à prévoir (buffer vide: retour utilisateur — "on ne
+ * devrait pas pouvoir continuer de jouer la grille actuelle" pendant ce
+ * temps, plateau à verrouiller + gros loader à la place de la grille). Une
+ * simple lecture, comme `configSignature` : ne modifie jamais `bufferItems`/
+ * `bufferPending`.
+ */
+export function hasBufferedLevel(config) {
+  return bufferSignature === configSignature(config) && bufferItems.length > 0;
+}
+
+/**
  * S'assure que le buffer contient jusqu'à BUFFER_SIZE niveaux prêts pour la
  * config donnée, en mettant en file d'attente (priorité basse — voir
  * enqueuePoolJob) les générations manquantes — ne bloque JAMAIS l'appelant.

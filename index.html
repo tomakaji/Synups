@@ -252,6 +252,15 @@
         <div id="play-view">
           <main id="board-container">
             <div id="board"></div>
+            <!-- Infini uniquement (retour utilisateur: "Nouvelle grille" sans
+                 grille préchargée en stock) — voir main.js:
+                 setInfiniteGeneratingOverlay(). Caché par défaut, affiché à
+                 la place de #board (jamais en plus) le temps que le
+                 générateur réponde, jamais lors du chemin buffer instantané. -->
+            <div id="board-generating-overlay" class="board-generating-overlay hidden" aria-live="polite">
+              <span class="infinite-spinner infinite-spinner--lg" aria-hidden="true"></span>
+              <span>Génération d'une nouvelle grille…</span>
+            </div>
           </main>
         </div>
 

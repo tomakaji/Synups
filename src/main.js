@@ -75,7 +75,7 @@ import {
   resetSommationProgress,
 } from "./sommation.js";
 import { FEATURES } from "./game/generator.js";
-import { requestLevel, ensureLevelBuffer, takeBufferedLevel } from "./game/infiniteClient.js";
+import { requestLevel, ensureLevelBuffer, takeBufferedLevel, hasBufferedLevel } from "./game/infiniteClient.js";
 import {
   loadPoints,
   savePoints,
@@ -143,6 +143,7 @@ let moveHistory = [];
 const boardEl = document.getElementById("board");
 const levelNameEl = document.getElementById("level-name");
 const boardContainerEl = document.getElementById("board-container");
+const boardGeneratingOverlayEl = document.getElementById("board-generating-overlay");
 const btnUndo = document.getElementById("btn-undo");
 // Retour utilisateur (zoom tactile): "on ne peut pas déplacer la grille en
 // touchant le vide autour d'elle" — voir render.js: createBoardRenderer,
@@ -191,6 +192,17 @@ function wait(ms) {
 // seul le mode Infini avait un tel verrou (infiniteAdvancePending), le mode
 // Jouer s'appuyait sur le menu bloquant pour empêcher les clics.
 let boardLocked = false;
+
+// Vrai uniquement pendant l'attente d'une génération Infini SANS niveau
+// préchargé en stock (buffer vide, voir infiniteClient.js:
+// hasBufferedLevel) déclenchée par un clic MANUEL sur "Nouvelle grille" —
+// voir setInfiniteGeneratingOverlay ci-dessous. Un flag SÉPARÉ de
+// `boardLocked` (pas juste "boardLocked = true" ici) parce que `goBack()`
+// vérifie ce dernier pour bloquer la navigation PENDANT la transition de
+// fin de niveau — un comportement voulu là-bas, mais pas ici (retour
+// utilisateur: "lock les boutons [...] sauf bouton retour", le joueur doit
+// pouvoir quitter Infini plutôt que d'attendre le générateur).
+let infiniteGenerationPending = false;
 
 async function advanceAfterWin() {
   boardLocked = true;
@@ -527,7 +539,7 @@ function loadLevel(index, { silent = false } = {}) {
 }
 
 function handleCellClick(r, c) {
-  if (boardLocked) return;
+  if (boardLocked || infiniteGenerationPending) return;
   // Musique par calques: démarre au premier vrai geste utilisateur (voir
   // music.js — Tone.js exige un clic avant de pouvoir jouer du son, même
   // règle que ensureStarted() dans sound.js). Sans effet si déjà démarrée.
@@ -581,7 +593,7 @@ function handleCellClick(r, c) {
 }
 
 function undoLastMove() {
-  if (boardLocked) return;
+  if (boardLocked || infiniteGenerationPending) return;
   const last = moveHistory.pop();
   if (!last) return;
   // Restaure directement l'état précédent (voir setLightRaw) plutôt que de
@@ -739,7 +751,7 @@ function closeHintModal() {
 }
 
 btnHint.onclick = () => {
-  if (boardLocked) return;
+  if (boardLocked || infiniteGenerationPending) return;
   if (hintStock <= 0) {
     openHintModal();
     return;
@@ -1721,12 +1733,61 @@ async function runGeneration({ intoBoard }) {
   }
 }
 
+/** Retour utilisateur: "lorsqu'on clique sur Nouvelle grille et qu'on n'en a
+ * plus en stock (aucune grille préchargée), on ne devrait pas pouvoir
+ * continuer de jouer la grille actuelle, mais [...] lock les boutons pour
+ * éviter le spam (sauf bouton retour) et mettre un gros Loader à la place
+ * de la grille". N'est appelée QUE quand `hasBufferedLevel` a déjà répondu
+ * non (voir btnInfiniteNext.onclick) — le chemin buffer (cas courant) reste
+ * instantané et ne passe jamais par ici, exactement comme avant.
+ *
+ * Verrouille via `infiniteGenerationPending` (pas `boardLocked`, voir sa
+ * déclaration) pour que goBack() reste fonctionnel pendant l'attente — le
+ * plateau lui-même est de toute façon totalement recouvert par le loader
+ * (voir mode-infinite.css: #board-generating-overlay, opaque et au-dessus
+ * de #board), donc masquer les cases ne dépend pas QUE de ce flag. Les
+ * boutons de la barre du haut/du bas (hors Retour) sont en plus rendus
+ * `disabled` pour un retour visuel immédiat (curseur, grisage) plutôt que
+ * de compter uniquement sur un clic qui ne ferait rien.
+ */
+function setInfiniteGeneratingOverlay(active) {
+  infiniteGenerationPending = active;
+  boardGeneratingOverlayEl?.classList.toggle("hidden", !active);
+  btnInfiniteSettings.disabled = active;
+  btnInfiniteNext.disabled = active;
+  btnHint.disabled = active;
+  document.getElementById("btn-reset").disabled = active;
+  // btn-undo a son propre état "activable" indépendant (voir syncMoveUi:
+  // désactivé tant qu'il n'y a rien à annuler) — le forcer à `false` en
+  // sortie afficherait un bouton cliquable même sans historique. On le
+  // force seulement à `true` en entrée (toujours sûr: jamais d'annulation
+  // possible pendant l'attente) et on laisse syncMoveUi() restaurer son
+  // état réel à la sortie.
+  if (active) btnUndo.disabled = true;
+  else syncMoveUi();
+}
+
 btnInfiniteGenerate.onclick = () => runGeneration({ intoBoard: false });
-btnInfiniteNext.onclick = () => {
-  // Bloqué pendant la transition de fin de niveau (boardLocked): sinon un
-  // double appel à runGeneration (celui-ci + celui déjà en cours dans
-  // advanceAfterWin) pourrait charger deux niveaux à la suite.
-  if (!boardLocked) runGeneration({ intoBoard: true });
+btnInfiniteNext.onclick = async () => {
+  // Bloqué pendant la transition de fin de niveau (boardLocked) ou une
+  // attente de génération déjà en cours (infiniteGenerationPending): sinon
+  // un double appel à runGeneration (celui-ci + celui déjà en cours dans
+  // advanceAfterWin, ou un second clic pendant l'attente) pourrait charger
+  // deux niveaux à la suite.
+  if (boardLocked || infiniteGenerationPending) return;
+  // Buffer non vide: runGeneration servira le niveau INSTANTANÉMENT (voir
+  // takeBufferedLevel) — rien à verrouiller ni à faire attendre, comme
+  // avant ce correctif.
+  if (hasBufferedLevel(infiniteConfig())) {
+    runGeneration({ intoBoard: true });
+    return;
+  }
+  setInfiniteGeneratingOverlay(true);
+  try {
+    await runGeneration({ intoBoard: true });
+  } finally {
+    setInfiniteGeneratingOverlay(false);
+  }
 };
 btnInfiniteSettings.onclick = () => {
   // "Réglages" pousse un NOUVEL écran (pas juste un panneau interne): Retour
@@ -1759,7 +1820,7 @@ document.getElementById("btn-next").onclick = () => {
 // Chaque mode "Effacer" doit recharger SA PROPRE grille en mémoire, jamais
 // passer par le chemin Histoire.
 document.getElementById("btn-reset").onclick = () => {
-  if (boardLocked) return;
+  if (boardLocked || infiniteGenerationPending) return;
   if (mode === "infinite" && lastInfiniteResult) loadInfiniteLevel(lastInfiniteResult);
   else if (mode === "community" && currentCommunityLevel) loadCommunityLevel(currentCommunityLevel);
   else if (mode === "daily") loadDailyChallengeLevel(currentLevel);
@@ -1806,7 +1867,7 @@ function renderLevelGrid() {
 const btnLevelGrid = document.getElementById("btn-level-grid");
 
 btnLevelGrid.onclick = () => {
-  if (boardLocked) return;
+  if (boardLocked || infiniteGenerationPending) return;
   pushView("story-select");
 };
 
@@ -2839,39 +2900,52 @@ function alignDailyChallengeFab() {
  * titre (voir showView: name === "title"). Revalide toujours contre la date
  * courante via isDailyChallengeReady/isDailyChallengeCompleted (voir
  * dailyChallenge.js), jamais un état mis en cache ici. */
-function renderDailyChallengeButton({ generating = false } = {}) {
+function renderDailyChallengeButton() {
   if (!btnDailyChallenge) return;
-  // Retour utilisateur: "doit disparaître si le défi a été réalisé" — plus
-  // seulement un tooltip "déjà fait" sur un bouton qui restait affiché (voir
-  // git history). display:none (classe .hidden, voir floating-controls.css)
-  // plutôt qu'une simple désactivation: c'est aussi ce qui permet à
-  // l'animation d'entrée du bouton de se REJOUER le jour suivant, quand il
-  // redevient visible (voir .daily-challenge-fab: animation d'entrée
-  // déclenchée par le passage display:none -> visible).
+  // Retour utilisateur: "le bouton flottant ne doit apparaître que dès lors
+  // que la grille quotidienne est générée, sinon il n'apparaît pas, afin de
+  // ne pas faire attendre le joueur dans un loading pour rien" — BUG
+  // CORRIGÉ: avant ce correctif, le bouton était déjà visible (juste sans
+  // pastille "!") pendant qu'`ensureTodayChallenge()` tournait encore en
+  // tâche de fond (voir plus bas), donc un joueur assez rapide pour taper
+  // dessus avant la fin tombait sur un état "generating" (pulse + clic qui
+  // attend la génération) — un temps de chargement qu'il n'avait aucun
+  // moyen d'éviter puisque rien ne distinguait "pas encore prêt" de "prêt".
+  // Le bouton reste maintenant simplement absent tant que ce n'est pas prêt
+  // (display:none, classe .hidden), exactement comme pour "déjà complété"
+  // ci-dessous — les deux raisons de ne PAS pouvoir jouer aujourd'hui sont
+  // donc traitées de la même façon: bouton caché, jamais un état "en cours".
+  // display:none (et non juste opacity/visibility) est volontaire: c'est ce
+  // qui permet à l'animation d'entrée (.daily-challenge-fab: animation
+  // d'entrée déclenchée par le passage display:none -> visible) de se
+  // rejouer aussi bien le jour suivant qu'à l'instant précis où la
+  // génération du jour se termine.
   const completed = isDailyChallengeCompleted();
-  btnDailyChallenge.classList.toggle("hidden", completed);
-  if (completed) return; // rien d'autre à mettre à jour sur un bouton caché
-  btnDailyChallenge.classList.toggle("generating", generating);
-  const showBadge = !generating && isDailyChallengeReady();
-  dailyChallengeFabBadgeEl.classList.toggle("hidden", !showBadge);
-  dailyChallengeFabBadgeEl.textContent = showBadge ? "!" : "";
+  const ready = isDailyChallengeReady();
+  btnDailyChallenge.classList.toggle("hidden", completed || !ready);
+  if (completed || !ready) return; // rien d'autre à mettre à jour sur un bouton caché
+  // Le bouton n'est visible qu'une fois prêt (voir ci-dessus) — la pastille
+  // "!" n'a donc plus qu'un seul état possible ici (toujours affichée),
+  // contrairement à avant où elle devait aussi distinguer "en cours de
+  // génération" (bouton visible mais rien à annoncer) de "prêt".
+  dailyChallengeFabBadgeEl.classList.remove("hidden");
+  dailyChallengeFabBadgeEl.textContent = "!";
   btnDailyChallenge.title = "Défi Quotidien — grille du jour, +1 Énergie";
 }
 
-btnDailyChallenge.onclick = async () => {
+btnDailyChallenge.onclick = () => {
   if (isDailyChallengeCompleted()) {
     // Rien à rejouer aujourd'hui (retour utilisateur: 1 grille/jour) — le
     // titre du bouton (voir ci-dessus) explique déjà pourquoi, pas besoin
     // d'une modale pour un simple clic curieux sur un bouton "fait".
     return;
   }
-  let level = getDailyChallengeLevel();
-  if (!level) {
-    renderDailyChallengeButton({ generating: true });
-    level = await ensureTodayChallenge();
-    renderDailyChallengeButton();
-    if (!level) return; // cas limite (voir generateLevel): rien à jouer, réessayer plus tard
-  }
+  const level = getDailyChallengeLevel();
+  // Ne devrait plus arriver: le bouton n'est désormais visible qu'une fois
+  // la grille du jour réellement générée (voir renderDailyChallengeButton
+  // ci-dessus) — gardé en garde-fou défensif plutôt que retiré, au cas où
+  // un appel externe l'afficherait un jour sans repasser par cette fonction.
+  if (!level) return;
   viewStack = ["title", "play"];
   loadDailyChallengeLevel(level);
   showView("play", { mode: "daily" });

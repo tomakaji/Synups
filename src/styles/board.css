@@ -8,6 +8,11 @@
 #board-container {
   display: flex;
   justify-content: center;
+  /* Ancre pour #board-generating-overlay (voir plus bas et main.js:
+     setInfiniteGeneratingOverlay) — un position:absolute a besoin d'un
+     ancêtre positionné pour couvrir exactement cette boîte plutôt que de
+     remonter jusqu'à la racine de la page. */
+  position: relative;
 }
 
 #board {
