@@ -7,3 +7,9 @@ music-demos
 .idea
 android/.idea
 ios/App/Pods
+
+# Clé de compte de service Firebase (voir scripts/seed-firestore.mjs) —
+# JAMAIS commitée, quel que soit son nom ou son emplacement dans le repo.
+*serviceAccount*.json
+*service-account*.json
+firebase-adminsdk-*.json
