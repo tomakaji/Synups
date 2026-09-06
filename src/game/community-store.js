@@ -47,7 +47,6 @@ import {
   collection,
   doc,
   addDoc,
-  setDoc,
   deleteDoc,
   updateDoc,
   increment,
@@ -405,11 +404,14 @@ export function likedLevels() {
  * philosophie que publishToCloud/unpublishLevel plus bas): `myLikedIds` et
  * le `likesCount` en cache sont mis à jour IMMÉDIATEMENT, avant même la
  * confirmation réseau, pour que le cœur réagisse au clic sans attendre —
- * l'écriture Firestore réelle (déduplication via l'id déterministe du
- * document `likes`, + `increment()` sur le compteur du niveau) part en
- * arrière-plan, best-effort comme le reste de ce module. Ne renvoie plus
- * rien : aucun appelant (voir main.js) n'utilisait la valeur de retour,
- * chacun ré-affiche depuis getLevel()/listLevels() juste après. */
+ * l'écriture Firestore réelle part en arrière-plan, best-effort comme le
+ * reste de ce module. Les deux écritures (doc `likes` + compteur sur
+ * `levels`) sont TOUJOURS liées (l'une n'a jamais de sens sans l'autre) —
+ * regroupées dans un seul writeBatch() pour ne faire qu'un aller-retour
+ * réseau au lieu de deux (retour utilisateur: "ces deux requêtes seront
+ * toujours liées"). Ne renvoie plus rien : aucun appelant (voir main.js)
+ * n'utilisait la valeur de retour, chacun ré-affiche depuis
+ * getLevel()/listLevels() juste après. */
 export function toggleLike(id) {
   const level = getLevel(id);
   if (!level || (level.ownerUid && level.ownerUid === myUid)) return;
@@ -423,13 +425,15 @@ export function toggleLike(id) {
     if (!uid) return; // hors ligne: reste purement optimiste pour cette session
     const ref = doc(db, LIKES_COLLECTION, likeDocId(id, uid));
     const levelRef = doc(db, LEVELS_COLLECTION, id);
+    const batch = writeBatch(db);
     if (wasLiked) {
-      deleteDoc(ref).catch(() => {});
-      updateDoc(levelRef, { likesCount: increment(-1) }).catch(() => {});
+      batch.delete(ref);
+      batch.update(levelRef, { likesCount: increment(-1) });
     } else {
-      setDoc(ref, { levelId: id, uid, createdAt: serverTimestamp() }).catch(() => {});
-      updateDoc(levelRef, { likesCount: increment(1) }).catch(() => {});
+      batch.set(ref, { levelId: id, uid, createdAt: serverTimestamp() });
+      batch.update(levelRef, { likesCount: increment(1) });
     }
+    batch.commit().catch(() => {});
   });
 }
 
