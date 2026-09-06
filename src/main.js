@@ -26,6 +26,7 @@ import {
   ensureTodayChallenge,
   completeTodayChallenge,
   getStarBadges,
+  debugUnlockStarBadges,
 } from "./game/dailyChallenge.js";
 import {
   playPlace,
@@ -100,7 +101,6 @@ import {
   toggleLike,
   markPlayed,
   unpublishLevel,
-  encodeShareCode,
   detectMechanics,
   AVATARS,
   isAvatarUnlocked,
@@ -1964,11 +1964,9 @@ const communitySearchEl = document.getElementById("community-search");
 const communitySortEl = document.getElementById("community-sort");
 const communityFeedEl = document.getElementById("community-feed");
 const communityEmptyEl = document.getElementById("community-empty");
+const communityPagerEl = document.getElementById("community-pager");
 const btnCommunityCreate = document.getElementById("btn-community-create");
 const btnCommunityProfile = document.getElementById("btn-community-profile");
-
-const communityShareModal = document.getElementById("community-share-modal");
-const communityShareOutputEl = document.getElementById("community-share-output");
 
 const communityRateModal = document.getElementById("community-rate-modal");
 const communityRateTextEl = document.getElementById("community-rate-text");
@@ -1991,8 +1989,10 @@ const btnProfilePseudoConfirm = document.getElementById("btn-profile-pseudo-conf
 const profileAvatarPicker = document.getElementById("profile-avatar-picker");
 const profilePublishedEl = document.getElementById("profile-published");
 const profilePublishedEmptyEl = document.getElementById("profile-published-empty");
+const profilePublishedPagerEl = document.getElementById("profile-published-pager");
 const profileLikedEl = document.getElementById("profile-liked");
 const profileLikedEmptyEl = document.getElementById("profile-liked-empty");
+const profileLikedPagerEl = document.getElementById("profile-liked-pager");
 const profileBadgePreviewEl = document.getElementById("profile-badge-preview");
 const profileSommationBadgesEl = document.getElementById("profile-sommation-badges");
 const btnProfileBadgesDebugUnlock = document.getElementById("btn-profile-badges-debug-unlock");
@@ -2001,12 +2001,31 @@ const titleProfileIdentityEl = document.getElementById("title-profile-identity")
 
 let communitySearch = "";
 let communitySort = "recent";
+// Retour utilisateur: "il faut paginer dans Communauté la liste des grilles,
+// par 20" — affichage paginé (pas de vraies routes/URLs), voir buildPager()
+// plus bas. Remise à 1 uniquement sur une VRAIE entrée dans l'écran ou un
+// changement de recherche/tri (voir renderCommunityFeed(resetPage)) — jamais
+// sur un simple like/rafraîchissement Firestore en tâche de fond, sinon
+// liker une grille en page 3 vous ramènerait brutalement en page 1.
+let communityPage = 1;
+const COMMUNITY_PAGE_SIZE = 20;
 let currentCommunityLevel = null; // grille en cours en mode "community" — voir loadCommunityLevel
 let selectedProfileAvatar = AVATARS[0].id;
 // Tier (1-5) du badge choisi pour affichage public, ou null ("aucun badge") —
 // voir renderCommunityProfile/refreshProfileBadgePreview. Simple reflet local
 // de profile.activeBadge, ré-synchronisé à chaque entrée dans "Mon profil".
 let selectedActiveBadge = null;
+// Retour utilisateur: "paginer les sections 'Mes grilles publiées' et 'mes
+// favoris', 5 grilles par page" — contrairement à communityPage ci-dessus,
+// remis à 1 à CHAQUE appel de renderCommunityProfile() (même philosophie que
+// le reste de cette fonction, voir son commentaire: "resynchronise TOUT
+// depuis le profil enregistré" à chaque rendu, jamais de diff fragile) —
+// ces deux listes rétrécissent de toute façon dès qu'on like/retire une
+// grille depuis cet écran, donc replacer en page 1 après coup est sans
+// risque de perte de contexte.
+let profilePublishedPage = 1;
+let profileLikedPage = 1;
+const PROFILE_PAGE_SIZE = 5;
 
 /** État d'unlocks résolu ici (main.js reste le seul point qui connaît à la
  * fois community-store.js, sommation.js ET la progression Histoire/le
@@ -2096,6 +2115,44 @@ function buildBadgeFrame(avatarId, pseudoText, badgeTier, { compact = false, fra
   return frame;
 }
 
+/** Affichage paginé générique (retour utilisateur: pagination de Communauté
+ * et des listes de "Mon profil") — "ce ne sont pas des vraies pages à
+ * proprement parler, c'est un affichage paginé" : pas de route/URL par
+ * page, juste un découpage de la liste déjà en mémoire + Précédent/Suivant.
+ * Renvoie `null` (rien à afficher) si tout tient sur une seule page, pour
+ * que l'appelant n'ait qu'à vider son conteneur avant d'ajouter le résultat
+ * (jamais de pager fantôme à cacher séparément). */
+function buildPager(page, totalPages, onChange) {
+  if (totalPages <= 1) return null;
+  const wrap = document.createElement("div");
+  wrap.className = "pager";
+
+  const prevBtn = document.createElement("button");
+  prevBtn.type = "button";
+  prevBtn.className = "pager-btn";
+  prevBtn.setAttribute("aria-label", t("pager.precedente"));
+  prevBtn.disabled = page <= 1;
+  prevBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+  prevBtn.addEventListener("click", () => onChange(page - 1));
+
+  const label = document.createElement("span");
+  label.className = "pager-label";
+  label.textContent = t("pager.label", { page, totalPages });
+
+  const nextBtn = document.createElement("button");
+  nextBtn.type = "button";
+  nextBtn.className = "pager-btn";
+  nextBtn.setAttribute("aria-label", t("pager.suivante"));
+  nextBtn.disabled = page >= totalPages;
+  nextBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+  nextBtn.addEventListener("click", () => onChange(page + 1));
+
+  wrap.append(prevBtn, label, nextBtn);
+  return wrap;
+}
+
 /** Carte d'une grille communautaire — réutilisée à l'identique dans le fil
  * principal et dans "Mon profil" (mes publications / mes favoris). Le
  * bouton "Retirer" (showUnpublish) n'apparaît que sur vos propres créations
@@ -2166,15 +2223,6 @@ function buildCommunityCard(level, { showUnpublish = false, onChange } = {}) {
     bottom.append(likeBtn, likesStat, playsStat, spacer);
   }
 
-  if (level.source === "local") {
-    const shareBtn = document.createElement("button");
-    shareBtn.type = "button";
-    shareBtn.className = "community-card-btn";
-    shareBtn.textContent = "Partager";
-    shareBtn.addEventListener("click", () => openShareModal(level));
-    bottom.appendChild(shareBtn);
-  }
-
   if (showUnpublish) {
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
@@ -2192,7 +2240,7 @@ function buildCommunityCard(level, { showUnpublish = false, onChange } = {}) {
   // tout l'espace en hauteur de community-card-byline et
   // community-card-bottom" — icône seule (même triangle que "Tester" dans
   // l'éditeur, voir ed-test), plus un vrai bouton texte perdu parmi
-  // like/partager/retirer. Sort du flux vertical top/byline/mechanics/bottom
+  // like/retirer. Sort du flux vertical top/byline/mechanics/bottom
   // (voir plus bas: regroupé avec ces 3 dans .community-card-middle, colonne
   // dédiée qui s'étire sur toute leur hauteur cumulée via align-items:stretch,
   // voir community.css).
@@ -2222,7 +2270,17 @@ function buildCommunityCard(level, { showUnpublish = false, onChange } = {}) {
   return card;
 }
 
-function renderCommunityFeed() {
+/** `resetPage`: remet la pagination en page 1 — UNIQUEMENT pertinent pour
+ * une vraie (ré)entrée dans l'écran ou un changement de recherche/tri (voir
+ * les appelants). Par défaut à `false`: un like posé en page 3 ou un
+ * rafraîchissement Firestore en tâche de fond (voir onChange/
+ * onLevelsChanged) redessinent la page COURANTE sans faire sauter le
+ * joueur en page 1 — contrairement à "Mon profil" (voir
+ * renderCommunityProfile), ce fil ne rétrécit jamais quand on like, rien ne
+ * justifie de perdre sa position de lecture à chaque interaction. */
+function renderCommunityFeed(resetPage = false) {
+  if (resetPage) communityPage = 1;
+
   const query = communitySearch.trim().toLowerCase();
   let list = listLevels().filter((level) => {
     if (!query) return true;
@@ -2235,11 +2293,26 @@ function renderCommunityFeed() {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
+  // Retour utilisateur: "il faut paginer dans Communauté la liste des
+  // grilles, par 20" — re-clampé à chaque rendu (pas seulement au reset):
+  // une recherche qui réduit soudain le nombre de résultats, ou une grille
+  // supprimée par son auteur pendant que vous êtes en page 3, ne doivent
+  // jamais laisser communityPage pointer sur une page devenue inexistante.
+  const totalPages = Math.max(1, Math.ceil(list.length / COMMUNITY_PAGE_SIZE));
+  communityPage = Math.min(Math.max(1, communityPage), totalPages);
+  const pageItems = list.slice((communityPage - 1) * COMMUNITY_PAGE_SIZE, communityPage * COMMUNITY_PAGE_SIZE);
+
   communityFeedEl.innerHTML = "";
-  for (const level of list) {
+  for (const level of pageItems) {
     communityFeedEl.appendChild(buildCommunityCard(level, { onChange: renderCommunityFeed }));
   }
   communityEmptyEl.classList.toggle("hidden", list.length > 0);
+  communityPagerEl.innerHTML = "";
+  const pager = buildPager(communityPage, totalPages, (page) => {
+    communityPage = page;
+    renderCommunityFeed();
+  });
+  if (pager) communityPagerEl.appendChild(pager);
 }
 
 btnCommunityCreate.onclick = () => pushView("editor");
@@ -2247,27 +2320,11 @@ btnCommunityProfile.onclick = () => pushView("community-profile");
 
 communitySearchEl.addEventListener("input", () => {
   communitySearch = communitySearchEl.value;
-  renderCommunityFeed();
+  renderCommunityFeed(true); // nouvelle recherche: retour en page 1
 });
 communitySortEl.addEventListener("change", () => {
   communitySort = communitySortEl.value;
-  renderCommunityFeed();
-});
-
-/** Affiche le code de partage d'UNE de vos grilles (voir community-store.js:
- * encodeShareCode) — jamais pour une grille seed/d'un autre joueur (voir
- * buildCommunityCard: le bouton n'existe que quand `source === "local"`). */
-function openShareModal(level) {
-  communityShareOutputEl.value = encodeShareCode(level);
-  communityShareModal.classList.remove("hidden");
-  communityShareOutputEl.focus();
-  communityShareOutputEl.select();
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(communityShareOutputEl.value).catch(() => {});
-  }
-}
-document.querySelectorAll("[data-community-share-close]").forEach((el) => {
-  el.onclick = () => communityShareModal.classList.add("hidden");
+  renderCommunityFeed(true); // nouveau tri: retour en page 1
 });
 
 /** Demande explicitement au joueur s'il a aimé la grille qu'il vient de
@@ -2595,21 +2652,63 @@ function renderCommunityProfile() {
   refreshProfileBadges();
   refreshProfileBadgePreview();
 
+  // Retour utilisateur: "paginer [...] 5 grilles par page" — remis à 1 à
+  // chaque appel (voir déclaration de profilePublishedPage/profileLikedPage
+  // plus haut pour la justification). L'état "vide" (voir *EmptyEl ci-
+  // dessous) ne dépend que du nombre TOTAL d'éléments, jamais de la page
+  // affichée — basculé ici une seule fois plutôt que dans les fonctions de
+  // page ci-dessous, qui elles ne re-dessinent QUE la page courante.
+  profilePublishedPage = 1;
+  profileLikedPage = 1;
   const mine = listLevels().filter((l) => l.source === "local");
+  const liked = likedLevels();
+  profilePublishedEmptyEl.classList.toggle("hidden", mine.length > 0);
+  profileLikedEmptyEl.classList.toggle("hidden", liked.length > 0);
+  renderProfilePublishedPage();
+  renderProfileLikedPage();
+}
+
+/** Change UNIQUEMENT la page de "Mes grilles publiées" (voir buildPager
+ * ci-dessus, bouton Précédent/Suivant) — un renderCommunityProfile() complet
+ * remettrait profilePublishedPage à 1 avant même de lire la nouvelle valeur
+ * (voir son propre commentaire: reset systématique), donc changer de page
+ * doit re-dérouler seulement CETTE section, pas tout l'écran. */
+function renderProfilePublishedPage() {
+  const mine = listLevels().filter((l) => l.source === "local");
+  const totalPages = Math.max(1, Math.ceil(mine.length / PROFILE_PAGE_SIZE));
+  profilePublishedPage = Math.min(Math.max(1, profilePublishedPage), totalPages);
+  const pageItems = mine.slice((profilePublishedPage - 1) * PROFILE_PAGE_SIZE, profilePublishedPage * PROFILE_PAGE_SIZE);
   profilePublishedEl.innerHTML = "";
-  for (const level of mine) {
+  for (const level of pageItems) {
     profilePublishedEl.appendChild(
       buildCommunityCard(level, { showUnpublish: true, onChange: renderCommunityProfile })
     );
   }
-  profilePublishedEmptyEl.classList.toggle("hidden", mine.length > 0);
+  profilePublishedPagerEl.innerHTML = "";
+  const pager = buildPager(profilePublishedPage, totalPages, (page) => {
+    profilePublishedPage = page;
+    renderProfilePublishedPage();
+  });
+  if (pager) profilePublishedPagerEl.appendChild(pager);
+}
 
+/** Même principe que renderProfilePublishedPage() ci-dessus, pour "Mes
+ * favoris". */
+function renderProfileLikedPage() {
   const liked = likedLevels();
+  const totalPages = Math.max(1, Math.ceil(liked.length / PROFILE_PAGE_SIZE));
+  profileLikedPage = Math.min(Math.max(1, profileLikedPage), totalPages);
+  const pageItems = liked.slice((profileLikedPage - 1) * PROFILE_PAGE_SIZE, profileLikedPage * PROFILE_PAGE_SIZE);
   profileLikedEl.innerHTML = "";
-  for (const level of liked) {
+  for (const level of pageItems) {
     profileLikedEl.appendChild(buildCommunityCard(level, { onChange: renderCommunityProfile }));
   }
-  profileLikedEmptyEl.classList.toggle("hidden", liked.length > 0);
+  profileLikedPagerEl.innerHTML = "";
+  const pager = buildPager(profileLikedPage, totalPages, (page) => {
+    profileLikedPage = page;
+    renderProfileLikedPage();
+  });
+  if (pager) profileLikedPagerEl.appendChild(pager);
 }
 
 // ---------- Pseudo: texte cliquable (lecture) <-> input + bouton check
@@ -2664,10 +2763,16 @@ profilePseudoInput.addEventListener("input", refreshProfileBadgePreview);
 // Round 17 (retour utilisateur): bouton admin temporaire pour tester les
 // badges sans finir Remember — même fonction que le bouton équivalent
 // d'Options (voir plus haut btnPixelartDebugUnlock), donc même effet de
-// bord accepté (débloque aussi le thème PixelArt en même temps).
+// bord accepté (débloque aussi le thème PixelArt en même temps). Round
+// suivant (retour utilisateur: "ajoute les deux [bannières Étoiles] sur le
+// bouton admin"): débloque désormais aussi Comète/Supernova (tiers 6-7,
+// voir dailyChallenge.js: debugUnlockStarBadges) — ce bouton couvre ainsi
+// les 7 bannières d'un seul clic, plutôt que de forcer à enchaîner des
+// Défis Quotidiens juste pour tester l'affichage.
 if (btnProfileBadgesDebugUnlock) {
   btnProfileBadgesDebugUnlock.onclick = () => {
     debugUnlockPixelArt();
+    debugUnlockStarBadges();
     renderCommunityProfile();
   };
 }
@@ -2856,7 +2961,7 @@ function showView(name, opts) {
   if (name === "play") setMode(opts?.mode ?? mode);
   if (opts?.levelIndex != null) loadLevel(opts.levelIndex);
   if (name === "story-select") renderLevelGrid();
-  if (name === "community") renderCommunityFeed();
+  if (name === "community") renderCommunityFeed(true); // vraie entrée dans l'écran: page 1
   if (name === "community-profile") renderCommunityProfile();
   if (name === "editor") editorApi.onShow();
   if (name === "sommation") sommationApi.onShow();

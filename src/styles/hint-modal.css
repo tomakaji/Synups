@@ -379,20 +379,3 @@
   text-align: center;
 }
 
-/* Texte de partage (codes SYN1-…) dans les modales Publier/Importer/
-   Partager — même look que les zones de code de l'éditeur
-   (#ed-export-output/#ed-import-input), dupliqué ici en pleine largeur de
-   modale plutôt que le sélecteur d'ID (les deux vivent dans des écrans
-   différents). */
-.community-code-textarea {
-  width: 100%;
-  background: #0e1119;
-  border: 1px solid #2a3040;
-  color: var(--text);
-  border-radius: 6px;
-  padding: 8px;
-  font-size: 0.72rem;
-  font-family: monospace;
-  resize: vertical;
-}
-

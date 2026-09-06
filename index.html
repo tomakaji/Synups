@@ -557,6 +557,7 @@
         <div class="community-scroll">
           <div id="community-feed" class="community-feed"></div>
           <p data-i18n="community-empty" id="community-empty" class="community-empty hidden">Aucune grille ne correspond à cette recherche.</p>
+          <div id="community-pager"></div>
         </div>
       </section>
 
@@ -652,12 +653,14 @@
           <span data-i18n="misc.mes_grilles_publiees" class="options-label">Mes grilles publiées</span>
           <div id="profile-published" class="community-feed community-feed--compact"></div>
           <p data-i18n="profile-published-empty" id="profile-published-empty" class="community-empty hidden">Tu n'as encore rien publié.</p>
+          <div id="profile-published-pager"></div>
         </div>
 
         <div class="options-section">
           <span data-i18n="misc.mes_favoris" class="options-label">Mes favoris</span>
           <div id="profile-liked" class="community-feed community-feed--compact"></div>
           <p data-i18n="profile-liked-empty" id="profile-liked-empty" class="community-empty hidden">Aucun favori pour l'instant.</p>
+          <div id="profile-liked-pager"></div>
         </div>
       </section>
 
@@ -938,7 +941,7 @@
                dehors") — le clic en dehors fonctionnait déjà via
                .modal-backdrop ci-dessus (data-hint-modal-close), seule la
                croix manquait; le bouton "Annuler" est retiré. -->
-          <button data-i18n-attr="aria-label:community-share-modal.btn" type="button" class="modal-close-x" data-hint-modal-close aria-label="Fermer">
+          <button data-i18n-attr="aria-label:common.fermer" type="button" class="modal-close-x" data-hint-modal-close aria-label="Fermer">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
           <h3 data-i18n="hint-modal.title" class="modal-title">Plus d'indices</h3>
@@ -1016,7 +1019,7 @@
       <div id="mechanics-reference-modal" class="modal mechanics-reference-modal hidden">
         <div class="modal-backdrop" data-mechanics-reference-close></div>
         <div class="modal-card mechanics-reference-card">
-          <button data-i18n-attr="aria-label:community-share-modal.btn" type="button" class="modal-close-x" data-mechanics-reference-close aria-label="Fermer">
+          <button data-i18n-attr="aria-label:common.fermer" type="button" class="modal-close-x" data-mechanics-reference-close aria-label="Fermer">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
           <h3 data-i18n="mechanics-reference-modal.title" class="modal-title">Mécaniques découvertes</h3>
@@ -1032,7 +1035,7 @@
           <!-- Round 23 (retour utilisateur): croix de fermeture au lieu du
                bouton "Annuler" — le clic en dehors (backdrop ci-dessus) le
                fait déjà. -->
-          <button data-i18n-attr="aria-label:community-share-modal.btn" type="button" class="modal-close-x" data-som-ad-modal-close aria-label="Fermer">
+          <button data-i18n-attr="aria-label:common.fermer" type="button" class="modal-close-x" data-som-ad-modal-close aria-label="Fermer">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
           <h3 data-i18n="som-ad-modal.title" class="modal-title">Plus assez d'étoiles</h3>
@@ -1063,7 +1066,7 @@
       <div id="som-genoffer-modal" class="modal hidden">
         <div class="modal-backdrop" data-som-genoffer-modal-close></div>
         <div class="modal-card">
-          <button data-i18n-attr="aria-label:community-share-modal.btn" type="button" class="modal-close-x" data-som-genoffer-modal-close aria-label="Fermer">
+          <button data-i18n-attr="aria-label:common.fermer" type="button" class="modal-close-x" data-som-genoffer-modal-close aria-label="Fermer">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
           <h3 data-i18n="som-genoffer-modal.title" class="modal-title">Générateur proposé</h3>
@@ -1125,23 +1128,6 @@
           <div class="modal-actions">
             <button data-i18n="editor-publish-modal.btn" class="options-btn" data-editor-publish-close>Annuler</button>
             <button data-i18n="btn-editor-publish-confirm" id="btn-editor-publish-confirm" class="options-btn options-btn--accent">Publier</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Modale "Partager cette grille" (Communauté, vos propres grilles):
-           affiche le code généré par community-store.js: encodeShareCode.
-           Round 26 (retour utilisateur): la fonctionnalité d'import associée
-           a été retirée (voir plus haut) — le texte ne promet donc plus un
-           import depuis la Communauté, juste un code à conserver/partager. -->
-      <div id="community-share-modal" class="modal hidden">
-        <div class="modal-backdrop" data-community-share-close></div>
-        <div class="modal-card">
-          <h3 data-i18n="community-share-modal.title" class="modal-title">Partager cette grille</h3>
-          <p data-i18n="community-share-modal.text" class="modal-text">Code de cette grille — garde-le ou envoie-le à un autre joueur.</p>
-          <textarea id="community-share-output" class="community-code-textarea" rows="4" readonly></textarea>
-          <div class="modal-actions">
-            <button data-i18n="community-share-modal.btn" class="options-btn" data-community-share-close>Fermer</button>
           </div>
         </div>
       </div>

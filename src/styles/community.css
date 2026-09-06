@@ -329,3 +329,53 @@
   fill: currentColor;
 }
 
+/* Pager générique (retour utilisateur: pagination du fil Communauté ET des
+   listes "Mes grilles publiées"/"Mes favoris" dans Mon profil, voir
+   main.js: buildPager) — Précédent/Suivant + "Page X / Y", pas de vraie
+   page/route derrière, juste un découpage de la liste déjà en mémoire.
+   Vide (aucun enfant) tant qu'une seule page suffit — voir buildPager, qui
+   renvoie `null` dans ce cas plutôt que de poser un élément à cacher. */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.pager-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: none;
+  border: 1px solid #2a3040;
+  border-radius: 999px;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pager-btn .icon-svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pager-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pager-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.pager-label {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  min-width: 84px;
+  text-align: center;
+}
+
