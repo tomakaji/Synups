@@ -156,17 +156,20 @@
   border-color: rgba(110, 231, 255, 0.4);
   background: linear-gradient(135deg, rgba(110, 231, 255, 0.1), var(--panel) 70%);
 }
-.badge-teaser--tier-1.earned .badge-teaser-deco::before {
-  content: "";
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 18px;
-  height: 18px;
-  background-color: var(--accent);
-  filter: drop-shadow(0 0 4px rgba(110, 231, 255, 0.8));
-  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><polygon points='13 2 4 14 11 14 9 22 20 10 13 10 13 2' fill='white'/></svg>");
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><polygon points='13 2 4 14 11 14 9 22 20 10 13 10 13 2' fill='white'/></svg>");
+/* Round suivant (retour utilisateur: "une identité visuelle qui n'est pas
+   une icône posée quelque part mais une imagerie qui s'intègre dans le
+   fond") — un point qui irradie depuis un coin, avec quelques rayons fins,
+   plutôt qu'une étincelle en icône isolée. `var(--accent)` reste utilisé
+   directement dans les dégradés (transparent en sortie de fondu) pour que
+   le thème PixelArt continue à s'appliquer, sans avoir besoin de
+   mask-image ici — un radial-gradient qui va d'une couleur pleine à
+   transparent crée déjà son propre halo. */
+.badge-teaser--tier-1.earned .badge-teaser-deco {
+  background-image:
+    radial-gradient(circle at 78% 26%, var(--accent) 0 2px, transparent 65%),
+    repeating-conic-gradient(from -30deg at 78% 26%, var(--accent) 0deg 1.5deg, transparent 1.5deg 16deg);
+  opacity: 0.8;
+  filter: drop-shadow(0 0 4px rgba(110, 231, 255, 0.6));
 }
 .badge-teaser--tier-1.earned .badge-teaser-name {
   color: var(--accent);
@@ -185,29 +188,16 @@
    .badge-teaser-deco (l'élément lui-même, pas un pseudo-élément: les deux
    pseudo-éléments ::before/::after restent réservés aux nœuds ci-dessous) —
    un vrai "synapse" plutôt que deux points isolés. */
+/* Round suivant (retour utilisateur: imagerie intégrée au fond) — le fil
+   de connexion et les deux nœuds ne sont plus des pastilles "posées"
+   dessus mais un fondu diagonal + deux points estompés dans le fond
+   (opacity sur l'ensemble de la couche plutôt qu'une couleur pleine). */
 .badge-teaser--tier-2.earned .badge-teaser-deco {
-  background-image: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent) 70%, transparent);
-  background-repeat: no-repeat;
-  background-size: 55% 2px;
-  background-position: center 10px;
+  background-image:
+    radial-gradient(3px 3px at 30% 62%, var(--accent), transparent),
+    radial-gradient(3px 3px at 72% 32%, var(--accent), transparent),
+    linear-gradient(50deg, transparent 42%, var(--accent) 52%, transparent 62%);
   opacity: 0.75;
-}
-.badge-teaser--tier-2.earned .badge-teaser-deco::before,
-.badge-teaser--tier-2.earned .badge-teaser-deco::after {
-  content: "";
-  position: absolute;
-  top: 8px;
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--accent);
-  box-shadow: 0 0 5px 1px rgba(110, 231, 255, 0.8);
-}
-.badge-teaser--tier-2.earned .badge-teaser-deco::before {
-  left: 10px;
-}
-.badge-teaser--tier-2.earned .badge-teaser-deco::after {
-  right: 10px;
 }
 .badge-teaser--tier-2.earned .badge-teaser-name {
   color: var(--accent);
@@ -219,36 +209,21 @@
   background: linear-gradient(135deg, rgba(197, 139, 255, 0.2), var(--panel) 78%);
   box-shadow: 0 0 14px -6px rgba(197, 139, 255, 0.6);
 }
-/* Round suivant (retour utilisateur: éléments concrets) — les deux points
-   isolés deviennent un vrai petit maillage à 3 nœuds (triangle), plus
-   lisible comme "réseau" qu'une simple paire de points. Un seul pictogramme
-   (::before) remplace les deux anciens pseudo-éléments ::before/::after. */
-.badge-teaser--tier-3.earned .badge-teaser-deco::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 22px;
-  height: 22px;
-  background-color: #c58bff;
-  filter: drop-shadow(0 0 5px rgba(197, 139, 255, 0.85));
-  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 4 L4 20 M12 4 L20 20 M4 20 L20 20' stroke='white' stroke-width='1.8' fill='none'/><circle cx='12' cy='4' r='2.6' fill='white'/><circle cx='4' cy='20' r='2.6' fill='white'/><circle cx='20' cy='20' r='2.6' fill='white'/></svg>");
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 4 L4 20 M12 4 L20 20 M4 20 L20 20' stroke='white' stroke-width='1.8' fill='none'/><circle cx='12' cy='4' r='2.6' fill='white'/><circle cx='4' cy='20' r='2.6' fill='white'/><circle cx='20' cy='20' r='2.6' fill='white'/></svg>");
-  animation: badge-network-pulse 2.4s ease-in-out infinite;
+/* Round suivant (retour utilisateur: "une imagerie qui s'intègre dans le
+   fond [...] des arcs d'onde progressivement plus opaques de gauche à
+   droite, cropés par les bords") — 3 arcs concentriques centrés sur le
+   bord droit: leur centre étant hors de la carte, seule leur moitié
+   gauche est visible, cropée naturellement par overflow:hidden plutôt que
+   par une découpe de la carte elle-même (voir plus bas: la miniature reste
+   un carré classique, jamais découpée). */
+.badge-teaser--tier-3.earned .badge-teaser-deco {
+  background-image:
+    radial-gradient(circle at right center, transparent 0 10px, rgba(197, 139, 255, 0.55) 10px 14px, transparent 14px),
+    radial-gradient(circle at right center, transparent 0 26px, rgba(197, 139, 255, 0.32) 26px 30px, transparent 30px),
+    radial-gradient(circle at right center, transparent 0 44px, rgba(197, 139, 255, 0.16) 44px 48px, transparent 48px);
 }
 .badge-teaser--tier-3.earned .badge-teaser-name {
   color: #c58bff;
-}
-
-@keyframes badge-network-pulse {
-  0%, 100% {
-    opacity: 0.55;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.4);
-  }
 }
 
 /* Tier 4 "Constellation" — ambre, mini champ d'étoiles. */
@@ -257,28 +232,17 @@
   background: linear-gradient(135deg, rgba(232, 181, 99, 0.22), var(--panel) 80%);
   box-shadow: 0 0 16px -6px rgba(232, 181, 99, 0.65);
 }
-.badge-teaser--tier-4.earned .badge-teaser-deco::before {
-  content: "";
-  position: absolute;
-  inset: 0;
+/* Round suivant (retour utilisateur: imagerie intégrée au fond, étalée sur
+   toute la surface plutôt que confinée à un coin) — champ d'étoiles élargi
+   + trace de constellation en dégradé diagonal, un seul calque au lieu de
+   deux pseudo-éléments superposés. */
+.badge-teaser--tier-4.earned .badge-teaser-deco {
   background-image:
-    radial-gradient(1.3px 1.3px at 25% 30%, rgba(232, 181, 99, 0.85), transparent),
-    radial-gradient(1.3px 1.3px at 65% 20%, rgba(232, 181, 99, 0.6), transparent),
-    radial-gradient(1px 1px at 80% 60%, rgba(232, 181, 99, 0.7), transparent),
-    radial-gradient(1px 1px at 35% 75%, rgba(232, 181, 99, 0.5), transparent);
-}
-/* Round suivant (retour utilisateur: éléments concrets) — un vrai tracé de
-   constellation (points reliés par un trait) posé au-dessus du champ
-   d'étoiles ci-dessus, plutôt que des points isolés sans lien visuel. */
-.badge-teaser--tier-4.earned .badge-teaser-deco::after {
-  content: "";
-  position: absolute;
-  inset: 6px;
-  background-color: #e8b563;
-  filter: drop-shadow(0 0 3px rgba(232, 181, 99, 0.6));
-  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3 19 L9 9 L15 15 L21 5' stroke='white' stroke-width='1.5' fill='none'/><circle cx='3' cy='19' r='1.6' fill='white'/><circle cx='9' cy='9' r='2.2' fill='white'/><circle cx='15' cy='15' r='1.6' fill='white'/><circle cx='21' cy='5' r='2.2' fill='white'/></svg>");
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3 19 L9 9 L15 15 L21 5' stroke='white' stroke-width='1.5' fill='none'/><circle cx='3' cy='19' r='1.6' fill='white'/><circle cx='9' cy='9' r='2.2' fill='white'/><circle cx='15' cy='15' r='1.6' fill='white'/><circle cx='21' cy='5' r='2.2' fill='white'/></svg>");
-  opacity: 0.8;
+    radial-gradient(1.6px 1.6px at 20% 25%, rgba(232, 181, 99, 0.8), transparent),
+    radial-gradient(1.4px 1.4px at 42% 65%, rgba(232, 181, 99, 0.5), transparent),
+    radial-gradient(1.8px 1.8px at 68% 22%, rgba(232, 181, 99, 0.7), transparent),
+    radial-gradient(1.4px 1.4px at 82% 55%, rgba(232, 181, 99, 0.6), transparent),
+    linear-gradient(120deg, transparent 40%, rgba(232, 181, 99, 0.3) 55%, transparent 70%);
 }
 .badge-teaser--tier-4.earned .badge-teaser-name {
   background: linear-gradient(90deg, #f4d9a8, #e8b563 60%, #f4d9a8);
@@ -293,34 +257,39 @@
   background: linear-gradient(135deg, rgba(57, 255, 20, 0.16), var(--panel) 78%);
   box-shadow: 0 0 14px -6px rgba(57, 255, 20, 0.6);
 }
+/* Round suivant (retour utilisateur: "des carrés (pixels) manquants sur la
+   droite, en fondu, comme un effet de désintégration, et un ou deux
+   pixels de la même couleur mais plus vifs qui déteignent par-ci
+   par-là") — grille de pixels qui s'estompe en diagonale (mask-image),
+   plus deux pixels isolés, plus vifs, qui "déteignent" ailleurs sur la
+   carte via ::before/::after. */
+.badge-teaser--tier-5.earned .badge-teaser-deco {
+  background-image:
+    repeating-linear-gradient(to right, rgba(57, 255, 20, 0.16) 0 3px, transparent 3px 6px),
+    repeating-linear-gradient(to bottom, rgba(57, 255, 20, 0.16) 0 3px, transparent 3px 6px);
+  -webkit-mask-image: linear-gradient(115deg, black 40%, transparent 88%);
+  mask-image: linear-gradient(115deg, black 40%, transparent 88%);
+  animation: badge-retro-flicker 3.6s steps(2) infinite;
+}
 .badge-teaser--tier-5.earned .badge-teaser-deco::before {
   content: "";
   position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    to bottom,
-    rgba(57, 255, 20, 0.1) 0px,
-    rgba(57, 255, 20, 0.1) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-  animation: badge-retro-flicker 3.6s steps(2) infinite;
+  width: 4px;
+  height: 4px;
+  top: 30%;
+  right: 20%;
+  background: #9dffa0;
+  box-shadow: 0 0 5px 1px rgba(157, 255, 160, 0.9);
 }
-/* Round suivant (retour utilisateur: éléments concrets) — un petit poste de
-   télévision (silhouette) en plus des scanlines ci-dessus, pour incarner
-   "Rétro" par une vraie image plutôt qu'un simple effet de texture. */
 .badge-teaser--tier-5.earned .badge-teaser-deco::after {
   content: "";
   position: absolute;
-  bottom: 6px;
-  right: 6px;
-  width: 18px;
-  height: 18px;
-  background-color: #9dffa0;
-  filter: drop-shadow(0 0 4px rgba(57, 255, 20, 0.6));
-  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='3' y='6' width='18' height='12' rx='2' fill='none' stroke='white' stroke-width='2'/><path d='M9 21 L15 21 M8 6 L5 2 M16 6 L19 2' stroke='white' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='3' y='6' width='18' height='12' rx='2' fill='none' stroke='white' stroke-width='2'/><path d='M9 21 L15 21 M8 6 L5 2 M16 6 L19 2' stroke='white' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
-  animation: badge-retro-flicker 3.6s steps(2) infinite;
+  width: 3px;
+  height: 3px;
+  bottom: 24%;
+  left: 28%;
+  background: #9dffa0;
+  box-shadow: 0 0 4px 1px rgba(157, 255, 160, 0.9);
 }
 .badge-teaser--tier-5.earned .badge-teaser-name {
   font-family: "Courier New", monospace;
@@ -339,43 +308,37 @@
 /* Tiers 6-7 "Comète"/"Supernova" — lot Défi Quotidien (voir la même
    numérotation dans .badge-frame--tier-6/7 plus bas), repris du style sobre
    du tier 1 pour la même raison (voir son commentaire là-bas). */
+/* Round suivant (retour utilisateur: "plus rouge/orange [...] la bordure
+   prendrait une autre forme, c'est trop classique là") — recoloré, et la
+   traînée/tête lumineuse d'une comète plutôt qu'une simple icône. La
+   miniature, elle, reste un carré classique aux bords arrondis (retour
+   utilisateur: "on la laisse dans un élément carré [...] c'est pas
+   gênant ici") — seule la bannière appliquée (plus bas) adopte une forme
+   en pointe. */
 .badge-teaser--tier-6.earned {
-  border-color: rgba(255, 215, 110, 0.4);
-  background: linear-gradient(135deg, rgba(255, 215, 110, 0.1), var(--panel) 70%);
+  border-color: rgba(255, 122, 69, 0.5);
+  background: linear-gradient(135deg, rgba(255, 122, 69, 0.18), var(--panel) 78%);
 }
-.badge-teaser--tier-6.earned .badge-teaser-deco::before {
-  content: "";
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 20px;
-  height: 20px;
-  background-color: #ffd76e;
-  filter: drop-shadow(0 0 4px rgba(255, 215, 110, 0.8));
-  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='17' cy='7' r='3.2' fill='white'/><path d='M15 9 C10 12 6 15 2 21' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round' opacity='0.85'/></svg>");
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='17' cy='7' r='3.2' fill='white'/><path d='M15 9 C10 12 6 15 2 21' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round' opacity='0.85'/></svg>");
+.badge-teaser--tier-6.earned .badge-teaser-deco {
+  background-image:
+    radial-gradient(4px 4px at 80% 22%, #ff7a45, transparent),
+    linear-gradient(150deg, transparent 45%, rgba(255, 150, 90, 0.35) 62%, rgba(255, 90, 40, 0.16) 80%, transparent 95%);
 }
 .badge-teaser--tier-6.earned .badge-teaser-name {
-  color: #ffd76e;
+  color: #ff9a63;
 }
 
+/* Round suivant (retour utilisateur: "c'est super, mais j'aimerais la même
+   chose sans bordure visible") — bordure retirée, l'éclat radiant (déjà
+   suffisamment lumineux) délimite la forme à lui seul. */
 .badge-teaser--tier-7.earned {
-  border-color: rgba(201, 143, 224, 0.55);
-  background: linear-gradient(135deg, rgba(201, 143, 224, 0.18), var(--panel) 75%);
-  box-shadow: 0 0 12px -6px rgba(201, 143, 224, 0.6);
+  border-color: transparent;
+  background: linear-gradient(135deg, rgba(201, 143, 224, 0.2), var(--panel) 78%);
 }
-.badge-teaser--tier-7.earned .badge-teaser-deco::before {
-  content: "";
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 20px;
-  height: 20px;
-  background-color: #c98fe0;
-  filter: drop-shadow(0 0 5px rgba(201, 143, 224, 0.9));
-  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 1 L14.2 9.8 L23 12 L14.2 14.2 L12 23 L9.8 14.2 L1 12 L9.8 9.8 Z' fill='white'/></svg>");
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 1 L14.2 9.8 L23 12 L14.2 14.2 L12 23 L9.8 14.2 L1 12 L9.8 9.8 Z' fill='white'/></svg>");
-  animation: badge-tier7-pulse 2.2s ease-in-out infinite;
+.badge-teaser--tier-7.earned .badge-teaser-deco {
+  background-image:
+    radial-gradient(circle at 78% 26%, rgba(201, 143, 224, 0.9) 0 4px, rgba(201, 143, 224, 0.35) 4px 13px, transparent 13px 70%),
+    repeating-conic-gradient(from 0deg at 78% 26%, rgba(201, 143, 224, 0.14) 0deg 3deg, transparent 3deg 20deg);
 }
 .badge-teaser--tier-7.earned .badge-teaser-name {
   color: #dcb8f0;
@@ -507,17 +470,22 @@
   border-color: rgba(110, 231, 255, 0.45);
   background: linear-gradient(135deg, rgba(110, 231, 255, 0.12), transparent 70%);
 }
-.badge-frame--tier-1 .badge-frame-deco::before {
-  content: "";
-  position: absolute;
-  top: 2px;
-  right: 5px;
-  width: 12px;
-  height: 12px;
-  background-color: var(--accent);
-  filter: drop-shadow(0 0 3px rgba(110, 231, 255, 0.85));
-  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><polygon points='13 2 4 14 11 14 9 22 20 10 13 10 13 2' fill='white'/></svg>");
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><polygon points='13 2 4 14 11 14 9 22 20 10 13 10 13 2' fill='white'/></svg>");
+/* Même principe que la preview .badge-teaser ci-dessus: un point qui
+   irradie depuis le bord droit, jamais mis à l'échelle en dur — le rayon
+   du halo est repris plus grand dans .badge-frame-preview ci-dessous pour
+   rester proportionné à l'avatar/pseudo agrandis (l'ancienne icône, elle,
+   restait scotchée à 12px quelle que soit la taille du cadre). */
+.badge-frame--tier-1 .badge-frame-deco {
+  background-image:
+    radial-gradient(circle at right center, var(--accent) 0 2px, transparent 60%),
+    repeating-conic-gradient(from -25deg at right center, var(--accent) 0deg 1.2deg, transparent 1.2deg 16deg);
+  opacity: 0.8;
+  filter: drop-shadow(0 0 3px rgba(110, 231, 255, 0.7));
+}
+.badge-frame-preview .badge-frame--tier-1 .badge-frame-deco {
+  background-image:
+    radial-gradient(circle at right center, var(--accent) 0 4px, transparent 70%),
+    repeating-conic-gradient(from -25deg at right center, var(--accent) 0deg 1.2deg, transparent 1.2deg 16deg);
 }
 .badge-frame--tier-1 .badge-frame-pseudo {
   color: var(--accent);
@@ -538,58 +506,50 @@
    preview .badge-teaser ci-dessus) — même fil de connexion entre les deux
    nœuds, posé directement sur .badge-frame-deco. */
 .badge-frame--tier-2 .badge-frame-deco {
-  background-image: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent) 70%, transparent);
-  background-repeat: no-repeat;
-  background-size: 30px 2px;
-  background-position: left 28px top 50%;
+  background-image:
+    radial-gradient(3px 3px at 78% 50%, var(--accent), transparent),
+    radial-gradient(3px 3px at 93% 50%, var(--accent), transparent),
+    linear-gradient(90deg, transparent 74%, var(--accent) 80%, var(--accent) 91%, transparent 96%);
   opacity: 0.7;
 }
-.badge-frame--tier-2 .badge-frame-deco::before,
-.badge-frame--tier-2 .badge-frame-deco::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  width: 4px;
-  height: 4px;
-  margin-top: -2px;
-  border-radius: 999px;
-  background: var(--accent);
-  box-shadow: 0 0 5px 1px rgba(110, 231, 255, 0.85);
-}
-.badge-frame--tier-2 .badge-frame-deco::before {
-  left: 30px;
-}
-.badge-frame--tier-2 .badge-frame-deco::after {
-  right: 10px;
+.badge-frame-preview .badge-frame--tier-2 .badge-frame-deco {
+  background-image:
+    radial-gradient(4px 4px at 55% 50%, var(--accent), transparent),
+    radial-gradient(4px 4px at 90% 50%, var(--accent), transparent),
+    linear-gradient(90deg, transparent 50%, var(--accent) 58%, var(--accent) 88%, transparent 94%);
 }
 .badge-frame--tier-2 .badge-frame-pseudo {
   color: var(--accent);
 }
 
-/* Tier 3 "Réseau" — violet, angle tranché (clip-path) côté texte + un duo de
-   nœuds qui pulsent. */
+/* Tier 3 "Réseau" — violet, arcs d'onde centrés sur le bord droit (voir la
+   preview .badge-teaser ci-dessus pour le principe). Retour utilisateur:
+   "sur le petit format, le fait que la bannière soit cropée ne me plaît
+   pas" — la découpe diagonale (clip-path) ne s'applique donc plus qu'en
+   grand format (.badge-frame-preview ci-dessous), là où elle a la place de
+   se lire comme un vrai parti pris de forme plutôt qu'un accident visuel;
+   en petit format la pilule reste intacte, seuls les arcs (déjà cropés par
+   leur propre géométrie, voir plus haut) apportent la texture. */
 .badge-frame--tier-3 {
-  clip-path: polygon(0 0, 100% 0, 100% 70%, calc(100% - 14px) 100%, 0 100%);
   border-color: rgba(197, 139, 255, 0.55);
   background: linear-gradient(135deg, rgba(197, 139, 255, 0.2), transparent 78%);
   box-shadow: 0 0 16px -6px rgba(197, 139, 255, 0.6);
-  padding-right: 18px;
 }
-/* Round suivant (retour utilisateur: éléments concrets, cohérent avec la
-   preview .badge-teaser ci-dessus) — même maillage à 3 nœuds que la
-   preview, un seul pictogramme remplace les deux anciens points isolés. */
-.badge-frame--tier-3 .badge-frame-deco::before {
-  content: "";
-  position: absolute;
-  top: 3px;
-  right: 6px;
-  width: 14px;
-  height: 14px;
-  background-color: #c58bff;
-  filter: drop-shadow(0 0 3px rgba(197, 139, 255, 0.9));
-  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 4 L4 20 M12 4 L20 20 M4 20 L20 20' stroke='white' stroke-width='1.8' fill='none'/><circle cx='12' cy='4' r='2.6' fill='white'/><circle cx='4' cy='20' r='2.6' fill='white'/><circle cx='20' cy='20' r='2.6' fill='white'/></svg>");
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 4 L4 20 M12 4 L20 20 M4 20 L20 20' stroke='white' stroke-width='1.8' fill='none'/><circle cx='12' cy='4' r='2.6' fill='white'/><circle cx='4' cy='20' r='2.6' fill='white'/><circle cx='20' cy='20' r='2.6' fill='white'/></svg>");
-  animation: badge-network-pulse 2.4s ease-in-out infinite;
+.badge-frame-preview .badge-frame--tier-3 {
+  clip-path: polygon(0 0, 100% 0, 100% 70%, calc(100% - 14px) 100%, 0 100%);
+  padding-right: 22px;
+}
+.badge-frame--tier-3 .badge-frame-deco {
+  background-image:
+    radial-gradient(circle at right center, transparent 0 4px, rgba(197, 139, 255, 0.5) 4px 6px, transparent 6px),
+    radial-gradient(circle at right center, transparent 0 13px, rgba(197, 139, 255, 0.3) 13px 15px, transparent 15px),
+    radial-gradient(circle at right center, transparent 0 22px, rgba(197, 139, 255, 0.15) 22px 24px, transparent 24px);
+}
+.badge-frame-preview .badge-frame--tier-3 .badge-frame-deco {
+  background-image:
+    radial-gradient(circle at right center, transparent 0 12px, rgba(197, 139, 255, 0.55) 12px 16px, transparent 16px),
+    radial-gradient(circle at right center, transparent 0 32px, rgba(197, 139, 255, 0.32) 32px 36px, transparent 36px),
+    radial-gradient(circle at right center, transparent 0 54px, rgba(197, 139, 255, 0.16) 54px 58px, transparent 58px);
 }
 .badge-frame--tier-3 .badge-frame-pseudo {
   color: #dcc2ff;
@@ -607,44 +567,26 @@
 .badge-frame--tier-4 .badge-frame-avatar {
   border-radius: 4px;
 }
-.badge-frame--tier-4 .badge-frame-deco::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image:
-    radial-gradient(1.3px 1.3px at 45% 25%, rgba(232, 181, 99, 0.85), transparent),
-    radial-gradient(1.3px 1.3px at 70% 60%, rgba(232, 181, 99, 0.6), transparent),
-    radial-gradient(1px 1px at 85% 30%, rgba(232, 181, 99, 0.7), transparent);
-}
-/* Round suivant (retour utilisateur: éléments concrets, cohérent avec la
-   preview .badge-teaser ci-dessus) — le même tracé de constellation, posé
-   ici directement sur .badge-frame-deco (::before/::after déjà pris par le
-   champ d'étoiles et le point qui orbite) — petit et discret, côté avatar
-   pour ne jamais empiéter sur le pseudo/les compteurs côté texte. */
+/* Round suivant (retour utilisateur: imagerie étalée sur toute la
+   bannière plutôt que confinée à un coin) — champ d'étoiles + trace,
+   agrandis en .badge-frame-preview pour rester proportionnés à l'avatar
+   40px (l'ancien tracé restait fixé à 11px quelle que soit la taille). */
 .badge-frame--tier-4 .badge-frame-deco {
-  background-color: #e8b563;
-  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3 19 L9 9 L15 15 L21 5' stroke='white' stroke-width='1.5' fill='none'/><circle cx='3' cy='19' r='1.6' fill='white'/><circle cx='9' cy='9' r='2.2' fill='white'/><circle cx='15' cy='15' r='1.6' fill='white'/><circle cx='21' cy='5' r='2.2' fill='white'/></svg>");
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3 19 L9 9 L15 15 L21 5' stroke='white' stroke-width='1.5' fill='none'/><circle cx='3' cy='19' r='1.6' fill='white'/><circle cx='9' cy='9' r='2.2' fill='white'/><circle cx='15' cy='15' r='1.6' fill='white'/><circle cx='21' cy='5' r='2.2' fill='white'/></svg>");
-  -webkit-mask-size: 11px 11px;
-  mask-size: 11px 11px;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: left 26px top 3px;
-  mask-position: left 26px top 3px;
-  opacity: 0.85;
+  background-image:
+    radial-gradient(1.3px 1.3px at 20% 35%, rgba(232, 181, 99, 0.8), transparent),
+    radial-gradient(1.1px 1.1px at 40% 70%, rgba(232, 181, 99, 0.5), transparent),
+    radial-gradient(1.5px 1.5px at 62% 28%, rgba(232, 181, 99, 0.7), transparent),
+    radial-gradient(1.2px 1.2px at 84% 58%, rgba(232, 181, 99, 0.6), transparent),
+    linear-gradient(120deg, transparent 42%, rgba(232, 181, 99, 0.32) 55%, transparent 68%);
 }
-.badge-frame--tier-4 .badge-frame-deco::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  width: 5px;
-  height: 5px;
-  margin-top: -2.5px;
-  border-radius: 999px;
-  background: #e8b563;
-  box-shadow: 0 0 8px 3px rgba(232, 181, 99, 0.9);
-  animation: badge-orbit 5s linear infinite;
+.badge-frame-preview .badge-frame--tier-4 .badge-frame-deco {
+  background-image:
+    radial-gradient(1.8px 1.8px at 20% 30%, rgba(232, 181, 99, 0.8), transparent),
+    radial-gradient(1.4px 1.4px at 42% 70%, rgba(232, 181, 99, 0.5), transparent),
+    radial-gradient(2px 2px at 65% 25%, rgba(232, 181, 99, 0.7), transparent),
+    radial-gradient(1.6px 1.6px at 85% 60%, rgba(232, 181, 99, 0.6), transparent),
+    radial-gradient(1.4px 1.4px at 30% 55%, rgba(232, 181, 99, 0.55), transparent),
+    linear-gradient(120deg, transparent 42%, rgba(232, 181, 99, 0.28) 55%, transparent 68%);
 }
 .badge-frame--tier-4 .badge-frame-pseudo {
   background: linear-gradient(90deg, #f4d9a8, #e8b563 60%, #f4d9a8);
@@ -652,24 +594,6 @@
   background-clip: text;
   color: transparent;
   text-shadow: 0 0 10px rgba(232, 181, 99, 0.35);
-}
-
-@keyframes badge-orbit {
-  0% {
-    transform: translate(6px, 0);
-  }
-  25% {
-    transform: translate(0, -5px);
-  }
-  50% {
-    transform: translate(-6px, 0);
-  }
-  75% {
-    transform: translate(0, 5px);
-  }
-  100% {
-    transform: translate(6px, 0);
-  }
 }
 
 /* Tier 5 "Rétro" — vert CRT, entièrement rectangulaire (aucun arrondi,
@@ -684,34 +608,46 @@
 .badge-frame--tier-5 .badge-frame-avatar {
   border-radius: 3px;
 }
+.badge-frame--tier-5 .badge-frame-deco {
+  background-image:
+    repeating-linear-gradient(to right, rgba(57, 255, 20, 0.16) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(to bottom, rgba(57, 255, 20, 0.16) 0 2px, transparent 2px 4px);
+  -webkit-mask-image: linear-gradient(to right, black 45%, transparent 92%);
+  mask-image: linear-gradient(to right, black 45%, transparent 92%);
+  animation: badge-retro-flicker 3.6s steps(2) infinite;
+}
 .badge-frame--tier-5 .badge-frame-deco::before {
   content: "";
   position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    to bottom,
-    rgba(57, 255, 20, 0.1) 0px,
-    rgba(57, 255, 20, 0.1) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-  animation: badge-retro-flicker 3.6s steps(2) infinite;
+  width: 3px;
+  height: 3px;
+  top: 40%;
+  right: 22%;
+  background: #9dffa0;
+  box-shadow: 0 0 4px 1px rgba(157, 255, 160, 0.9);
 }
-/* Round suivant (retour utilisateur: éléments concrets, cohérent avec la
-   preview .badge-teaser ci-dessus) — même poste de télévision en plus des
-   scanlines ci-dessus. */
 .badge-frame--tier-5 .badge-frame-deco::after {
   content: "";
   position: absolute;
-  top: 2px;
-  right: 4px;
-  width: 12px;
-  height: 12px;
-  background-color: #9dffa0;
-  filter: drop-shadow(0 0 3px rgba(57, 255, 20, 0.6));
-  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='3' y='6' width='18' height='12' rx='2' fill='none' stroke='white' stroke-width='2'/><path d='M9 21 L15 21 M8 6 L5 2 M16 6 L19 2' stroke='white' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='3' y='6' width='18' height='12' rx='2' fill='none' stroke='white' stroke-width='2'/><path d='M9 21 L15 21 M8 6 L5 2 M16 6 L19 2' stroke='white' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
-  animation: badge-retro-flicker 3.6s steps(2) infinite;
+  width: 2px;
+  height: 2px;
+  bottom: 22%;
+  right: 10%;
+  background: #9dffa0;
+  box-shadow: 0 0 3px 1px rgba(157, 255, 160, 0.9);
+}
+.badge-frame-preview .badge-frame--tier-5 .badge-frame-deco {
+  background-image:
+    repeating-linear-gradient(to right, rgba(57, 255, 20, 0.16) 0 3px, transparent 3px 6px),
+    repeating-linear-gradient(to bottom, rgba(57, 255, 20, 0.16) 0 3px, transparent 3px 6px);
+}
+.badge-frame-preview .badge-frame--tier-5 .badge-frame-deco::before {
+  width: 4px;
+  height: 4px;
+}
+.badge-frame-preview .badge-frame--tier-5 .badge-frame-deco::after {
+  width: 3px;
+  height: 3px;
 }
 .badge-frame--tier-5 .badge-frame-pseudo {
   font-family: "Courier New", monospace;
@@ -727,58 +663,66 @@
    jamais confondues. Repris du style sobre du tier 1 (pilule intacte + un
    repère décoratif), simplement reteinté couleur "étoile" pour rester
    cohérent avec .daily-challenge-fab/avatars comet/nova.
-   Tier 6 "Comète": doré. */
+   Tier 6 "Comète": rouge-orange, forme en pointe vers l'avant (au lieu
+   d'une pilule classique) — la tête lumineuse de la comète se loge dans la
+   pointe. Le CSS `border` ne suit pas les arêtes introduites par un
+   clip-path (seulement les bords d'origine du rectangle) : le contour est
+   donc simulé par un double clip-path — .badge-frame lui-même porte un
+   fond plein qui sert de "liseré", et .badge-frame-deco, légèrement
+   rétréci (inset) et redécoupé au même polygone, vient poser par-dessus le
+   fond sombre + la traînée, ne laissant dépasser qu'un fin bord coloré
+   tout du long, pointe comprise. */
 .badge-frame--tier-6 {
-  border-color: rgba(255, 215, 110, 0.5);
-  background: linear-gradient(135deg, rgba(255, 215, 110, 0.14), transparent 72%);
+  border-color: transparent;
+  background: rgba(255, 122, 69, 0.55);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
+  padding-right: 18px;
 }
-.badge-frame--tier-6 .badge-frame-deco::before {
-  content: "";
-  position: absolute;
-  top: 1px;
-  right: 4px;
-  width: 13px;
-  height: 13px;
-  background-color: #ffd76e;
-  filter: drop-shadow(0 0 3px rgba(255, 215, 110, 0.85));
-  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='17' cy='7' r='3.2' fill='white'/><path d='M15 9 C10 12 6 15 2 21' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round' opacity='0.85'/></svg>");
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='17' cy='7' r='3.2' fill='white'/><path d='M15 9 C10 12 6 15 2 21' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round' opacity='0.85'/></svg>");
+.badge-frame--tier-6 .badge-frame-deco {
+  inset: 1px;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
+  background-color: #1a1310;
+  background-image:
+    radial-gradient(4px 4px at calc(100% - 8px) 50%, #ff7a45, transparent),
+    linear-gradient(200deg, transparent 45%, rgba(255, 150, 90, 0.35) 68%, rgba(255, 90, 40, 0.2) 88%, transparent 100%);
+}
+/* Le même angle (12px de profondeur) s'aplatirait presque à rien sur une
+   bannière bien plus large/haute (avatar 40px) — profondeur reprise à
+   28px pour garder le même angle visuel qu'en petit format. */
+.badge-frame-preview .badge-frame--tier-6 {
+  clip-path: polygon(0 0, calc(100% - 28px) 0, 100% 50%, calc(100% - 28px) 100%, 0 100%);
+  padding-right: 32px;
+}
+.badge-frame-preview .badge-frame--tier-6 .badge-frame-deco {
+  inset: 1.5px;
+  clip-path: polygon(0 0, calc(100% - 28px) 0, 100% 50%, calc(100% - 28px) 100%, 0 100%);
+  background-image:
+    radial-gradient(6px 6px at calc(100% - 15px) 50%, #ff7a45, transparent),
+    linear-gradient(200deg, transparent 40%, rgba(255, 150, 90, 0.35) 64%, rgba(255, 90, 40, 0.2) 85%, transparent 100%);
 }
 .badge-frame--tier-6 .badge-frame-pseudo {
-  color: #ffd76e;
+  color: #ff9a63;
 }
 
-/* Tier 7 "Supernova": violet-rose, léger halo pulsant pour rester au-dessus
-   du tier 6 en prestige visuel malgré une décoration tout aussi simple. */
+/* Tier 7 "Supernova" — éclat radiant, sans bordure visible (retour
+   utilisateur: "la même chose sans bordure visible"). */
 .badge-frame--tier-7 {
-  border-color: rgba(201, 143, 224, 0.55);
+  border-color: transparent;
   background: linear-gradient(135deg, rgba(201, 143, 224, 0.18), transparent 75%);
   box-shadow: 0 0 12px -6px rgba(201, 143, 224, 0.6);
 }
-.badge-frame--tier-7 .badge-frame-deco::before {
-  content: "";
-  position: absolute;
-  top: 1px;
-  right: 4px;
-  width: 13px;
-  height: 13px;
-  background-color: #c98fe0;
-  filter: drop-shadow(0 0 3px rgba(201, 143, 224, 0.9));
-  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 1 L14.2 9.8 L23 12 L14.2 14.2 L12 23 L9.8 14.2 L1 12 L9.8 9.8 Z' fill='white'/></svg>");
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 1 L14.2 9.8 L23 12 L14.2 14.2 L12 23 L9.8 14.2 L1 12 L9.8 9.8 Z' fill='white'/></svg>");
-  animation: badge-tier7-pulse 2.2s ease-in-out infinite;
+.badge-frame--tier-7 .badge-frame-deco {
+  background-image:
+    radial-gradient(circle at 85% 50%, rgba(201, 143, 224, 0.9) 0 2px, rgba(201, 143, 224, 0.35) 2px 7px, transparent 7px 65%),
+    repeating-conic-gradient(from 0deg at 85% 50%, rgba(201, 143, 224, 0.14) 0deg 3deg, transparent 3deg 20deg);
+}
+.badge-frame-preview .badge-frame--tier-7 .badge-frame-deco {
+  background-image:
+    radial-gradient(circle at 82% 50%, rgba(201, 143, 224, 0.9) 0 4px, rgba(201, 143, 224, 0.35) 4px 14px, transparent 14px 75%),
+    repeating-conic-gradient(from 0deg at 82% 50%, rgba(201, 143, 224, 0.14) 0deg 3deg, transparent 3deg 20deg);
 }
 .badge-frame--tier-7 .badge-frame-pseudo {
   color: #dcb8f0;
-}
-
-@keyframes badge-tier7-pulse {
-  0%, 100% {
-    opacity: 0.7;
-  }
-  50% {
-    opacity: 1;
-  }
 }
 
 /* Prévisualisation d'identité en haut de "Mon profil" (avatar+pseudo encadrés
