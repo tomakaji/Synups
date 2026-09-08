@@ -159,3 +159,35 @@
   display: none;
 }
 
+/* Round suivant (retour utilisateur: "on va permettre de jouer le défi
+   quotidien à nouveau [...] en échange d'une rewardAd") — un défi déjà fait
+   aujourd'hui ne cache PLUS le bouton (voir main.js:
+   renderDailyChallengeButton), il reste affiché mais dans cet état atténué
+   ("déjà fait, mais on peut encore taper pour proposer un rejeu"), bien
+   distinct visuellement de l'état "prêt à jouer" ci-dessus. */
+.daily-challenge-fab--done {
+  border-color: #2a3040;
+  color: var(--text-dim);
+  box-shadow: none;
+}
+
+.daily-challenge-fab--done .daily-challenge-fab-bolt,
+.daily-challenge-fab--done .daily-challenge-fab-label {
+  color: var(--text-dim);
+}
+
+.daily-challenge-fab--done:hover {
+  border-color: rgba(255, 215, 110, 0.4);
+  box-shadow: 0 0 10px -6px rgba(255, 215, 110, 0.4);
+}
+
+/* Bandeau "regarder une pub" (retour utilisateur, voir index.html:
+   #daily-replay-banner) — simple empilement texte + bouton, avec un gap
+   plus resserré que .modal-card (14px) puisque les deux éléments forment un
+   seul bloc logique. */
+.daily-replay-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+

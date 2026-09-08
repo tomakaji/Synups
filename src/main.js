@@ -25,6 +25,8 @@ import {
   getTodayLevel as getDailyChallengeLevel,
   ensureTodayChallenge,
   completeTodayChallenge,
+  getReplayCooldownRemainingMs,
+  regenerateTodayChallengeViaAd,
 } from "./game/dailyChallenge.js";
 // Mode Meditate (retour utilisateur) — remplace l'ancien déblocage par
 // seuil d'Énergie des bannières Comète/Supernova (voir dailyChallenge.js,
@@ -3297,35 +3299,40 @@ function alignDailyChallengeFab() {
  * après chaque victoire (voir advanceAfterWin), et à chaque retour au menu
  * titre (voir showView: name === "title"). Revalide toujours contre la date
  * courante via isDailyChallengeReady/isDailyChallengeCompleted (voir
- * dailyChallenge.js), jamais un état mis en cache ici. */
+ * dailyChallenge.js), jamais un état mis en cache ici.
+ *
+ * Round suivant (retour utilisateur: "on va permettre de jouer le défi
+ * quotidien à nouveau [...] en échange d'une rewardAd"): un défi déjà
+ * terminé aujourd'hui ne cache PLUS le bouton (contrairement à avant ce
+ * round, voir commentaire ci-dessous toujours valable pour "pas encore
+ * prêt") — il reste affiché dans un état "fait" distinct (voir
+ * floating-controls.css: .daily-challenge-fab--done), seul moyen d'accéder
+ * à la popup "rejouer contre une pub" (voir openDailyReplayPopup). */
 function renderDailyChallengeButton() {
   if (!btnDailyChallenge) return;
   // Retour utilisateur: "le bouton flottant ne doit apparaître que dès lors
   // que la grille quotidienne est générée, sinon il n'apparaît pas, afin de
-  // ne pas faire attendre le joueur dans un loading pour rien" — BUG
-  // CORRIGÉ: avant ce correctif, le bouton était déjà visible (juste sans
-  // pastille "!") pendant qu'`ensureTodayChallenge()` tournait encore en
-  // tâche de fond (voir plus bas), donc un joueur assez rapide pour taper
-  // dessus avant la fin tombait sur un état "generating" (pulse + clic qui
-  // attend la génération) — un temps de chargement qu'il n'avait aucun
-  // moyen d'éviter puisque rien ne distinguait "pas encore prêt" de "prêt".
-  // Le bouton reste maintenant simplement absent tant que ce n'est pas prêt
-  // (display:none, classe .hidden), exactement comme pour "déjà complété"
-  // ci-dessous — les deux raisons de ne PAS pouvoir jouer aujourd'hui sont
-  // donc traitées de la même façon: bouton caché, jamais un état "en cours".
-  // display:none (et non juste opacity/visibility) est volontaire: c'est ce
+  // ne pas faire attendre le joueur dans un loading pour rien" — le bouton
+  // reste absent tant que ce n'est pas prêt (display:none, classe .hidden):
+  // display:none (et non juste opacity/visibility) est volontaire, c'est ce
   // qui permet à l'animation d'entrée (.daily-challenge-fab: animation
   // d'entrée déclenchée par le passage display:none -> visible) de se
   // rejouer aussi bien le jour suivant qu'à l'instant précis où la
   // génération du jour se termine.
   const completed = isDailyChallengeCompleted();
   const ready = isDailyChallengeReady();
-  btnDailyChallenge.classList.toggle("hidden", completed || !ready);
-  if (completed || !ready) return; // rien d'autre à mettre à jour sur un bouton caché
-  // Le bouton n'est visible qu'une fois prêt (voir ci-dessus) — la pastille
-  // "!" n'a donc plus qu'un seul état possible ici (toujours affichée),
-  // contrairement à avant où elle devait aussi distinguer "en cours de
-  // génération" (bouton visible mais rien à annoncer) de "prêt".
+  btnDailyChallenge.classList.toggle("hidden", !ready);
+  btnDailyChallenge.classList.toggle("daily-challenge-fab--done", ready && completed);
+  if (!ready) return; // rien d'autre à mettre à jour sur un bouton caché
+  if (completed) {
+    // Pastille "!" réservée à "grille du jour pas encore jouée" — un défi
+    // déjà fait n'a rien de nouveau à annoncer tant que le cooldown de
+    // rejeu n'est pas écoulé (voir openDailyReplayPopup/renderDailyReplayPopup
+    // pour ce détail, affiché seulement DANS la popup, pas ici sur le FAB).
+    dailyChallengeFabBadgeEl.classList.add("hidden");
+    btnDailyChallenge.title = "Défi Quotidien — déjà fait aujourd'hui, appuyer pour rejouer contre une pub";
+    return;
+  }
   dailyChallengeFabBadgeEl.classList.remove("hidden");
   dailyChallengeFabBadgeEl.textContent = "!";
   btnDailyChallenge.title = "Défi Quotidien — grille du jour, +1 Énergie";
@@ -3333,9 +3340,7 @@ function renderDailyChallengeButton() {
 
 btnDailyChallenge.onclick = () => {
   if (isDailyChallengeCompleted()) {
-    // Rien à rejouer aujourd'hui (retour utilisateur: 1 grille/jour) — le
-    // titre du bouton (voir ci-dessus) explique déjà pourquoi, pas besoin
-    // d'une modale pour un simple clic curieux sur un bouton "fait".
+    openDailyReplayPopup();
     return;
   }
   const level = getDailyChallengeLevel();
@@ -3347,6 +3352,128 @@ btnDailyChallenge.onclick = () => {
   viewStack = ["title", "play"];
   loadDailyChallengeLevel(level);
   showView("play", { mode: "daily" });
+};
+
+// ---------- Défi Quotidien: rejouer contre une pub (retour utilisateur) ----------
+// "on va permettre de jouer le défi quotidien à nouveau (nouvelle
+// génération de grille) en échange d'une rewardAd [...] il faudra attendre
+// minimum une heure avant de pouvoir refaire cette action [...] on affichera
+// donc un compteur d'une heure [...] sur la petite pop up du menu. Pour la
+// première proposition de rejouer contre une pub (donc avant le compteur),
+// on affichera juste un bandeau pour prévenir qu'il faut regarder une pub,
+// et si on clique sur le bouton, on a une modale qui prévient qu'il faut
+// regarder la pub." — deux niveaux distincts, voir index.html:
+// #daily-replay-popup (bandeau OU compte à rebours) puis
+// #daily-replay-confirm-modal (confirmation + vraie rewarded ad, même
+// mécanisme que som-ad-modal/som-genoffer-modal).
+const dailyReplayPopupEl = document.getElementById("daily-replay-popup");
+const dailyReplayBannerEl = document.getElementById("daily-replay-banner");
+const dailyReplayCooldownEl = document.getElementById("daily-replay-cooldown");
+const btnDailyReplayOffer = document.getElementById("btn-daily-replay-offer");
+const dailyReplayConfirmModalEl = document.getElementById("daily-replay-confirm-modal");
+const btnDailyReplayWatch = document.getElementById("btn-daily-replay-watch");
+const dailyReplayAdStatusEl = document.getElementById("daily-replay-ad-status");
+let dailyReplayCooldownTimer = null;
+
+/** "1 h 12 min" / "45 min" — toujours arrondi À LA MINUTE SUPÉRIEURE (jamais
+ * 0 min affiché tant qu'il reste ne serait-ce qu'une seconde de cooldown),
+ * pour ne jamais laisser croire que c'est déjà rejouable. */
+function formatDailyReplayCooldown(ms) {
+  const totalMinutes = Math.max(1, Math.ceil(ms / 60000));
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return h > 0 ? `${h} h ${String(m).padStart(2, "0")} min` : `${m} min`;
+}
+
+/** (Ré)affiche le contenu de la popup selon le cooldown ACTUEL (voir
+ * dailyChallenge.js: getReplayCooldownRemainingMs) — jamais un état figé au
+ * moment de l'ouverture, voir openDailyReplayPopup qui rafraîchit ceci
+ * périodiquement tant que la popup reste affichée. */
+function renderDailyReplayPopup() {
+  const remaining = getReplayCooldownRemainingMs();
+  const canReplay = remaining === 0;
+  dailyReplayBannerEl.classList.toggle("hidden", !canReplay);
+  dailyReplayCooldownEl.classList.toggle("hidden", canReplay);
+  if (!canReplay) {
+    dailyReplayCooldownEl.textContent = `Reviens dans ${formatDailyReplayCooldown(remaining)} pour rejouer contre une pub.`;
+  }
+}
+
+function openDailyReplayPopup() {
+  renderDailyReplayPopup();
+  dailyReplayPopupEl.classList.remove("hidden");
+  clearInterval(dailyReplayCooldownTimer);
+  // 30s: largement suffisant pour un compte à rebours affiché à la minute
+  // près (voir formatDailyReplayCooldown) — jamais besoin de la seconde,
+  // et évite de solliciter le DOM inutilement pendant que la popup reste
+  // ouverte.
+  dailyReplayCooldownTimer = setInterval(renderDailyReplayPopup, 30_000);
+}
+
+function closeDailyReplayPopup() {
+  dailyReplayPopupEl.classList.add("hidden");
+  clearInterval(dailyReplayCooldownTimer);
+  dailyReplayCooldownTimer = null;
+}
+
+document.querySelectorAll("[data-daily-replay-popup-close]").forEach((el) => (el.onclick = closeDailyReplayPopup));
+
+function closeDailyReplayConfirmModal() {
+  dailyReplayConfirmModalEl.classList.add("hidden");
+}
+
+document.querySelectorAll("[data-daily-replay-confirm-close]").forEach((el) => (el.onclick = closeDailyReplayConfirmModal));
+
+/** Clic sur le bouton du bandeau (retour utilisateur: "si on clique sur le
+ * bouton, on a une modale qui prévient qu'il faut regarder la pub") — ferme
+ * la popup et ouvre la VRAIE modale de confirmation, réinitialisée à son
+ * état de départ (au cas où une tentative précédente avait laissé un
+ * message d'erreur affiché). */
+btnDailyReplayOffer.onclick = () => {
+  closeDailyReplayPopup();
+  if (dailyReplayAdStatusEl) {
+    dailyReplayAdStatusEl.textContent = "";
+    dailyReplayAdStatusEl.classList.add("hidden");
+  }
+  btnDailyReplayWatch.disabled = false;
+  btnDailyReplayWatch.textContent = t("btn-daily-replay-watch");
+  dailyReplayConfirmModalEl.classList.remove("hidden");
+};
+
+/** Même principe que btnHintWatchAd.onclick/genOfferAcceptBtn.onclick
+ * ci-dessus: showRewardedAd() ne résout `earned: true` QUE sur confirmation
+ * du SDK — la grille n'est régénérée (dailyChallenge.js:
+ * regenerateTodayChallengeViaAd, qui enregistre aussi l'horodatage du
+ * cooldown) que dans ce cas précis, jamais de façon optimiste. */
+btnDailyReplayWatch.onclick = async () => {
+  btnDailyReplayWatch.disabled = true;
+  btnDailyReplayWatch.textContent = "Chargement…";
+  if (dailyReplayAdStatusEl) {
+    dailyReplayAdStatusEl.textContent = "";
+    dailyReplayAdStatusEl.classList.add("hidden");
+  }
+  const { earned, reason } = await showRewardedAd();
+  if (earned) {
+    trackEvent("rewarded_ad_completed", { placement: "daily_challenge_replay" });
+    closeDailyReplayConfirmModal();
+    const level = await regenerateTodayChallengeViaAd();
+    renderDailyChallengeButton();
+    if (level) {
+      viewStack = ["title", "play"];
+      loadDailyChallengeLevel(level);
+      showView("play", { mode: "daily" });
+    }
+    return;
+  }
+  btnDailyReplayWatch.disabled = false;
+  btnDailyReplayWatch.textContent = t("btn-daily-replay-watch");
+  if (dailyReplayAdStatusEl) {
+    dailyReplayAdStatusEl.textContent =
+      reason === "unavailable"
+        ? "Pas de pub disponible pour l'instant — réessaie dans un instant."
+        : "Pub fermée avant la fin — rien n'a changé.";
+    dailyReplayAdStatusEl.classList.remove("hidden");
+  }
 };
 
 // Amorce la génération dès l'ouverture de l'app (retour utilisateur: "on

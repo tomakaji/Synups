@@ -23,6 +23,10 @@ const KEYS = {
   // jamais mélangées. Voir dailyChallenge.js pour le reste de la logique.
   stars: "lightup-stars",
   dailyChallenge: "lightup-daily-challenge",
+  // Rejouer le Défi Quotidien contre une pub (retour utilisateur) — un seul
+  // horodatage (dernier visionnage réussi) suffit à faire tourner le
+  // cooldown d'1h, voir dailyChallenge.js: getReplayCooldownRemainingMs.
+  dailyReplayAdAt: "lightup-daily-replay-ad-at",
   // Mode Meditate (retour utilisateur: remplace l'ancien déblocage par
   // seuil d'Énergie des bannières Comète/Supernova) — voir game/meditate.js
   // pour toute la logique, ce module ne fait que porter le stockage, même
@@ -122,6 +126,18 @@ export function loadDailyChallenge() {
 
 export function saveDailyChallenge(data) {
   writeJson(KEYS.dailyChallenge, data);
+}
+
+/** Horodatage (ms epoch) du dernier "rejouer contre une pub" réussi, ou
+ * `null` si jamais utilisé — voir dailyChallenge.js:
+ * regenerateTodayChallengeViaAd/getReplayCooldownRemainingMs. */
+export function loadDailyReplayAdAt() {
+  const value = readJson(KEYS.dailyReplayAdAt, null);
+  return typeof value === "number" ? value : null;
+}
+
+export function saveDailyReplayAdAt(timestamp) {
+  writeJson(KEYS.dailyReplayAdAt, timestamp);
 }
 
 // ---------- Meditate (grille de révélation, bannières Comète/Supernova) ----------
@@ -289,6 +305,13 @@ export function eraseAllProgress() {
   }
   try {
     localStorage.removeItem(KEYS.dailyChallenge);
+  } catch {
+    // voir writeJson
+  }
+  // Cooldown "rejouer contre une pub" (voir dailyChallenge.js) — même sort
+  // que le reste de l'état Défi Quotidien ci-dessus.
+  try {
+    localStorage.removeItem(KEYS.dailyReplayAdAt);
   } catch {
     // voir writeJson
   }

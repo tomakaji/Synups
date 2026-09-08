@@ -15,7 +15,14 @@
 // heure locale de l'appareil), jamais CE QUI est généré.
 import { requestLevel } from "./infiniteClient.js";
 import { DAILY_CHALLENGE_SIZE_BOOST, DAILY_CHALLENGE_MIN_BRANCH_COUNT } from "./generator.js";
-import { loadDailyChallenge, saveDailyChallenge, loadStars, addStars } from "./storage.js";
+import {
+  loadDailyChallenge,
+  saveDailyChallenge,
+  loadStars,
+  addStars,
+  loadDailyReplayAdAt,
+  saveDailyReplayAdAt,
+} from "./storage.js";
 import { trackEvent } from "./analytics.js";
 
 // Budget généreux (voir generator.js: DAILY_CHALLENGE_SIZE_BOOST) — cette
@@ -72,17 +79,19 @@ export function getTodayLevel() {
 
 let generationPromise = null;
 
-/** S'assure qu'une grille valide pour AUJOURD'HUI est disponible, en la
- * (re)générant si besoin (jour différent de la dernière grille stockée, ou
- * jamais générée) — voir todayKey(). Une seule génération en vol à la fois
- * (mise en cache de la Promise, même pattern que firebaseReady/initAds):
- * appelable sans risque depuis plusieurs points (ouverture du menu titre ET
- * clic sur le bouton flottant) sans lancer deux générations en parallèle.
- * Ne throw jamais: en cas d'échec du générateur (cas limite, voir
+/** Lance une génération de grille (mêmes paramètres partout, voir
+ * ENABLED_FEATURE_KEYS/MAX_ATTEMPTS/MAX_TIME_MS ci-dessus), la stocke comme
+ * grille du jour (`completed: false`) puis résout avec le niveau — factorisé
+ * ici car ensureTodayChallenge (génération normale) ET
+ * regenerateTodayChallengeViaAd (rejeu contre pub, round suivant) partagent
+ * EXACTEMENT la même mécanique de génération/stockage, seule la condition de
+ * déclenchement diffère. Une seule génération en vol à la fois (mise en
+ * cache de la Promise, même pattern que firebaseReady/initAds): appelable
+ * sans risque depuis plusieurs points sans jamais en lancer deux en
+ * parallèle. Ne throw jamais: en cas d'échec du générateur (cas limite, voir
  * generateLevel), résout avec `null` — l'appelant (main.js) affiche alors un
  * état d'erreur discret plutôt qu'un plateau cassé. */
-export function ensureTodayChallenge() {
-  if (isTodayReady()) return Promise.resolve(getTodayLevel());
+function generateAndStoreTodayChallenge(trackEventName) {
   if (generationPromise) return generationPromise;
 
   generationPromise = requestLevel({
@@ -97,7 +106,7 @@ export function ensureTodayChallenge() {
     .then((result) => {
       if (!result) return null;
       saveDailyChallenge({ date: todayKey(), level: result.level, completed: false });
-      trackEvent("daily_challenge_generated");
+      trackEvent(trackEventName);
       return result.level;
     })
     .catch(() => null)
@@ -106,6 +115,17 @@ export function ensureTodayChallenge() {
     });
 
   return generationPromise;
+}
+
+/** S'assure qu'une grille valide pour AUJOURD'HUI est disponible, en la
+ * (re)générant si besoin (jour différent de la dernière grille stockée, ou
+ * jamais générée) — voir todayKey(). Ne régénère JAMAIS une grille déjà
+ * valide pour aujourd'hui, même si elle est déjà `completed` (voir
+ * regenerateTodayChallengeViaAd ci-dessous pour ce cas précis, qui exige lui
+ * une vraie rewarded ad). */
+export function ensureTodayChallenge() {
+  if (isTodayReady()) return Promise.resolve(getTodayLevel());
+  return generateAndStoreTodayChallenge("daily_challenge_generated");
 }
 
 /** Marque le défi du jour comme terminé et crédite 1 étoile — protégée
@@ -122,6 +142,38 @@ export function completeTodayChallenge() {
   const total = addStars(1);
   trackEvent("daily_challenge_completed", { stars_total: total });
   return total;
+}
+
+// ---------- Rejouer contre une pub (retour utilisateur) ----------
+// "on va permettre de jouer le défi quotidien à nouveau (nouvelle génération
+// de grille) en échange d'une rewardAd [...] il faudra attendre minimum une
+// heure avant de pouvoir refaire cette action" — un SEUL horodatage
+// (KEYS.dailyReplayAdAt, voir storage.js) suffit à représenter tout l'état
+// du cooldown: "dernière fois que ce visionnage a eu lieu", jamais un
+// compteur séparé à garder synchronisé.
+const REPLAY_COOLDOWN_MS = 60 * 60 * 1000; // 1h, en dur (retour utilisateur: "minimum une heure")
+
+/** Millisecondes restantes avant de pouvoir proposer à nouveau le rejeu
+ * contre une pub — 0 si jamais regardée ou si le cooldown est déjà écoulé. */
+export function getReplayCooldownRemainingMs() {
+  const last = loadDailyReplayAdAt();
+  if (!last) return 0;
+  const remaining = last + REPLAY_COOLDOWN_MS - Date.now();
+  return remaining > 0 ? remaining : 0;
+}
+
+/** Régénère une NOUVELLE grille pour aujourd'hui suite à un visionnage de
+ * pub réussi (retour utilisateur: "jouer le défi quotidien à nouveau,
+ * nouvelle génération de grille") — remet `completed` à false (même stockage
+ * que la génération normale, voir generateAndStoreTodayChallenge) et
+ * enregistre l'horodatage de CE visionnage pour armer le cooldown d'1h
+ * ci-dessus. Appelée UNIQUEMENT après confirmation du SDK (voir main.js:
+ * appelée seulement quand showRewardedAd() résout `earned: true`, jamais de
+ * façon optimiste) — contrairement à ensureTodayChallenge, régénère
+ * TOUJOURS, même si une grille du jour valide (et déjà terminée) existe. */
+export function regenerateTodayChallengeViaAd() {
+  saveDailyReplayAdAt(Date.now());
+  return generateAndStoreTodayChallenge("daily_challenge_replay_generated");
 }
 
 // ---------- Ancien déblocage par seuil d'Énergie (tiers 6-7) ----------

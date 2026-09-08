@@ -1138,6 +1138,50 @@
         </div>
       </div>
 
+      <!-- Défi Quotidien: popup "rejouer contre une pub" (retour
+           utilisateur: "on va permettre de jouer le défi quotidien à
+           nouveau [...] en échange d'une rewardAd [...] on affichera donc un
+           compteur d'une heure [...] sur la petite pop up du menu") —
+           ouverte en tapant le bouton flottant une fois le défi du jour déjà
+           terminé (voir main.js: openDailyReplayPopup). Deux contenus
+           mutuellement exclusifs (voir main.js: renderDailyReplayPopup):
+           le bandeau ci-dessous si le cooldown d'1h est écoulé, sinon un
+           simple compte à rebours. -->
+      <div id="daily-replay-popup" class="modal hidden">
+        <div class="modal-backdrop" data-daily-replay-popup-close></div>
+        <div class="modal-card">
+          <button data-i18n-attr="aria-label:common.fermer" type="button" class="modal-close-x" data-daily-replay-popup-close aria-label="Fermer">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+          <h3 data-i18n="daily-replay-popup.title" class="modal-title">Défi quotidien terminé</h3>
+          <div id="daily-replay-banner" class="daily-replay-banner hidden">
+            <p data-i18n="daily-replay-banner.text" class="modal-text">Regarde une pub pour refaire une grille aujourd'hui.</p>
+            <button data-i18n="daily-replay-banner.button" id="btn-daily-replay-offer" type="button" class="options-btn options-btn--accent">Regarder une pub</button>
+          </div>
+          <p id="daily-replay-cooldown" class="modal-text hidden"></p>
+        </div>
+      </div>
+
+      <!-- Modale de confirmation (retour utilisateur: "si on clique sur le
+           bouton, on a une modale qui prévient qu'il faut regarder la pub
+           pour pouvoir refaire un niveau de grille quotidienne") — 2e étape
+           après le bandeau ci-dessus, même mécanisme de rewarded ad que
+           som-ad-modal/som-genoffer-modal plus haut. -->
+      <div id="daily-replay-confirm-modal" class="modal hidden">
+        <div class="modal-backdrop" data-daily-replay-confirm-close></div>
+        <div class="modal-card">
+          <button data-i18n-attr="aria-label:common.fermer" type="button" class="modal-close-x" data-daily-replay-confirm-close aria-label="Fermer">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+          <h3 data-i18n="daily-replay-confirm-modal.title" class="modal-title">Regarder une pub</h3>
+          <p data-i18n="daily-replay-confirm-modal.text" class="modal-text">Il faut regarder une pub en entier pour refaire un niveau de grille quotidienne.</p>
+          <p id="daily-replay-ad-status" class="som-ad-status hidden"></p>
+          <div class="modal-actions">
+            <button data-i18n="btn-daily-replay-watch" id="btn-daily-replay-watch" type="button" class="options-btn options-btn--accent">Regarder la pub</button>
+          </div>
+        </div>
+      </div>
+
       <div id="som-recycle-confirm-modal" class="modal hidden">
         <div class="modal-backdrop" data-som-recycle-modal-close></div>
         <div class="modal-card">
