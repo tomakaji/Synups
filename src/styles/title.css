@@ -257,3 +257,39 @@
   transition: width 0.4s ease-out;
 }
 
+/* Retour utilisateur: "on va lui donner, dans le menu, une hauteur un peu
+   plus petite, pour le distinguer (comme Options), donc on retire la
+   ligne de description [...] et on lui donne un design un peu différent
+   qui correspond à la couleur des Étoiles" — sans .menu-card-sub (voir
+   index.html), la carte redevient aussi compacte qu'Options (même
+   structure à une seule ligne). La teinte Étoile (var(--accent), déjà la
+   couleur de base de .menu-card-icon) se distingue ici par un fond/bordure
+   dédiés plutôt qu'un simple aplat neutre, pour que la carte se remarque
+   comme "spéciale" au même titre que les bannières de badges. */
+.menu-card--remember {
+  border-color: rgba(110, 231, 255, 0.35);
+  background: linear-gradient(135deg, rgba(110, 231, 255, 0.1), var(--panel) 75%);
+}
+
+.menu-card--remember:hover {
+  border-color: var(--accent);
+}
+
+/* Nouveau mode "Meditate" (retour utilisateur) — même gabarit compact que
+   Remember ci-dessus, teinté Énergie (éclair jaune, #ffd76e — même couleur
+   que .daily-challenge-fab/.badge-frame--tier-6) plutôt qu'Étoile ; l'icône
+   hérite de var(--accent) par défaut via .menu-card-icon, donc recolorée
+   explicitement ici. */
+.menu-card--meditate {
+  border-color: rgba(255, 215, 110, 0.35);
+  background: linear-gradient(135deg, rgba(255, 215, 110, 0.1), var(--panel) 75%);
+}
+
+.menu-card--meditate:hover {
+  border-color: #ffd76e;
+}
+
+.menu-card--meditate .menu-card-icon {
+  color: #ffd76e;
+}
+

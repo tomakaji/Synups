@@ -386,7 +386,6 @@ const INFINITE_POINTS_BY_TIER = { 1: 1, 2: 3, 3: 5 };
 
 let infinitePoints = loadPoints();
 const infinitePointsEl = document.getElementById("infinite-points");
-const menuPointsBadgeEl = document.getElementById("menu-points-badge");
 // Sommation (mode "Remember") partage désormais ce MÊME solde — retour
 // utilisateur: "les points dans le mode Sommation sont les mêmes que dans le
 // mode infinity". Inclus ici pour que renderPointsEverywhere() le maintienne
@@ -450,14 +449,6 @@ function renderPointsEverywhere() {
   // préfixe le nombre par l'icône SVG (voir currencyIcons.js).
   const label = starLabel(infinitePoints);
   infinitePointsEl.innerHTML = label;
-  // Une fois PixelArt débloqué (5e et dernière récompense de Remember), le
-  // mode est terminé (retour utilisateur round 12: "il sera marqué comme
-  // terminé et ne sera plus jouable") — la carte du menu titre l'affiche à
-  // la place du solde de points, qui n'a plus de sens ici (voir
-  // enterRememberDirect ci-dessous: le clic ouvre quand même Remember, qui
-  // affiche alors son propre état "terminé" — voir sommation.js: onShow()).
-  const showTermine = isPixelArtUnlocked();
-  menuPointsBadgeEl.innerHTML = showTermine ? "Terminé" : label;
   if (sommationPointsEl) sommationPointsEl.innerHTML = label;
 
   const delta = infinitePoints - lastRenderedPoints;
@@ -466,9 +457,6 @@ function renderPointsEverywhere() {
     const cls = delta > 0 ? "points-gain" : "points-loss";
     triggerPointsAnim(infinitePointsEl, cls);
     triggerPointsAnim(sommationPointsEl, cls);
-    // Rien à animer si "Terminé" est affiché à la place du solde (voir plus
-    // haut) — la classe n'aurait aucun effet visible sur ce texte.
-    if (!showTermine) triggerPointsAnim(menuPointsBadgeEl, cls);
   }
 }
 
@@ -3151,6 +3139,10 @@ document.getElementById("menu-story").onclick = enterStoryDirect;
 document.getElementById("menu-infinite").onclick = enterInfiniteDirect;
 document.getElementById("menu-community").onclick = () => pushView("community");
 document.getElementById("menu-remember").onclick = enterRememberDirect;
+// TODO(Meditate): bouton posé pour le nouveau mode (retour utilisateur),
+// pas encore câblé — la vue/le moteur de jeu (grille de révélation,
+// découpage des bannières en formes, difficulté progressive) arrivent dans
+// un round séparé, après validation du mockup visuel.
 document.getElementById("menu-options").onclick = () => pushView("options");
 
 renderActiveScreen();

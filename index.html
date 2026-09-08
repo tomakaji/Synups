@@ -141,15 +141,35 @@
             <span data-i18n="menu-community.sub" class="menu-card-sub">Crée, partage et joue les grilles des autres joueurs</span>
           </button>
 
+          <!-- Retour utilisateur: "une hauteur un peu plus petite, pour le
+               distinguer (comme Options), donc on retire la ligne de
+               description [...] et on lui donne un design [...] qui
+               correspond à la couleur des Étoiles et [...] l'icône étoile"
+               — plus de .menu-card-sub (voir Options ci-dessous, qui n'en a
+               jamais eu: sans cette 2e ligne le flex column column devient
+               naturellement plus bas), icône reprise telle quelle de
+               currencyIcons.js (STAR_PATH) pour rester identique à l'icône
+               Étoile utilisée partout ailleurs, teinte dédiée en dessous
+               (voir title.css: .menu-card--remember). -->
           <button id="menu-remember" class="menu-card menu-card--remember">
             <span class="menu-card-top">
-              <svg viewBox="0 0 24 24" class="menu-card-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="7.5" cy="15.5" r="5.5"></circle>
-                <path d="M11.6 11.6 21 2.3M21 2.3v5M21 2.3h-5M15 7l3 3"></path>
+              <svg viewBox="0 0 24 24" class="menu-card-icon" fill="currentColor" stroke="none">
+                <path d="M12 2.5l2.9 6.2 6.6.6-5 4.5 1.5 6.7L12 17l-6 3.5 1.5-6.7-5-4.5 6.6-.6z"></path>
               </svg>
               <span data-i18n="menu-remember.label" class="menu-card-label">Remember</span>
             </span>
-            <span id="menu-points-badge" class="menu-card-sub menu-card-points">0</span>
+          </button>
+
+          <!-- Nouveau mode "Meditate" (retour utilisateur): même gabarit
+               compact que Remember ci-dessus, teinté Énergie (éclair jaune)
+               plutôt qu'Étoile — voir title.css: .menu-card--meditate. -->
+          <button id="menu-meditate" class="menu-card menu-card--meditate">
+            <span class="menu-card-top">
+              <svg viewBox="0 0 24 24" class="menu-card-icon" fill="currentColor" stroke="none">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              </svg>
+              <span data-i18n="menu-meditate.label" class="menu-card-label">Meditate</span>
+            </span>
           </button>
 
           <button id="menu-options" class="menu-card menu-card--options">
