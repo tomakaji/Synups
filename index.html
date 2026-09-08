@@ -535,6 +535,45 @@
         <div id="som-spawn-info" class="som-spawn-info"></div>
       </section>
 
+      <!-- ================= MEDITATE (mini-jeu de révélation) =================
+           Retour utilisateur: remplace l'ancien déblocage par seuil d'Énergie
+           des bannières Comète/Supernova — voir game/meditate.js pour toute
+           la logique, main.js: renderMeditateView pour le rendu de cet
+           écran. Même structure "état de jeu / état terminé" que Remember
+           ci-dessus (voir #som-done-state), réutilisant tel quel son
+           habillage .som-done-* pour l'écran "tout débloqué". -->
+      <section id="view-meditate" class="screen hidden">
+        <header class="screen-header">
+          <button data-i18n-attr="title:common.retour;aria-label:common.retour" class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <h2 data-i18n="view-meditate.title" class="screen-title">Meditate</h2>
+          <span id="meditate-energy" class="infinite-points"></span>
+        </header>
+
+        <div id="meditate-play-state" class="meditate-play-state">
+          <p data-i18n="meditate-hint" class="meditate-hint">Retrouvez les formes cachées dans la grille pour révéler la bannière — chaque case fouillée coûte 1 Énergie.</p>
+
+          <div class="meditate-preview-wrap">
+            <div id="meditate-preview-grid" class="meditate-preview-grid"></div>
+          </div>
+          <span id="meditate-preview-name" class="meditate-preview-name"></span>
+
+          <div class="meditate-search-wrap">
+            <div id="meditate-search-grid" class="meditate-search-grid"></div>
+          </div>
+        </div>
+
+        <!-- Tout le contenu de Meditate débloqué — même habillage que
+             #som-done-state (voir sommation.css: .som-done-*), réutilisé tel
+             quel plutôt que dupliqué. -->
+        <div id="meditate-done-state" class="som-done-state hidden">
+          <div class="som-done-icon" aria-hidden="true">✓</div>
+          <p data-i18n="meditate-done.title" class="som-done-title">Meditate est terminé !</p>
+          <p data-i18n="meditate-done.message" class="som-done-message">Toutes les bannières ont été débloquées. Il n'y a plus rien à fouiller ici.</p>
+        </div>
+      </section>
+
       <!-- ================= COMMUNAUTÉ (fil, tout local) ================= -->
       <section id="view-community" class="screen hidden">
         <header class="screen-header">

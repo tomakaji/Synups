@@ -15,7 +15,7 @@
 // heure locale de l'appareil), jamais CE QUI est généré.
 import { requestLevel } from "./infiniteClient.js";
 import { DAILY_CHALLENGE_SIZE_BOOST, DAILY_CHALLENGE_MIN_BRANCH_COUNT } from "./generator.js";
-import { loadDailyChallenge, saveDailyChallenge, loadStars, saveStars, addStars } from "./storage.js";
+import { loadDailyChallenge, saveDailyChallenge, loadStars, addStars } from "./storage.js";
 import { trackEvent } from "./analytics.js";
 
 // Budget généreux (voir generator.js: DAILY_CHALLENGE_SIZE_BOOST) — cette
@@ -124,36 +124,11 @@ export function completeTodayChallenge() {
   return total;
 }
 
-// ---------- Badges dédiés aux étoiles ----------
-// Retour utilisateur: "[les étoiles] permettront de débloquer des avatars ET
-// des badges" — lot séparé de BADGE_DEFS (sommation.js, lié à la progression
-// Remember) : mêmes tiers visuels (badge-frame--tier-N, voir badges.css)
-// mais des numéros DÉDIÉS (6-7) pour ne jamais entrer en collision avec les
-// tiers 1-5 déjà utilisés par Remember (voir main.js: activeBadge est un
-// simple numéro de tier, peu importe quel système l'a produit).
-export const STAR_BADGE_DEFS = [
-  { name: "Comète", tier: 6, cost: 5 },
-  { name: "Supernova", tier: 7, cost: 20 },
-];
-
-/** Même forme que getSommationBadges() (sommation.js) — `{name, earned,
- * tier}` — pour que main.js puisse fusionner les deux listes dans le même
- * sélecteur de badge sans traitement spécial. */
-export function getStarBadges() {
-  const stars = loadStars();
-  return STAR_BADGE_DEFS.map((def) => ({ name: def.name, earned: stars >= def.cost, tier: def.tier }));
-}
-
-/** Débogage: force le déverrouillage des bannières Étoiles (Comète,
- * Supernova) sans avoir à enchaîner les Défis Quotidiens — même bouton que
- * debugUnlockPixelArt (sommation.js: tiers 1-5), retour utilisateur: "ajoute
- * les deux [bannières Étoiles] sur le bouton admin". Fait avancer le VRAI
- * solde d'étoiles (jamais en arrière si déjà plus haut, même garde que
- * spendStars/addStars) jusqu'au coût du palier le plus cher — réutilise tel
- * quel le chemin normal (getStarBadges lit le même solde), donc rien à
- * dupliquer/désynchroniser ailleurs. Effet de bord acceptable pour un
- * bouton de test: ça crédite aussi de vraies étoiles dépensables. */
-export function debugUnlockStarBadges() {
-  const maxCost = Math.max(...STAR_BADGE_DEFS.map((def) => def.cost));
-  if (loadStars() < maxCost) saveStars(maxCost);
-}
+// ---------- Ancien déblocage par seuil d'Énergie (tiers 6-7) ----------
+// RETIRÉ (retour utilisateur: "on va retirer les regles actuelles d'unlock
+// de ces bannieres pour les modifier") — Comète/Supernova se débloquent
+// désormais via le mini-jeu de révélation "Meditate" (voir game/meditate.js:
+// MEDITATE_BADGE_DEFS/getMeditateBadges/debugUnlockMeditateBadges, mêmes
+// numéros de tier 6-7 réutilisés tels quels côté badges.css). L'ancien
+// STAR_BADGE_DEFS/getStarBadges/debugUnlockStarBadges basé sur un simple
+// seuil de solde d'Énergie (loadStars() >= cost) n'existe plus.

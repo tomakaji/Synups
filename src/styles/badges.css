@@ -655,14 +655,14 @@
   text-shadow: 0 0 8px rgba(57, 255, 20, 0.6);
 }
 
-/* Tiers 6-7 "Comète"/"Supernova" — lot DÉDIÉ au Défi Quotidien (retour
-   utilisateur: "[les étoiles] permettront de débloquer [...] des badges"),
-   voir dailyChallenge.js: STAR_BADGE_DEFS. Numérotation volontairement
-   DISJOINTE des tiers 1-5 ci-dessus (progression Remember) — même mécanisme
-   visuel (badge-frame--tier-N) mais deux progressions indépendantes,
-   jamais confondues. Repris du style sobre du tier 1 (pilule intacte + un
-   repère décoratif), simplement reteinté couleur "étoile" pour rester
-   cohérent avec .daily-challenge-fab/avatars comet/nova.
+/* Tiers 6-7 "Comète"/"Supernova" — lot dédié au mode Meditate (voir
+   game/meditate.js: MEDITATE_BADGE_DEFS — remplace l'ancien déblocage par
+   seuil d'Énergie du Défi Quotidien). Numérotation volontairement DISJOINTE
+   des tiers 1-5 ci-dessus (progression Remember) — même mécanisme visuel
+   (badge-frame--tier-N) mais deux progressions indépendantes, jamais
+   confondues. Repris du style sobre du tier 1 (pilule intacte + un repère
+   décoratif), simplement reteinté couleur "étoile" pour rester cohérent
+   avec .daily-challenge-fab/avatars comet/nova.
    Tier 6 "Comète": rouge-orange, forme en pointe vers l'avant (au lieu
    d'une pilule classique) — la tête lumineuse de la comète se loge dans la
    pointe. Le CSS `border` ne suit pas les arêtes introduites par un

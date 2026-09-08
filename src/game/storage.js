@@ -23,6 +23,11 @@ const KEYS = {
   // jamais mélangées. Voir dailyChallenge.js pour le reste de la logique.
   stars: "lightup-stars",
   dailyChallenge: "lightup-daily-challenge",
+  // Mode Meditate (retour utilisateur: remplace l'ancien déblocage par
+  // seuil d'Énergie des bannières Comète/Supernova) — voir game/meditate.js
+  // pour toute la logique, ce module ne fait que porter le stockage, même
+  // convention que `dailyChallenge` ci-dessus.
+  meditate: "lightup-meditate",
 };
 
 function readJson(key, fallback) {
@@ -117,6 +122,35 @@ export function loadDailyChallenge() {
 
 export function saveDailyChallenge(data) {
   writeJson(KEYS.dailyChallenge, data);
+}
+
+// ---------- Meditate (grille de révélation, bannières Comète/Supernova) ----------
+// Voir game/meditate.js pour la logique (génération/révélation/progression)
+// — ce module se contente de lire/écrire l'état tel quel, même partage des
+// responsabilités que dailyChallenge.js/loadDailyChallenge ci-dessus. Forme
+// stockée: { bannerIndex, grid: {tier, size, cells:[{shapeId, revealed}]}
+// | null, unlockedTiers: number[] }.
+
+export function loadMeditateState() {
+  return readJson(KEYS.meditate, null);
+}
+
+export function saveMeditateState(state) {
+  writeJson(KEYS.meditate, state);
+}
+
+/** Repart de zéro (retour utilisateur, choix "Reset complet" plutôt que
+ * migrer l'ancien seuil d'Énergie retiré de dailyChallenge.js): efface
+ * bannerIndex/grille en cours/bannières déjà débloquées par ce système.
+ * Jamais fusionnée dans eraseAllProgress() (voir son commentaire) —
+ * appelée explicitement à côté, même principe que resetSommationProgress()
+ * (voir main.js: bouton "Réinitialiser le jeu"). */
+export function resetMeditateProgress() {
+  try {
+    localStorage.removeItem(KEYS.meditate);
+  } catch {
+    // voir writeJson
+  }
 }
 
 // ---------- Progression Histoire ----------

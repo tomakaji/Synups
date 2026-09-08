@@ -1,0 +1,139 @@
+/* ---------- Meditate (mini-jeu de révélation, bannières Comète/Supernova) ----------
+   Retour utilisateur: remplace l'ancien déblocage par seuil d'Énergie — voir
+   game/meditate.js pour la logique, main.js: renderMeditateView pour le
+   rendu, index.html: #view-meditate pour la structure. */
+
+.meditate-play-state {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 4px 20px 20px;
+}
+
+.meditate-hint {
+  margin: 0;
+  max-width: 420px;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.meditate-preview-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+/* Damier division×division reconstruisant la preview de la bannière (voir
+   main.js: renderMeditatePreview) — cadre carré aux bords arrondis (retour
+   utilisateur: "on la laisse dans un élément carré aux bords arrondis, c'est
+   pas gênant ici"), jamais cropé/déformé. */
+.meditate-preview-grid {
+  display: grid;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #1c2130;
+  box-shadow: 0 0 22px -8px rgba(0, 0, 0, 0.6);
+}
+
+.meditate-preview-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+/* Fenêtre de tuilage partagée (preview ET fragments révélés de la grille de
+   recherche, voir main.js: makeMeditateWindow) — chaque fenêtre découpe une
+   portion d'un même grand calque .meditate-art-backdrop positionné en
+   absolu à l'intérieur, jamais une image recomposée séparément par case. */
+.meditate-window {
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.meditate-art-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* Case de preview: assombrie/désaturée tant que la FORME qu'elle porte
+   n'est pas entièrement retrouvée (retour utilisateur: "elle se 'enable'
+   sur la preview [...] lorsque le joueur a découvert entièrement une
+   forme") — jamais case par case. */
+.meditate-preview-cell--locked {
+  filter: grayscale(0.85) brightness(0.5);
+  opacity: 0.6;
+}
+
+.meditate-preview-cell--found {
+  filter: none;
+  opacity: 1;
+  transition: filter 0.35s ease-out, opacity 0.35s ease-out;
+}
+
+/* Contour UNIQUEMENT entre deux cases de formes DIFFÉRENTES (retour
+   utilisateur: "il faut que les formes définies soient constatables, donc
+   détourées") — jamais à l'intérieur d'une même forme, posé sur la case
+   elle-même (jamais sur sa voisine) pour ne jamais doubler le trait. */
+.meditate-preview-cell--edge-right {
+  border-right: 2px solid rgba(255, 255, 255, 0.55);
+}
+
+.meditate-preview-cell--edge-bottom {
+  border-bottom: 2px solid rgba(255, 255, 255, 0.55);
+}
+
+.meditate-search-wrap {
+  display: flex;
+  justify-content: center;
+  /* Compense le décalage de -1px induit par les marges négatives ci-dessous
+     (retour utilisateur: "toutes les cases doivent se toucher") sur la
+     toute première ligne/colonne, pour ne jamais la laisser rognée par ce
+     conteneur. */
+  padding: 1px 0 0 1px;
+}
+
+.meditate-search-grid {
+  display: grid;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+/* Retour utilisateur: "je préfère que toutes les cases se touchent" — même
+   technique que sommation.js: .som-grid (marges négatives qui superposent
+   la bordure d'une case sur sa voisine), plutôt qu'un `gap`. */
+.meditate-search-cell {
+  box-sizing: border-box;
+  margin: -1px 0 0 -1px;
+  border: 1px solid #1c2130;
+  padding: 0;
+  background: #0e1016;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.meditate-search-cell:not(:disabled):hover {
+  border-color: var(--accent);
+  background: #171b28;
+}
+
+.meditate-search-cell:disabled {
+  cursor: default;
+}
+
+/* Case révélée mais vide (retour utilisateur: "soit il n'y a rien [...]")
+   — volontairement minimale, aucun fragment, pas de retour visuel autre
+   qu'un fond légèrement distinct des cases pas encore fouillées. */
+.meditate-search-cell--empty {
+  background: #06070a;
+}
+
+.meditate-search-cell--fragment {
+  cursor: default;
+}

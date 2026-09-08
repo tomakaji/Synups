@@ -25,9 +25,20 @@ import {
   getTodayLevel as getDailyChallengeLevel,
   ensureTodayChallenge,
   completeTodayChallenge,
-  getStarBadges,
-  debugUnlockStarBadges,
 } from "./game/dailyChallenge.js";
+// Mode Meditate (retour utilisateur) — remplace l'ancien déblocage par
+// seuil d'Énergie des bannières Comète/Supernova (voir dailyChallenge.js,
+// getStarBadges/debugUnlockStarBadges retirés) par un mini-jeu de
+// révélation, voir game/meditate.js pour toute la logique.
+import {
+  getCurrentDef as getMeditateCurrentDef,
+  isAllUnlocked as isMeditateAllUnlocked,
+  ensureCurrentGrid as ensureMeditateGrid,
+  getShapeRevealState as getMeditateShapeRevealState,
+  revealCell as revealMeditateCell,
+  getMeditateBadges,
+  debugUnlockMeditateBadges,
+} from "./game/meditate.js";
 import {
   playPlace,
   playRemove,
@@ -93,6 +104,7 @@ import {
   saveSeenMechanics,
   loadStars,
   spendStars,
+  resetMeditateProgress,
 } from "./game/storage.js";
 import {
   listLevels,
@@ -1050,6 +1062,11 @@ document.querySelectorAll("[data-reset-modal-close]").forEach((el) => {
 document.getElementById("btn-reset-confirm").onclick = () => {
   eraseAllProgress();
   resetSommationProgress();
+  // Round suivant (retour utilisateur, "Reset complet" plutôt que migrer
+  // l'ancien seuil d'Énergie): la progression Meditate (bannière en cours,
+  // grille en cours, Comète/Supernova déjà débloquées par ce système) est
+  // elle aussi un "bonus débloqué" au même titre que Remember ci-dessus.
+  resetMeditateProgress();
   // Round 22: `ownedAvatars` (avatars achetés avec des points, voir
   // community-store.js: unlock.type === "purchase") est lui aussi un "bonus
   // débloqué" au même titre qu'avatar/activeBadge ci-dessous — les points
@@ -2576,13 +2593,14 @@ function refreshProfileBadgePreview() {
 function refreshProfileBadges() {
   if (!profileSommationBadgesEl) return;
   profileSommationBadgesEl.innerHTML = "";
-  // Deux lots de badges indépendants affichés dans la MÊME grille (retour
-  // utilisateur: les étoiles "permettront de débloquer [...] des badges") —
-  // voir dailyChallenge.js: STAR_BADGE_DEFS, tiers 6-7 DISJOINTS des tiers
-  // 1-5 de getSommationBadges() (voir badges.css) donc aucun risque de
+  // Deux lots de badges indépendants affichés dans la MÊME grille — voir
+  // game/meditate.js: MEDITATE_BADGE_DEFS, tiers 6-7 DISJOINTS des tiers 1-5
+  // de getSommationBadges() (voir badges.css) donc aucun risque de
   // collision dans activeBadge (juste un numéro de tier, peu importe la
-  // source — voir buildBadgeFrame).
-  for (const badge of [...getSommationBadges(), ...getStarBadges()]) {
+  // source — voir buildBadgeFrame). Round suivant (retour utilisateur):
+  // getStarBadges() (ancien seuil d'Énergie) remplacé par
+  // getMeditateBadges() (mini-jeu de révélation).
+  for (const badge of [...getSommationBadges(), ...getMeditateBadges()]) {
     const tile = document.createElement(badge.earned ? "button" : "div");
     if (badge.earned) tile.type = "button";
     tile.className =
@@ -2753,14 +2771,16 @@ profilePseudoInput.addEventListener("input", refreshProfileBadgePreview);
 // d'Options (voir plus haut btnPixelartDebugUnlock), donc même effet de
 // bord accepté (débloque aussi le thème PixelArt en même temps). Round
 // suivant (retour utilisateur: "ajoute les deux [bannières Étoiles] sur le
-// bouton admin"): débloque désormais aussi Comète/Supernova (tiers 6-7,
-// voir dailyChallenge.js: debugUnlockStarBadges) — ce bouton couvre ainsi
-// les 7 bannières d'un seul clic, plutôt que de forcer à enchaîner des
-// Défis Quotidiens juste pour tester l'affichage.
+// bouton admin"): débloque aussi Comète/Supernova (tiers 6-7). Round Meditate
+// (retour utilisateur): l'ancien debugUnlockStarBadges (seuil d'Énergie,
+// dailyChallenge.js) est remplacé par debugUnlockMeditateBadges (voir
+// game/meditate.js) — ce bouton couvre ainsi toujours les 7 bannières d'un
+// seul clic, plutôt que de forcer à jouer Meditate juste pour tester
+// l'affichage.
 if (btnProfileBadgesDebugUnlock) {
   btnProfileBadgesDebugUnlock.onclick = () => {
     debugUnlockPixelArt();
-    debugUnlockStarBadges();
+    debugUnlockMeditateBadges();
     renderCommunityProfile();
   };
 }
@@ -2911,6 +2931,7 @@ const SCREEN_IDS = {
   "community-profile": "view-community-profile",
   editor: "view-editor",
   sommation: "view-sommation",
+  meditate: "view-meditate",
 };
 
 let viewStack = ["title"];
@@ -2940,7 +2961,10 @@ function showView(name, opts) {
   // enterRememberDirect, loadCommunityLevel...): showView() est LE point de
   // passage commun à toute navigation (voir pushView/goBack), donc aucun
   // chemin ne peut l'oublier.
-  if (name === "play" || name === "sommation") showBannerAd();
+  // Meditate ajouté au même lot que Remember (retour utilisateur: "pour
+  // que cette feature pousse à la consommation") — même écran "gameplay
+  // actif" que play/sommation du point de vue du bandeau publicitaire.
+  if (name === "play" || name === "sommation" || name === "meditate") showBannerAd();
   else hideBannerAd();
   // Si `opts.mode` n'est pas fourni (ex: goBack() qui rappelle showView
   // sans opts), on garde le mode DÉJÀ actif plutôt que de retomber sur
@@ -2953,6 +2977,7 @@ function showView(name, opts) {
   if (name === "community-profile") renderCommunityProfile();
   if (name === "editor") editorApi.onShow();
   if (name === "sommation") sommationApi.onShow();
+  if (name === "meditate") renderMeditateView();
   if (name === "options") {
     renderPixelArtOption();
     renderPlayGamesSection();
@@ -3048,6 +3073,203 @@ function enterRememberDirect() {
   showView("sommation");
 }
 
+// ---------- Meditate (mini-jeu de révélation, bannières Comète/Supernova) ----------
+// Retour utilisateur: remplace l'ancien déblocage par seuil d'Énergie — voir
+// game/meditate.js pour toute la logique (génération de grille, révélation,
+// progression). Ce bloc ne fait que du rendu DOM + relais des clics vers ce
+// module, même répartition des responsabilités que sommationApi/
+// sommation.js pour Remember.
+const meditateEnergyEl = document.getElementById("meditate-energy");
+const meditatePlayStateEl = document.getElementById("meditate-play-state");
+const meditateDoneStateEl = document.getElementById("meditate-done-state");
+const meditatePreviewGridEl = document.getElementById("meditate-preview-grid");
+const meditatePreviewNameEl = document.getElementById("meditate-preview-name");
+const meditateSearchGridEl = document.getElementById("meditate-search-grid");
+
+/** Recette de fond CSS de chaque bannière — reprise TELLE QUELLE de
+ * badges.css (.badge-teaser--tier-N.earned + .badge-teaser-deco, retour
+ * utilisateur: "la preview doit être de base l'image qu'on utilise pour la
+ * préview des bannières dans Profil"), combinée en une seule liste
+ * `background-image` empilable sur un calque de taille arbitraire (voir
+ * buildMeditateBackdrop ci-dessous). */
+const MEDITATE_ART_RECIPES = {
+  6: {
+    background: "#1f130d",
+    image:
+      "linear-gradient(135deg, rgba(255, 122, 69, 0.18), transparent 78%), " +
+      "radial-gradient(4px 4px at 80% 22%, #ff7a45, transparent), " +
+      "linear-gradient(150deg, transparent 45%, rgba(255, 150, 90, 0.35) 62%, rgba(255, 90, 40, 0.16) 80%, transparent 95%)",
+  },
+  7: {
+    background: "#170f1f",
+    image:
+      "linear-gradient(135deg, rgba(201, 143, 224, 0.2), transparent 78%), " +
+      "radial-gradient(circle at 78% 26%, rgba(201, 143, 224, 0.9) 0 4px, rgba(201, 143, 224, 0.35) 4px 13px, transparent 13px 70%), " +
+      "repeating-conic-gradient(from 0deg at 78% 26%, rgba(201, 143, 224, 0.14) 0deg 3deg, transparent 3deg 20deg)",
+  },
+};
+const MEDITATE_NAME_COLORS = { 6: "#ff9a63", 7: "#dcb8f0" };
+const MEDITATE_PREVIEW_CELL_SIZE = 60;
+const MEDITATE_FRAGMENT_CELL_SIZE = 40;
+
+/** Un seul grand calque ("backdrop") portant la recette d'imagerie complète
+ * de la bannière, à la taille `division*cellSize` — chaque "fenêtre"
+ * (`overflow:hidden`, cellSize×cellSize, voir meditate.css:
+ * .meditate-window) le positionne en absolu, décalé de `-row*cellSize`/
+ * `-col*cellSize`: même technique de "tuilage" partagée par la preview
+ * (damier division×division) ET les fragments révélés de la grille de
+ * recherche (à une échelle différente), pour ne jamais recomposer deux fois
+ * la même image. */
+function makeMeditateWindow(tier, division, cellSize, row, col) {
+  const recipe = MEDITATE_ART_RECIPES[tier];
+  const win = document.createElement("div");
+  win.className = "meditate-window";
+  win.style.width = `${cellSize}px`;
+  win.style.height = `${cellSize}px`;
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "meditate-art-backdrop";
+  const full = division * cellSize;
+  backdrop.style.width = `${full}px`;
+  backdrop.style.height = `${full}px`;
+  backdrop.style.background = recipe.background;
+  backdrop.style.backgroundImage = recipe.image;
+  backdrop.style.top = `${-row * cellSize}px`;
+  backdrop.style.left = `${-col * cellSize}px`;
+
+  win.appendChild(backdrop);
+  return win;
+}
+
+/** Reconstruit la preview division×division en haut de l'écran (retour
+ * utilisateur: "on affiche la preview à débloquer dans une sorte d'état
+ * disable [...] et on y trace sa division des formes pour que le joueur ait
+ * un repère"), assombrie/désaturée tant que la FORME correspondante n'est
+ * pas ENTIÈREMENT retrouvée (retour utilisateur: "lorsque le joueur a
+ * découvert entièrement une forme, elle se 'enable' sur la preview en
+ * haut") — jamais case par case, toujours forme par forme. Un contour
+ * (border-right/bottom) sépare deux cases de FORMES DIFFÉRENTES uniquement
+ * (retour utilisateur: "il faut que les formes définies soient
+ * constatables, donc détourées"), jamais deux cases de la même forme. */
+function renderMeditatePreview(def, revealState) {
+  meditatePreviewGridEl.innerHTML = "";
+  meditatePreviewGridEl.style.gridTemplateColumns = `repeat(${def.division}, ${MEDITATE_PREVIEW_CELL_SIZE}px)`;
+
+  const shapeAt = Array.from({ length: def.division }, () => Array(def.division).fill(null));
+  for (const shape of def.shapes) {
+    for (const [r, c] of shape.cells) shapeAt[r][c] = shape.id;
+  }
+
+  for (let row = 0; row < def.division; row++) {
+    for (let col = 0; col < def.division; col++) {
+      const win = makeMeditateWindow(def.tier, def.division, MEDITATE_PREVIEW_CELL_SIZE, row, col);
+      const shapeId = shapeAt[row][col];
+      const found = shapeId != null && revealState[shapeId];
+      win.classList.add("meditate-preview-cell", found ? "meditate-preview-cell--found" : "meditate-preview-cell--locked");
+      if (col < def.division - 1 && shapeAt[row][col + 1] !== shapeId) win.classList.add("meditate-preview-cell--edge-right");
+      if (row < def.division - 1 && shapeAt[row + 1][col] !== shapeId) win.classList.add("meditate-preview-cell--edge-bottom");
+      meditatePreviewGridEl.appendChild(win);
+    }
+  }
+}
+
+/** Grille de recherche (retour utilisateur: "toutes les cases doivent se
+ * toucher" — voir meditate.css: technique des marges négatives qui
+ * superposent les bordures d'une case sur sa voisine, même principe que
+ * sommation.js: .som-grid). Une case déjà révélée montre soit le VRAI
+ * fragment d'image (même imagerie que la preview, repositionné via son
+ * origine `originRow`/`originCol` — voir meditate.js: generateGrid), soit
+ * un simple fond neutre si elle ne portait rien (retour utilisateur: "soit
+ * il n'y a rien [...] soit il y a un morceau d'une des formes") — jamais un
+ * indice visuel AVANT le clic (retour utilisateur: "quand je clique rien ne
+ * se découvre [...] mais quand quelque chose se découvre ça doit être
+ * aussi visuel"). */
+function renderMeditateSearchGrid(def, grid) {
+  meditateSearchGridEl.innerHTML = "";
+  meditateSearchGridEl.style.gridTemplateColumns = `repeat(${grid.size}, ${MEDITATE_FRAGMENT_CELL_SIZE}px)`;
+
+  grid.cells.forEach((cell, index) => {
+    let el;
+    if (cell.revealed && cell.shapeId != null) {
+      el = makeMeditateWindow(def.tier, def.division, MEDITATE_FRAGMENT_CELL_SIZE, cell.originRow, cell.originCol);
+      el.classList.add("meditate-search-cell", "meditate-search-cell--fragment");
+    } else {
+      el = document.createElement("button");
+      el.type = "button";
+      el.className = "meditate-search-cell";
+      el.style.width = `${MEDITATE_FRAGMENT_CELL_SIZE}px`;
+      el.style.height = `${MEDITATE_FRAGMENT_CELL_SIZE}px`;
+      if (cell.revealed) {
+        el.classList.add("meditate-search-cell--empty");
+        el.disabled = true;
+      } else {
+        el.addEventListener("click", () => onMeditateCellClick(index));
+      }
+    }
+    meditateSearchGridEl.appendChild(el);
+  });
+}
+
+function renderMeditateEnergy() {
+  if (meditateEnergyEl) meditateEnergyEl.innerHTML = boltLabel(loadStars());
+}
+
+/** Point d'entrée (voir showView: name === "meditate") — prépare une grille
+ * pour la bannière en cours si besoin (voir meditate.js: ensureCurrentGrid)
+ * puis (re)dessine tout l'écran depuis zéro, jamais un rendu incrémental
+ * (même principe que renderLevelGrid/refreshProfileBadges: on ne risque
+ * jamais un affichage périmé). */
+function renderMeditateView() {
+  renderMeditateEnergy();
+  if (isMeditateAllUnlocked()) {
+    meditatePlayStateEl.classList.add("hidden");
+    meditateDoneStateEl.classList.remove("hidden");
+    return;
+  }
+  meditatePlayStateEl.classList.remove("hidden");
+  meditateDoneStateEl.classList.add("hidden");
+
+  const def = getMeditateCurrentDef();
+  const grid = ensureMeditateGrid();
+  if (!def || !grid) return; // filet de sécurité, ne devrait pas arriver ici (voir isMeditateAllUnlocked ci-dessus)
+
+  meditatePreviewNameEl.textContent = def.name;
+  meditatePreviewNameEl.style.color = MEDITATE_NAME_COLORS[def.tier] ?? "";
+  renderMeditatePreview(def, getMeditateShapeRevealState());
+  renderMeditateSearchGrid(def, grid);
+}
+
+/** Clic sur une case pas encore révélée — dépense 1 Énergie via
+ * meditate.js:revealCell (retour utilisateur: "ça découvre la case [...]
+ * en payant un Éclair"), jamais gratuit ni remboursé si la case était
+ * vide. Ré-affiche entièrement l'écran ensuite (voir renderMeditateView) —
+ * y compris quand une bannière vient d'être débloquée: la modale de
+ * récompense PARTAGÉE (showCosmeticUnlockModal, même composant que Remember)
+ * s'affiche par-dessus le nouvel état déjà à jour (bannière suivante, ou
+ * écran "tout débloqué"), jamais derrière. */
+function onMeditateCellClick(index) {
+  const result = revealMeditateCell(index);
+  if (!result.ok) {
+    if (result.reason === "not-enough-energy") hapticWarning();
+    return;
+  }
+  hapticLight();
+
+  if (result.bannerUnlocked) {
+    hapticSuccess();
+    saveProgressToCloud();
+    showCosmeticUnlockModal({
+      kind: "badge",
+      badgeTier: result.unlockedTier,
+      title: result.unlockedName ? `Bannière « ${result.unlockedName} »` : "Nouvelle bannière",
+      subtitle: result.allDone
+        ? "Nouvelle bannière débloquée — tout le contenu de Meditate est désormais débloqué !"
+        : "Nouvelle bannière débloquée !",
+    });
+  }
+  renderMeditateView();
+}
+
 // ---------- Défi Quotidien (bouton flottant du menu titre) ----------
 const btnDailyChallenge = document.getElementById("btn-daily-challenge");
 const dailyChallengeFabBadgeEl = document.getElementById("daily-challenge-fab-badge");
@@ -3139,10 +3361,7 @@ document.getElementById("menu-story").onclick = enterStoryDirect;
 document.getElementById("menu-infinite").onclick = enterInfiniteDirect;
 document.getElementById("menu-community").onclick = () => pushView("community");
 document.getElementById("menu-remember").onclick = enterRememberDirect;
-// TODO(Meditate): bouton posé pour le nouveau mode (retour utilisateur),
-// pas encore câblé — la vue/le moteur de jeu (grille de révélation,
-// découpage des bannières en formes, difficulté progressive) arrivent dans
-// un round séparé, après validation du mockup visuel.
+document.getElementById("menu-meditate").onclick = () => pushView("meditate");
 document.getElementById("menu-options").onclick = () => pushView("options");
 
 renderActiveScreen();
