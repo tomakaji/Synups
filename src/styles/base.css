@@ -201,6 +201,61 @@ body {
   flex-shrink: 0;
 }
 
+/* Retour utilisateur: "on n'a pas l'animation d'addition/soustraction sur
+   les éclairs... Ça devrait faire comme pour les étoiles" — même mécanisme
+   que .points-gain/.points-loss (mode-infinite.css: anneau lumineux qui
+   s'étend puis s'efface, voir main.js: triggerPointsAnim, réutilisé tel
+   quel pour ces deux classes), mais recoloré en jaune (couleur de
+   l'Énergie/Éclairs, #ffd76e — voir .meditate-energy-badge) plutôt qu'en
+   bleu (--accent, couleur des Étoiles) pour rester cohérent quel que soit
+   l'élément où ces classes sont posées. */
+@keyframes energy-pulse {
+  0% {
+    transform: scale(1);
+    color: #ffd76e;
+    box-shadow: 0 0 0 0 rgba(255, 215, 110, 0.65);
+  }
+  35% {
+    transform: scale(1.22);
+    color: #fff3c9;
+    box-shadow: 0 0 0 8px rgba(255, 215, 110, 0.35);
+  }
+  100% {
+    transform: scale(1);
+    color: #ffd76e;
+    box-shadow: 0 0 0 14px rgba(255, 215, 110, 0);
+  }
+}
+
+/* Miroir de @keyframes energy-pulse (mêmes timing/structure) mais inversé:
+   rétrécit au lieu de grossir, flashe en rouge --error au lieu du jaune
+   plus clair du gain — même principe que .points-loss/points-pulse-loss. */
+@keyframes energy-pulse-loss {
+  0% {
+    transform: scale(1);
+    color: #ffd76e;
+    box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.65);
+  }
+  35% {
+    transform: scale(0.85);
+    color: var(--error);
+    box-shadow: 0 0 0 8px rgba(255, 107, 107, 0.35);
+  }
+  100% {
+    transform: scale(1);
+    color: #ffd76e;
+    box-shadow: 0 0 0 14px rgba(255, 107, 107, 0);
+  }
+}
+
+.energy-gain {
+  animation: energy-pulse 0.6s ease-out;
+}
+
+.energy-loss {
+  animation: energy-pulse-loss 0.6s ease-out;
+}
+
 /* Icônes plus grandes spécifiquement dans .icon-btn (Annuler/Réinitialiser)
    — l'icône toggle son/musique (.icon-toggle) garde la taille par défaut
    ci-dessus, plus discrète car ce sont des réglages, pas des actions de jeu. */

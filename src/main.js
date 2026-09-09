@@ -449,7 +449,12 @@ const POINTS_ANIM_MS = 600;
 function triggerPointsAnim(el, cls) {
   if (!el) return;
   if (el._pointsAnimTimeout != null) clearTimeout(el._pointsAnimTimeout);
-  el.classList.remove("points-gain", "points-loss");
+  // Retire aussi energy-gain/energy-loss (base.css): cette fonction est
+  // désormais partagée avec renderMeditateEnergy() ci-dessous (retour
+  // utilisateur: "l'animation d'addition/soustraction sur les éclairs [...]
+  // ça devrait faire comme pour les étoiles"), jamais les deux paires de
+  // classes en même temps sur le même élément.
+  el.classList.remove("points-gain", "points-loss", "energy-gain", "energy-loss");
   void el.offsetWidth;
   el.classList.add(cls);
   el._pointsAnimTimeout = setTimeout(() => {
@@ -3234,8 +3239,21 @@ function renderMeditateSearchGrid(def, grid) {
   });
 }
 
+// Retour utilisateur: "on n'a pas non plus l'animation d'addition/
+// soustraction sur les éclairs [...] ça devrait faire comme pour les
+// étoiles" — même principe que lastRenderedPoints/triggerPointsAnim
+// (renderPointsEverywhere ci-dessus): mémorise la dernière valeur RENDUE
+// pour détecter un delta à chaque appel, initialisée avant le tout premier
+// rendu pour ne rien animer au chargement.
+let lastRenderedEnergy = loadStars();
+
 function renderMeditateEnergy() {
-  if (meditateEnergyEl) meditateEnergyEl.innerHTML = boltLabel(loadStars());
+  if (!meditateEnergyEl) return;
+  const energy = loadStars();
+  meditateEnergyEl.innerHTML = boltLabel(energy);
+  const delta = energy - lastRenderedEnergy;
+  lastRenderedEnergy = energy;
+  if (delta !== 0) triggerPointsAnim(meditateEnergyEl, delta > 0 ? "energy-gain" : "energy-loss");
 }
 
 /** Point d'entrée (voir showView: name === "meditate") — prépare une grille
@@ -3271,27 +3289,56 @@ function renderMeditateView() {
  * récompense PARTAGÉE (showCosmeticUnlockModal, même composant que Remember)
  * s'affiche par-dessus le nouvel état déjà à jour (bannière suivante, ou
  * écran "tout débloqué"), jamais derrière. */
+// Retour utilisateur: "j'aimerais que lorsqu'on gagne, on ait un peu de
+// flottement entre le moment où on découvre la dernière pièce en entier et
+// le moment où la victoire s'annonce, très léger, peut-être juste une
+// seconde". `def`/`grid` sont capturés AVANT revealMeditateCell (toujours
+// corrects: rien d'autre n'a pu les modifier entre le rendu précédent et ce
+// clic) car revealCell (meditate.js) fait avancer l'état RÉEL de façon
+// synchrone dès qu'une bannière se débloque (bannerIndex incrémenté, grid
+// remis à null pour la bannière suivante) — sans cette capture,
+// renderMeditateView() basculerait IMMÉDIATEMENT sur la bannière suivante
+// (ou l'écran "tout débloqué"), sans jamais montrer la grille dans son état
+// "juste complété".
+const MEDITATE_VICTORY_DELAY_MS = 1000;
+
 function onMeditateCellClick(index) {
+  const def = getMeditateCurrentDef();
+  const grid = ensureMeditateGrid();
   const result = revealMeditateCell(index);
   if (!result.ok) {
     if (result.reason === "not-enough-energy") hapticWarning();
     return;
   }
   hapticLight();
+  renderMeditateEnergy();
 
-  if (result.bannerUnlocked) {
-    hapticSuccess();
-    saveProgressToCloud();
-    showCosmeticUnlockModal({
-      kind: "badge",
-      badgeTier: result.unlockedTier,
-      title: result.unlockedName ? `Bannière « ${result.unlockedName} »` : "Nouvelle bannière",
-      subtitle: result.allDone
-        ? "Nouvelle bannière débloquée — tout le contenu de Meditate est désormais débloqué !"
-        : "Nouvelle bannière débloquée !",
-    });
+  if (result.bannerUnlocked && def && grid) {
+    // Ré-affiche D'ABORD la case qui vient d'être cliquée dans la grille
+    // encore "actuelle" (celle capturée ci-dessus) — le joueur voit la
+    // dernière pièce se révéler entièrement — puis attend
+    // MEDITATE_VICTORY_DELAY_MS avant l'annonce de victoire proprement dite.
+    grid.cells[index].revealed = true;
+    const revealState = {};
+    for (const shape of def.shapes) revealState[shape.id] = true; // bannerUnlocked => tout est trouvé
+    renderMeditatePreview(def, revealState);
+    renderMeditateSearchGrid(def, grid);
+    setTimeout(() => {
+      hapticSuccess();
+      saveProgressToCloud();
+      showCosmeticUnlockModal({
+        kind: "badge",
+        badgeTier: result.unlockedTier,
+        title: result.unlockedName ? `Bannière « ${result.unlockedName} »` : "Nouvelle bannière",
+        subtitle: result.allDone
+          ? "Nouvelle bannière débloquée — tout le contenu de Meditate est désormais débloqué !"
+          : "Nouvelle bannière débloquée !",
+      });
+      renderMeditateView();
+    }, MEDITATE_VICTORY_DELAY_MS);
+  } else {
+    renderMeditateView();
   }
-  renderMeditateView();
 }
 
 // ---------- Défi Quotidien (bouton flottant du menu titre) ----------
