@@ -548,7 +548,11 @@
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
           <h2 data-i18n="view-meditate.title" class="screen-title">Meditate</h2>
-          <span id="meditate-energy" class="infinite-points"></span>
+          <span id="meditate-energy" class="infinite-points meditate-energy-badge"></span>
+          <!-- Outil de test (retour utilisateur): injecte des Éclairs sans
+               avoir à farmer le Défi Quotidien — même principe que
+               #som-debug-points (+500 étoiles). -->
+          <button data-i18n="meditate-debug-points" id="meditate-debug-points" class="som-debug-btn" type="button" title="Débug: +100 Éclairs">+100 éclairs</button>
         </header>
 
         <div id="meditate-play-state" class="meditate-play-state">

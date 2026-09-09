@@ -159,6 +159,20 @@
   display: none;
 }
 
+/* Retour utilisateur: "le bouton Défi quotidien lorsqu'il a déjà été fait
+   doit avoir un petit badge 'pub' pour prévenir qu'il faudra visionner une
+   pub" — même pastille que ci-dessus (position/forme), juste reteintée et
+   avec un texte plus long ("PUB" vs "!"), donc un font-size réduit et un
+   padding horizontal élargi pour que le texte ne touche pas les bords. */
+.daily-challenge-fab-badge--pub {
+  background: #ffb454;
+  color: #1a1310;
+  font-size: 0.5rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0 4px;
+}
+
 /* Round suivant (retour utilisateur: "on va permettre de jouer le défi
    quotidien à nouveau [...] en échange d'une rewardAd") — un défi déjà fait
    aujourd'hui ne cache PLUS le bouton (voir main.js:

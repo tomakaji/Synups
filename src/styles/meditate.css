@@ -3,18 +3,38 @@
    game/meditate.js pour la logique, main.js: renderMeditateView pour le
    rendu, index.html: #view-meditate pour la structure. */
 
+/* Retour utilisateur: "la grille de jeu doit [...] prendre la largeur du
+   téléphone" — pas de padding HORIZONTAL ici (contrairement à avant): c'est
+   ce qui permet à .meditate-search-wrap ci-dessous de s'étirer sur toute la
+   largeur réellement disponible (voir main.js: renderMeditateSearchGrid, qui
+   mesure cette largeur pour calculer la taille des cases). Les autres
+   éléments (indice, preview) restent centrés/à largeur limitée via leur
+   propre padding, voir .meditate-hint ci-dessous. */
 .meditate-play-state {
   width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 20px;
-  padding: 4px 20px 20px;
+  padding: 4px 0 20px;
+}
+
+/* Retour utilisateur: "la ressource éclairs dans le header doit être de la
+   bonne couleur (là elle est bleue)" — #meditate-energy réutilise
+   .infinite-points (mode-infinite.css) pour son gabarit pilule, mais cette
+   classe est teintée var(--accent), la couleur des ÉTOILES (bleu), pas de
+   l'Énergie/Éclair (jaune, même couleur que .daily-challenge-fab-bolt/
+   .title-profile-stat--star). Surchargée ici plutôt que dans
+   mode-infinite.css, qui n'a pas à connaître Meditate. */
+.meditate-energy-badge {
+  color: #ffd76e;
+  border-color: rgba(255, 215, 110, 0.4);
 }
 
 .meditate-hint {
   margin: 0;
   max-width: 420px;
+  padding: 0 20px;
   text-align: center;
   font-size: 0.82rem;
   color: var(--text-dim);
@@ -99,10 +119,13 @@
   padding: 1px 0 0 1px;
 }
 
+/* Retour utilisateur: "la grille où l'on clique peut avoir des bords
+   carrés (pas besoin de l'arrondi)" — contrairement à .meditate-preview-grid
+   ci-dessus (qui reste un carré aux bords arrondis), pas de border-radius
+   ici. */
 .meditate-search-grid {
   display: grid;
-  border-radius: 10px;
-  overflow: hidden;
+  width: 100%;
 }
 
 /* Retour utilisateur: "je préfère que toutes les cases se touchent" — même

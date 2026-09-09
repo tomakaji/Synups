@@ -7,6 +7,7 @@
 // qu'une convention de lecture, jamais un chemin résolu par t() (voir i18n.js).
 export const fr = {
   "btn-daily-challenge.label": "Défi quotidien",
+  "daily-challenge-fab-badge--pub.label": "Pub",
   "misc.synups": "Synups",
   "misc.reconnecte_le_reseau": "Reconnecte le réseau",
   "menu-story.label": "Histoire",
@@ -49,6 +50,7 @@ export const fr = {
   "som-done-state.title": "Bravo, Remember est terminé !",
   "som-done-state.message": "Toutes les récompenses ont été débloquées. Il n'y a plus rien à faire ici.",
   "view-meditate.title": "Meditate",
+  "meditate-debug-points": "+100 éclairs",
   "meditate-hint": "Retrouvez les formes cachées dans la grille pour révéler la bannière — chaque case fouillée coûte 1 Énergie.",
   "meditate-done.title": "Meditate est terminé !",
   "meditate-done.message": "Toutes les bannières ont été débloquées. Il n'y a plus rien à fouiller ici.",

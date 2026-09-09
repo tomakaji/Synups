@@ -106,6 +106,7 @@ import {
   saveSeenMechanics,
   loadStars,
   spendStars,
+  addStars,
   resetMeditateProgress,
 } from "./game/storage.js";
 import {
@@ -2979,7 +2980,6 @@ function showView(name, opts) {
   if (name === "community-profile") renderCommunityProfile();
   if (name === "editor") editorApi.onShow();
   if (name === "sommation") sommationApi.onShow();
-  if (name === "meditate") renderMeditateView();
   if (name === "options") {
     renderPixelArtOption();
     renderPlayGamesSection();
@@ -3002,6 +3002,12 @@ function showView(name, opts) {
   // ne peut donner un résultat correct qu'UNE FOIS #view-title démasqué,
   // donc après renderActiveScreen() ci-dessus, jamais avant.
   if (name === "title") alignDailyChallengeFab();
+  // Même raisonnement pour Meditate: renderMeditateView() mesure la largeur
+  // RÉELLE de .meditate-search-wrap (clientWidth, voir
+  // renderMeditateSearchGrid) pour calculer la taille des cases — appelée
+  // AVANT renderActiveScreen() ci-dessus, #view-meditate serait encore
+  // display:none et clientWidth vaudrait 0 (grille cassée, cases de 1px).
+  if (name === "meditate") renderMeditateView();
 }
 
 /** Empile et affiche un nouvel écran — c'est la navigation "normale" (un
@@ -3087,6 +3093,16 @@ const meditateDoneStateEl = document.getElementById("meditate-done-state");
 const meditatePreviewGridEl = document.getElementById("meditate-preview-grid");
 const meditatePreviewNameEl = document.getElementById("meditate-preview-name");
 const meditateSearchGridEl = document.getElementById("meditate-search-grid");
+const meditateDebugPointsBtn = document.getElementById("meditate-debug-points");
+
+// Outil de test (retour utilisateur): injecte 100 Éclairs sans avoir à
+// farmer le Défi Quotidien — même principe que som-debug-points (sommation.js).
+if (meditateDebugPointsBtn) {
+  meditateDebugPointsBtn.onclick = () => {
+    addStars(100);
+    renderMeditateEnergy();
+  };
+}
 
 /** Recette de fond CSS de chaque bannière — reprise TELLE QUELLE de
  * badges.css (.badge-teaser--tier-N.earned + .badge-teaser-deco, retour
@@ -3112,7 +3128,6 @@ const MEDITATE_ART_RECIPES = {
 };
 const MEDITATE_NAME_COLORS = { 6: "#ff9a63", 7: "#dcb8f0" };
 const MEDITATE_PREVIEW_CELL_SIZE = 60;
-const MEDITATE_FRAGMENT_CELL_SIZE = 40;
 
 /** Un seul grand calque ("backdrop") portant la recette d'imagerie complète
  * de la bannière, à la taille `division*cellSize` — chaque "fenêtre"
@@ -3188,19 +3203,28 @@ function renderMeditatePreview(def, revealState) {
  * aussi visuel"). */
 function renderMeditateSearchGrid(def, grid) {
   meditateSearchGridEl.innerHTML = "";
-  meditateSearchGridEl.style.gridTemplateColumns = `repeat(${grid.size}, ${MEDITATE_FRAGMENT_CELL_SIZE}px)`;
+  // Retour utilisateur: "la grille de jeu doit être grande, prendre la
+  // largeur du téléphone et s'adapter en hauteur" — taille de case calculée
+  // à partir de la largeur RÉELLE du conteneur (.meditate-search-wrap, déjà
+  // sans padding horizontal propre, voir meditate.css) plutôt qu'une valeur
+  // fixe: la grille occupe donc toujours toute la largeur disponible, quelle
+  // que soit la taille de l'écran, et sa hauteur suit mécaniquement
+  // (cellSize × grid.size) puisque chaque case reste un carré.
+  const wrapWidth = meditateSearchGridEl.parentElement?.clientWidth || window.innerWidth;
+  const cellSize = Math.max(1, Math.floor(wrapWidth / grid.size));
+  meditateSearchGridEl.style.gridTemplateColumns = `repeat(${grid.size}, ${cellSize}px)`;
 
   grid.cells.forEach((cell, index) => {
     let el;
     if (cell.revealed && cell.shapeId != null) {
-      el = makeMeditateWindow(def.tier, def.division, MEDITATE_FRAGMENT_CELL_SIZE, cell.originRow, cell.originCol);
+      el = makeMeditateWindow(def.tier, def.division, cellSize, cell.originRow, cell.originCol);
       el.classList.add("meditate-search-cell", "meditate-search-cell--fragment");
     } else {
       el = document.createElement("button");
       el.type = "button";
       el.className = "meditate-search-cell";
-      el.style.width = `${MEDITATE_FRAGMENT_CELL_SIZE}px`;
-      el.style.height = `${MEDITATE_FRAGMENT_CELL_SIZE}px`;
+      el.style.width = `${cellSize}px`;
+      el.style.height = `${cellSize}px`;
       if (cell.revealed) {
         el.classList.add("meditate-search-cell--empty");
         el.disabled = true;
@@ -3325,15 +3349,21 @@ function renderDailyChallengeButton() {
   btnDailyChallenge.classList.toggle("daily-challenge-fab--done", ready && completed);
   if (!ready) return; // rien d'autre à mettre à jour sur un bouton caché
   if (completed) {
-    // Pastille "!" réservée à "grille du jour pas encore jouée" — un défi
-    // déjà fait n'a rien de nouveau à annoncer tant que le cooldown de
-    // rejeu n'est pas écoulé (voir openDailyReplayPopup/renderDailyReplayPopup
-    // pour ce détail, affiché seulement DANS la popup, pas ici sur le FAB).
-    dailyChallengeFabBadgeEl.classList.add("hidden");
+    // Retour utilisateur: "le bouton Défi quotidien lorsqu'il a déjà été
+    // fait doit avoir un petit badge 'pub' pour prévenir qu'il faudra
+    // visionner une pub" — remplace la pastille "!" (réservée à "grille du
+    // jour pas encore jouée") par ce badge dédié, affiché QUELLE QUE SOIT
+    // l'état du cooldown (le détail exact du compte à rebours, lui, ne
+    // s'affiche que DANS la popup, voir openDailyReplayPopup/
+    // renderDailyReplayPopup) — juste un rappel visuel permanent qu'un rejeu
+    // passera forcément par une pub.
+    dailyChallengeFabBadgeEl.classList.remove("hidden");
+    dailyChallengeFabBadgeEl.classList.add("daily-challenge-fab-badge--pub");
+    dailyChallengeFabBadgeEl.textContent = t("daily-challenge-fab-badge--pub.label");
     btnDailyChallenge.title = "Défi Quotidien — déjà fait aujourd'hui, appuyer pour rejouer contre une pub";
     return;
   }
-  dailyChallengeFabBadgeEl.classList.remove("hidden");
+  dailyChallengeFabBadgeEl.classList.remove("hidden", "daily-challenge-fab-badge--pub");
   dailyChallengeFabBadgeEl.textContent = "!";
   btnDailyChallenge.title = "Défi Quotidien — grille du jour, +1 Énergie";
 }
@@ -3530,6 +3560,13 @@ window.addEventListener("resize", () => {
     // passer le logo à la ligne différemment (mobile étroit) et décaler sa
     // position verticale — sans effet si l'écran titre n'est pas affiché.
     alignDailyChallengeFab();
+    // Meditate (retour utilisateur: "la grille de jeu doit [...] prendre la
+    // largeur du téléphone") — la taille des cases est calculée depuis la
+    // largeur RÉELLE du conteneur (voir renderMeditateSearchGrid), donc un
+    // changement de largeur (rotation, redimensionnement desktop) doit
+    // redessiner la grille pour rester pleine largeur ; sans effet si
+    // l'écran Meditate n'est pas actif.
+    if (viewStack[viewStack.length - 1] === "meditate") renderMeditateView();
   }, 120);
 });
 
