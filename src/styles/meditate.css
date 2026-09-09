@@ -127,6 +127,39 @@
   transition: filter 0.35s ease-out, opacity 0.35s ease-out;
 }
 
+/* Retour utilisateur: "animation sur la preview lorsqu'on découvre une
+   pièce entière" — posée UNIQUEMENT sur les cases de la forme qui vient
+   JUSTE d'être complétée (voir main.js: justFoundShapeId), jamais sur
+   .meditate-preview-cell--found en général: comme tout le damier est
+   reconstruit à chaque rendu (innerHTML vidé, voir renderMeditatePreview),
+   une transition CSS classique (ci-dessus) ne se voit de toute façon
+   jamais sur un élément flambant neuf — un vrai @keyframes, lui, se joue
+   normalement dès l'insertion. Se termine dans le MÊME état visuel que
+   .meditate-preview-cell--found (filter:none, opacity:1, scale:1), donc
+   aucun `forwards` nécessaire: une fois l'animation finie, la règle statique
+   ci-dessus prend le relais sans aucun changement visible. */
+@keyframes meditate-preview-just-found {
+  0% {
+    filter: grayscale(0.85) brightness(0.5);
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  55% {
+    filter: none;
+    opacity: 1;
+    transform: scale(1.18);
+  }
+  100% {
+    filter: none;
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.meditate-preview-cell--just-found {
+  animation: meditate-preview-just-found 0.55s ease-out;
+}
+
 /* Contour UNIQUEMENT entre deux cases de formes DIFFÉRENTES (retour
    utilisateur: "il faut que les formes définies soient constatables, donc
    détourées") — jamais à l'intérieur d'une même forme, posé sur la case
@@ -209,4 +242,50 @@
 
 .meditate-search-cell--fragment {
   cursor: default;
+}
+
+/* Retour utilisateur: "une animation sur les cases autant lorsqu'on a rien
+   derrière que lorsqu'on découvre un élément" — posée UNIQUEMENT sur la
+   case que le DERNIER clic vient de révéler (voir main.js:
+   justRevealedIndex), jamais sur .meditate-search-cell--empty/--fragment
+   en général: toute la grille est reconstruite à chaque rendu (innerHTML
+   vidé, voir renderMeditateSearchGrid), donc une animation posée sans
+   condition rejouerait sur TOUTES les cases déjà révélées à chaque
+   nouveau clic. Se termine dans le MÊME état visuel que la règle statique
+   correspondante ci-dessus/ci-dessous (transparent, ou opacité/échelle
+   pleines) — aucun `forwards` nécessaire. */
+@keyframes meditate-cell-reveal-empty {
+  0% {
+    background: #232a3d;
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: scale(1.1);
+  }
+  100% {
+    background: transparent;
+    border-color: transparent;
+    transform: scale(1);
+  }
+}
+
+.meditate-search-cell--reveal-empty {
+  animation: meditate-cell-reveal-empty 0.45s ease-out;
+}
+
+@keyframes meditate-cell-reveal-fragment {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.meditate-search-cell--reveal-fragment {
+  animation: meditate-cell-reveal-fragment 0.4s ease-out;
 }

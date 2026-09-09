@@ -53,6 +53,8 @@ import {
   playChargeFull,
   playChargeEmptied,
   playChargeOverload,
+  playMeditateEmpty,
+  playMeditateFragment,
   setMasterVolume,
 } from "./game/sound.js";
 import {
@@ -3189,7 +3191,16 @@ function makeMeditateWindow(tier, division, row, col) {
  * (border-right/bottom) sépare deux cases de FORMES DIFFÉRENTES uniquement
  * (retour utilisateur: "il faut que les formes définies soient
  * constatables, donc détourées"), jamais deux cases de la même forme. */
-function renderMeditatePreview(def, revealState) {
+/** @param justFoundShapeId — retour utilisateur: "animation sur la preview
+ * lorsqu'on découvre une pièce entière" — identifiant de la forme qui vient
+ * SEULEMENT d'être entièrement révélée par le dernier clic (ou `null` sur
+ * tout rendu qui n'en découle pas, ex. simple retour sur l'écran): ajoute
+ * une classe d'animation UNIQUEMENT aux cases de cette forme, plutôt qu'à
+ * toute case déjà trouvée — sans ça, comme tout le damier est reconstruit
+ * depuis zéro à chaque rendu (innerHTML vidé), une classe d'animation posée
+ * sans condition sur .meditate-preview-cell--found rejouerait l'animation
+ * de TOUTES les formes déjà trouvées à chaque nouveau clic. */
+function renderMeditatePreview(def, revealState, justFoundShapeId = null) {
   meditatePreviewGridEl.innerHTML = "";
   // 1fr: chaque colonne se partage également la largeur du conteneur (voir
   // meditate.css: .meditate-preview-grid, largeur bornée via `min()`) —
@@ -3207,6 +3218,7 @@ function renderMeditatePreview(def, revealState) {
       const shapeId = shapeAt[row][col];
       const found = shapeId != null && revealState[shapeId];
       win.classList.add("meditate-preview-cell", found ? "meditate-preview-cell--found" : "meditate-preview-cell--locked");
+      if (found && shapeId === justFoundShapeId) win.classList.add("meditate-preview-cell--just-found");
       if (col < def.division - 1 && shapeAt[row][col + 1] !== shapeId) win.classList.add("meditate-preview-cell--edge-right");
       if (row < def.division - 1 && shapeAt[row + 1][col] !== shapeId) win.classList.add("meditate-preview-cell--edge-bottom");
       meditatePreviewGridEl.appendChild(win);
@@ -3224,8 +3236,18 @@ function renderMeditatePreview(def, revealState) {
  * il n'y a rien [...] soit il y a un morceau d'une des formes") — jamais un
  * indice visuel AVANT le clic (retour utilisateur: "quand je clique rien ne
  * se découvre [...] mais quand quelque chose se découvre ça doit être
- * aussi visuel"). */
-function renderMeditateSearchGrid(def, grid) {
+ * aussi visuel").
+ *
+ * @param justRevealedIndex — retour utilisateur: "une animation sur les
+ * cases autant lorsqu'on a rien derrière que lorsqu'on découvre un
+ * élément" — index de la case que le DERNIER clic vient de révéler (ou
+ * `null` sur tout rendu qui n'en découle pas). Même raisonnement que
+ * justFoundShapeId ci-dessus (renderMeditatePreview): toute la grille est
+ * reconstruite depuis zéro à chaque rendu, donc l'animation ne doit être
+ * posée QUE sur cette case précise, jamais sur toutes celles déjà
+ * révélées, sous peine de les voir toutes rejouer leur animation à chaque
+ * nouveau clic. */
+function renderMeditateSearchGrid(def, grid, justRevealedIndex = null) {
   meditateSearchGridEl.innerHTML = "";
   // Retour utilisateur: "la grille de jeu doit être grande, prendre la
   // largeur du téléphone et s'adapter en hauteur [...] juste un
@@ -3239,16 +3261,19 @@ function renderMeditateSearchGrid(def, grid) {
   meditateSearchGridEl.style.gridTemplateColumns = `repeat(${grid.size}, 1fr)`;
 
   grid.cells.forEach((cell, index) => {
+    const justRevealed = index === justRevealedIndex;
     let el;
     if (cell.revealed && cell.shapeId != null) {
       el = makeMeditateWindow(def.tier, def.division, cell.originRow, cell.originCol);
       el.classList.add("meditate-search-cell", "meditate-search-cell--fragment");
+      if (justRevealed) el.classList.add("meditate-search-cell--reveal-fragment");
     } else {
       el = document.createElement("button");
       el.type = "button";
       el.className = "meditate-search-cell";
       if (cell.revealed) {
         el.classList.add("meditate-search-cell--empty");
+        if (justRevealed) el.classList.add("meditate-search-cell--reveal-empty");
         el.disabled = true;
       } else {
         el.addEventListener("click", () => onMeditateCellClick(index));
@@ -3280,7 +3305,12 @@ function renderMeditateEnergy() {
  * puis (re)dessine tout l'écran depuis zéro, jamais un rendu incrémental
  * (même principe que renderLevelGrid/refreshProfileBadges: on ne risque
  * jamais un affichage périmé). */
-function renderMeditateView() {
+// `justRevealedIndex`/`justFoundShapeId`: relayés tels quels à
+// renderMeditateSearchGrid/renderMeditatePreview (voir leurs commentaires
+// respectifs) — `null` par défaut pour tout appel qui ne découle pas
+// directement d'un clic (entrée sur l'écran, retour après fermeture de la
+// modale de récompense...), pour n'y rejouer AUCUNE animation.
+function renderMeditateView(justRevealedIndex = null, justFoundShapeId = null) {
   renderMeditateEnergy();
   if (isMeditateAllUnlocked()) {
     meditatePlayStateEl.classList.add("hidden");
@@ -3296,8 +3326,8 @@ function renderMeditateView() {
 
   meditatePreviewNameEl.textContent = def.name;
   meditatePreviewNameEl.style.color = MEDITATE_NAME_COLORS[def.tier] ?? "";
-  renderMeditatePreview(def, getMeditateShapeRevealState());
-  renderMeditateSearchGrid(def, grid);
+  renderMeditatePreview(def, getMeditateShapeRevealState(), justFoundShapeId);
+  renderMeditateSearchGrid(def, grid, justRevealedIndex);
 }
 
 /** Clic sur une case pas encore révélée — dépense 1 Énergie via
@@ -3331,17 +3361,23 @@ function onMeditateCellClick(index) {
   }
   hapticLight();
   renderMeditateEnergy();
+  // Retour utilisateur: "avec un son pour chaque cas" — deux SFX distincts
+  // (voir game/sound.js) selon que la case révélée portait un fragment ou
+  // rien du tout, jamais le même quel que soit le résultat.
+  if (result.shapeId != null) playMeditateFragment();
+  else playMeditateEmpty();
 
   if (result.bannerUnlocked && def && grid) {
     // Ré-affiche D'ABORD la case qui vient d'être cliquée dans la grille
     // encore "actuelle" (celle capturée ci-dessus) — le joueur voit la
-    // dernière pièce se révéler entièrement — puis attend
+    // dernière pièce se révéler entièrement (avec son animation, voir
+    // justRevealedIndex/justFoundShapeId ci-dessous) — puis attend
     // MEDITATE_VICTORY_DELAY_MS avant l'annonce de victoire proprement dite.
     grid.cells[index].revealed = true;
     const revealState = {};
     for (const shape of def.shapes) revealState[shape.id] = true; // bannerUnlocked => tout est trouvé
-    renderMeditatePreview(def, revealState);
-    renderMeditateSearchGrid(def, grid);
+    renderMeditatePreview(def, revealState, result.shapeId);
+    renderMeditateSearchGrid(def, grid, index);
     setTimeout(() => {
       hapticSuccess();
       saveProgressToCloud();
@@ -3362,7 +3398,11 @@ function onMeditateCellClick(index) {
       });
     }, MEDITATE_VICTORY_DELAY_MS);
   } else {
-    renderMeditateView();
+    // Reveal "normal" (pas la dernière pièce d'une bannière): l'animation
+    // de case + celle de la preview (si une forme individuelle vient
+    // d'être complétée, sans pour autant débloquer toute la bannière)
+    // peuvent s'appliquer immédiatement, rien à retarder ici.
+    renderMeditateView(index, result.shapeCompleted ? result.shapeId : null);
   }
 }
 

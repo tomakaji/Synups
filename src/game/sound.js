@@ -325,3 +325,23 @@ export async function playGenerate() {
   await ensureStarted();
   sommationGenerateSynth.triggerAttackRelease("C5", "32n");
 }
+
+// --- Meditate: révélation d'une case (grille de recherche) ---------------
+// Retour utilisateur: "avec un son pour chaque cas" — deux SFX courts et
+// doux (jamais percussifs, même langage que tout ce fichier) pour
+// distinguer sans ambiguïté "rien ici" de "un fragment trouvé", réutilisant
+// les synths `soft`/`chime` déjà partagés plutôt que d'en créer de nouveaux.
+
+export async function playMeditateEmpty() {
+  await ensureStarted();
+  // Note grave, courte, sans deuxième note qui monte — sonne délibérément
+  // "creux"/éteint, à l'inverse de playMeditateFragment ci-dessous.
+  soft.triggerAttackRelease("D3", "16n");
+}
+
+export async function playMeditateFragment() {
+  await ensureStarted();
+  const now = Tone.now();
+  chime.triggerAttackRelease("C5", "16n", now);
+  chime.triggerAttackRelease("G5", "8n", now + 0.07);
+}
