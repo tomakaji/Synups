@@ -151,7 +151,13 @@
                currencyIcons.js (STAR_PATH) pour rester identique à l'icône
                Étoile utilisée partout ailleurs, teinte dédiée en dessous
                (voir title.css: .menu-card--remember). -->
+          <!-- Retour utilisateur: "si un mode est terminé, le bouton dans le
+               menu est disable avec un petit badge qui indique que le mode
+               est terminé" — voir main.js: renderModeMenuButtons()
+               (bascule `disabled` + visibilité de ce badge selon
+               isPixelArtUnlocked()/isMeditateAllUnlocked()). -->
           <button id="menu-remember" class="menu-card menu-card--remember">
+            <span id="menu-remember-done-badge" class="menu-card-done-badge hidden" data-i18n="menu-mode-done-badge.label">Terminé</span>
             <span class="menu-card-top">
               <svg viewBox="0 0 24 24" class="menu-card-icon" fill="currentColor" stroke="none">
                 <path d="M12 2.5l2.9 6.2 6.6.6-5 4.5 1.5 6.7L12 17l-6 3.5 1.5-6.7-5-4.5 6.6-.6z"></path>
@@ -164,6 +170,7 @@
                compact que Remember ci-dessus, teinté Énergie (éclair jaune)
                plutôt qu'Étoile — voir title.css: .menu-card--meditate. -->
           <button id="menu-meditate" class="menu-card menu-card--meditate">
+            <span id="menu-meditate-done-badge" class="menu-card-done-badge hidden" data-i18n="menu-mode-done-badge.label">Terminé</span>
             <span class="menu-card-top">
               <svg viewBox="0 0 24 24" class="menu-card-icon" fill="currentColor" stroke="none">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
@@ -484,30 +491,16 @@
           <button data-i18n="som-debug-points" id="som-debug-points" class="som-debug-btn" type="button" title="Débug: +500 étoiles">+500 étoiles</button>
         </header>
 
-        <!-- État "terminé" (round 12, réécrit round 18): une fois PixelArt
-             débloqué (5e et dernière récompense), Remember est fini — retour
-             utilisateur round 18: "j'aimerais juste que ça ouvre la page
-             remember mais qu'à la place du jeu on a une page de réussite, de
-             jeu terminé, pour dire bravo mais y a plus rien à voir ici". Le
-             menu titre ouvre maintenant toujours cet écran Remember (voir
-             main.js: enterRememberDirect) plutôt que de rediriger vers Mon
-             profil — c'est CET écran qui joue le rôle de "plus rien à voir
-             ici". -->
-        <div id="som-done-state" class="som-done-state hidden">
-          <div class="som-done-icon" aria-hidden="true">✓</div>
-          <p data-i18n="som-done-state.title" class="som-done-title">Bravo, Remember est terminé !</p>
-          <p data-i18n="som-done-state.message" class="som-done-message">Toutes les récompenses ont été débloquées. Il n'y a plus rien à faire ici.</p>
-          <!-- Round 19 (retour utilisateur): "on peut ajouter un bouton qui
-               fasse lien vers le profil en dessous (exactement la même chose
-               que dans 'Menu')" — réutilise telle quelle la bannière
-               avatar+pseudo du menu titre (voir #title-profile-banner),
-               juste sous d'autres IDs (même classe CSS) puisqu'un ID ne peut
-               apparaître qu'une fois dans le document. -->
-          <button id="som-done-profile-link" class="title-profile-banner som-done-profile-link" type="button">
-            <span id="som-done-profile-identity" class="title-profile-identity"></span>
-          </button>
-        </div>
-
+        <!-- Retour utilisateur: "on va retirer les 'pages' affichées lorsqu'on
+             a terminé le mode Remember [...] A la place, une fois la modale
+             de récompense fermée, on redirige vers le menu, et si un mode
+             est terminé, le bouton dans le menu est disable avec un petit
+             badge" — l'ancien écran "terminé" (#som-done-state) est donc
+             retiré: une fois la 5e et dernière récompense débloquée, la
+             modale de révélation (voir main.js: sommationApi.onBadgeEarned)
+             redirige elle-même vers le menu titre à sa fermeture, et c'est
+             désormais #menu-remember (index.html, plus bas) qui porte l'état
+             "terminé" (disabled + badge), jamais cet écran de jeu. -->
         <div data-i18n-attr="title:common.progression_vers_la_prochain" class="som-progress-wrap" title="Progression vers la prochaine récompense">
           <!-- Teaser de la prochaine récompense — retour utilisateur round 11:
                "au dessus de la barre de progression, il faut teaser le
@@ -539,9 +532,7 @@
            Retour utilisateur: remplace l'ancien déblocage par seuil d'Énergie
            des bannières Comète/Supernova — voir game/meditate.js pour toute
            la logique, main.js: renderMeditateView pour le rendu de cet
-           écran. Même structure "état de jeu / état terminé" que Remember
-           ci-dessus (voir #som-done-state), réutilisant tel quel son
-           habillage .som-done-* pour l'écran "tout débloqué". -->
+           écran. -->
       <section id="view-meditate" class="screen hidden">
         <header class="screen-header">
           <button data-i18n-attr="title:common.retour;aria-label:common.retour" class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
@@ -566,15 +557,6 @@
           <div class="meditate-search-wrap">
             <div id="meditate-search-grid" class="meditate-search-grid"></div>
           </div>
-        </div>
-
-        <!-- Tout le contenu de Meditate débloqué — même habillage que
-             #som-done-state (voir sommation.css: .som-done-*), réutilisé tel
-             quel plutôt que dupliqué. -->
-        <div id="meditate-done-state" class="som-done-state hidden">
-          <div class="som-done-icon" aria-hidden="true">✓</div>
-          <p data-i18n="meditate-done.title" class="som-done-title">Meditate est terminé !</p>
-          <p data-i18n="meditate-done.message" class="som-done-message">Toutes les bannières ont été débloquées. Il n'y a plus rien à fouiller ici.</p>
         </div>
       </section>
 
@@ -1031,9 +1013,16 @@
            un avatar (campagne/achat, voir main.js: markStoryLevelCompleted/
            refreshProfileAvatarPicker) ET un badge Remember (voir
            sommation.js: pointsApi.onBadgeEarned) — voir main.js:
-           showCosmeticUnlockModal(). -->
+           showCosmeticUnlockModal().
+           Retour utilisateur: "cette modale ne doit pas être fermable en
+           cliquant en dehors" — contrairement aux autres modales du
+           fichier, PAS de data-cosmetic-unlock-close sur le backdrop:
+           seul le bouton explicite ci-dessous ferme cette modale (elle
+           peut porter une redirection vers le menu à sa fermeture, voir
+           main.js: onClose de showCosmeticUnlockModal — jamais déclenchée
+           par un clic accidentel en dehors). -->
       <div id="cosmetic-unlock-modal" class="modal cosmetic-unlock-modal hidden">
-        <div class="modal-backdrop" data-cosmetic-unlock-close></div>
+        <div class="modal-backdrop"></div>
         <div class="modal-card cosmetic-unlock-card">
           <p data-i18n="cosmetic-unlock-kicker" class="cosmetic-unlock-kicker" id="cosmetic-unlock-kicker">Nouveau cosmétique débloqué</p>
           <div class="cosmetic-unlock-reveal" id="cosmetic-unlock-reveal"></div>

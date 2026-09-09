@@ -19,17 +19,6 @@
   padding: 4px 0 20px;
 }
 
-/* BUG corrigé: aucune règle ne masquait réellement cet état une fois tout
-   le contenu débloqué (voir main.js: renderMeditateView, qui lui ajoute la
-   classe .hidden) — .meditate-play-state restait donc affiché EN PLUS de
-   #meditate-done-state (juste en dessous dans le DOM, voir index.html),
-   qui n'apportait donc rien de visible dans ces conditions puisque
-   l'ancienne grille entièrement révélée occupait déjà tout l'écran
-   au-dessus (retour utilisateur: "on n'a pas d'écran de fin du mode"). */
-.meditate-play-state.hidden {
-  display: none;
-}
-
 /* Retour utilisateur: "la ressource éclairs dans le header doit être de la
    bonne couleur (là elle est bleue)" — #meditate-energy réutilise
    .infinite-points (mode-infinite.css) pour son gabarit pilule, mais cette

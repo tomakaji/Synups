@@ -189,6 +189,7 @@
 }
 
 .menu-card {
+  position: relative;
   background: var(--panel);
   border: 1px solid #1c2130;
   border-radius: 14px;
@@ -204,6 +205,45 @@
 .menu-card:hover {
   border-color: var(--accent);
   transform: translateY(-1px);
+}
+
+/* Retour utilisateur: "on va retirer les 'pages' affichées lorsqu'on a
+   terminé le mode Remember ou Meditate [...] le bouton dans le menu est
+   disable avec un petit badge qui indique que le mode est terminé" — voir
+   main.js: renderModeMenuButtons(). `disabled` (attribut natif du
+   <button>, pas une classe) désactive aussi le clic/focus sans le moindre
+   JS supplémentaire — seul le style visuel doit être posé ici. */
+.menu-card:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.menu-card:disabled:hover {
+  border-color: #1c2130;
+  transform: none;
+}
+
+/* Pastille "Terminé" — même gabarit que .daily-challenge-fab-badge (pilule
+   colorée en haut à droite), teintée --success (déjà associé à un état
+   "réussi" ailleurs, voir .daily-challenge-fab-badge) plutôt qu'une des
+   couleurs de la carte, pour rester lisible aussi bien sur
+   .menu-card--remember que .menu-card--meditate. */
+.menu-card-done-badge {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: var(--success);
+  color: #05060a;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.menu-card-done-badge.hidden {
+  display: none;
 }
 
 .menu-card-top {

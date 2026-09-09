@@ -46,13 +46,6 @@ import { hexFor, colorFor } from "./game/colors.js";
 // Renommage joueur (retour utilisateur): "points" -> "Étoile(s)" (icône
 // étoile bleue) — voir game/currencyIcons.js.
 import { starLabel } from "./game/currencyIcons.js";
-// Bouton "Mon profil" de l'écran "terminé" (voir onShow ci-dessous, round
-// 19) — réutilise loadProfile + pointsApi.buildBadgeFrame (round 22, voir
-// JSDoc d'initSommation), exactement comme la bannière équivalente du menu
-// titre (voir main.js: renderTitleProfileBanner), plutôt que de faire
-// remonter cette logique d'affichage à main.js.
-import { loadProfile } from "./game/storage.js";
-import { DEFAULT_AVATAR } from "./game/community-store.js";
 // Rewarded ad (round 20, migration Capacitor/AdMob) — voir game/ads.js pour
 // le détail (no-op propre hors app native, ne résout QUE sur confirmation
 // du SDK que la récompense a été gagnée). adWatchBtn.onclick plus bas est le
@@ -663,16 +656,13 @@ const UNLOCK_COLORS = ["r", "g", "b", "w"];
  * dans le mode Sommation sont les mêmes que dans le mode infinity") — fourni
  * par main.js plutôt que géré localement, pour rester une seule source de
  * vérité (voir main.js: infinitePoints/spendSharedPoints/addSharedPoints).
- * `pointsApi.goToProfile` (round 19): callback fourni par main.js pour
- * naviguer vers "Mon profil" depuis l'écran "terminé" — même pattern
- * d'injection que getPoints/spendPoints/addPoints, pour ne jamais faire
- * dépendre ce module du routeur de main.js directement.
  * `pointsApi.onBadgeEarned` (round 22, retour utilisateur: "il faudra freeze
  * le jeu lors du déblocage d'un objet cosmétique [...] pareillement pour les
  * badges"): callback `(tier, name) => void` appelé juste après qu'un nouveau
  * badge soit décroché (voir doDropOnObjective ci-dessous) — main.js s'en sert
- * pour déclencher la modale de révélation, ce module ne sait rien de cette
- * modale (même pattern d'injection que goToProfile).
+ * pour déclencher la modale de révélation (et, sur la 5e/dernière, rediriger
+ * vers le menu à sa fermeture — voir main.js: onBadgeEarned), ce module ne
+ * sait rien de cette modale (simple callback injecté).
  */
 export function initSommation(pointsApi) {
   const gridEl = document.getElementById("sommation-grid");
@@ -705,21 +695,6 @@ export function initSommation(pointsApi) {
   // éviter la frustration d'un faux mouvement" — voir onDragEnd() plus bas.
   const recycleModalEl = document.getElementById("som-recycle-confirm-modal");
   const recycleConfirmBtn = document.getElementById("btn-som-recycle-confirm");
-  // État "terminé" (round 12, devenu l'écran normal round 18) — voir
-  // onShow() plus bas et index.html: #som-done-state. Depuis round 18, le
-  // menu titre ouvre TOUJOURS Remember (voir main.js: enterRememberDirect),
-  // donc c'est bien ICI, une fois PixelArt débloqué, que ce filet devient
-  // l'écran effectivement affiché — un état non-interactif ("bravo, plus
-  // rien à voir ici") plutôt que le plateau normal.
-  const doneStateEl = document.getElementById("som-done-state");
-  const progressWrapEl = document.querySelector(".som-progress-wrap");
-  const boardWrapEl = document.querySelector(".som-board-wrap");
-  const actionsEl = document.querySelector(".som-actions");
-  // Lien "Mon profil" de l'écran "terminé" (round 19, retour utilisateur) —
-  // voir onShow() plus bas pour le remplissage avatar/pseudo.
-  const doneProfileLinkEl = document.getElementById("som-done-profile-link");
-  const doneProfileIdentityEl = document.getElementById("som-done-profile-identity");
-  if (doneProfileLinkEl) doneProfileLinkEl.onclick = () => pointsApi.goToProfile?.();
 
   // Partie en cours: restaurée depuis le disque si une sauvegarde valide
   // existe (voir BOARD_KEY/readBoardState plus haut) — retour utilisateur:
@@ -2035,38 +2010,15 @@ export function initSommation(pointsApi) {
   }
 
   return {
+    // Retour utilisateur: "on va retirer les 'pages' affichées lorsqu'on a
+    // terminé le mode Remember [...] le bouton dans le menu est disable
+    // avec un petit badge" — l'ancien état figé "terminé" (basé sur
+    // isPixelArtUnlocked(), voir #som-done-state retiré d'index.html) est
+    // donc supprimé d'ici: c'est désormais le bouton #menu-remember du menu
+    // titre qui porte cet état (voir main.js: renderModeMenuButtons), lequel
+    // empêche d'ailleurs d'entrer ici une fois terminé — onShow() n'a donc
+    // plus qu'à toujours afficher le plateau normalement.
     onShow() {
-      // Voir déclaration de doneStateEl plus haut: si PixelArt est
-      // débloqué, Remember est terminé — on affiche un état figé au lieu du
-      // plateau (jamais de render(), donc jamais de spawn/fusion/objectif
-      // traité pour cette visite).
-      const done = isPixelArtUnlocked();
-      doneStateEl?.classList.toggle("hidden", !done);
-      progressWrapEl?.classList.toggle("hidden", done);
-      boardWrapEl?.classList.toggle("hidden", done);
-      spawnInfoEl?.classList.toggle("hidden", done);
-      actionsEl?.classList.toggle("hidden", done);
-      if (done) {
-        const profile = loadProfile();
-        // Round 22 (retour utilisateur): "l'avatar+pseudo dans le menu (en
-        // haut) doit être aussi affiché avec le badge" — même bannière que
-        // le titre (voir main.js: renderTitleProfileBanner), donc même
-        // composant buildBadgeFrame plutôt qu'un avatar+texte bruts. Fourni
-        // via pointsApi (comme goToProfile/onBadgeEarned ci-dessus) pour ne
-        // pas faire dépendre ce module de main.js directement.
-        if (doneProfileIdentityEl && pointsApi.buildBadgeFrame) {
-          doneProfileIdentityEl.innerHTML = "";
-          doneProfileIdentityEl.appendChild(
-            pointsApi.buildBadgeFrame(
-              profile?.avatar ?? DEFAULT_AVATAR,
-              profile?.pseudo?.trim() || "Configurer mon profil",
-              profile?.activeBadge,
-              { chevron: true }
-            )
-          );
-        }
-        return;
-      }
       render();
     },
   };

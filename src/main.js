@@ -2906,13 +2906,6 @@ const sommationApi = initSommation({
   getPoints: () => infinitePoints,
   spendPoints: spendSharedPoints,
   addPoints: addSharedPoints,
-  // Round 19 (retour utilisateur): bouton "Mon profil" sous le message
-  // "terminé" — voir sommation.js: onShow().
-  goToProfile: () => pushView("community-profile"),
-  // Round 22: voir buildBadgeFrame() plus haut — passé tel quel pour que
-  // sommation.js affiche le MÊME composant avatar+pseudo+badge sur son
-  // écran "terminé" sans dépendre de main.js directement.
-  buildBadgeFrame,
   // Round 22 (retour utilisateur): "il faudra freeze le jeu lors du
   // déblocage d'un objet cosmétique [...] pareillement pour les badges" —
   // voir showCosmeticUnlockModal() plus bas.
@@ -2921,14 +2914,23 @@ const sommationApi = initSommation({
     // ci-dessus) — un badge Remember est un événement de progression au même
     // titre qu'un niveau terminé.
     saveProgressToCloud();
+    // tier >= PIXELART_BADGE_UNLOCK_TIER: 5e et DERNIÈRE récompense —
+    // Remember est désormais terminé (voir main.js: renderModeMenuButtons,
+    // qui désactive #menu-remember + son badge "terminé" dès le prochain
+    // passage par le menu). Retour utilisateur: "une fois la modale de
+    // récompense fermée, on redirige vers le menu" — onClose plutôt qu'un
+    // appel immédiat, pour ne rediriger qu'APRÈS que le joueur ait
+    // explicitement fermé la modale (jamais avant, voir aussi: "cette
+    // modale ne doit pas être fermable en cliquant en dehors").
+    const isFinal = tier >= PIXELART_BADGE_UNLOCK_TIER;
     showCosmeticUnlockModal({
       kind: "badge",
       badgeTier: tier,
       title: name ? `Bannière « ${name} »` : "Nouvelle bannière",
-      subtitle:
-        tier >= PIXELART_BADGE_UNLOCK_TIER
-          ? "Nouvelle bannière débloquée, et le thème PixelArt avec !"
-          : "Nouvelle bannière débloquée !",
+      subtitle: isFinal
+        ? "Nouvelle bannière débloquée, et le thème PixelArt avec !"
+        : "Nouvelle bannière débloquée !",
+      onClose: isFinal ? goToTitle : undefined,
     });
   },
 });
@@ -3023,6 +3025,11 @@ function showView(name, opts) {
     // utilisateur: "on vérifie que la grille est à jour selon la date") —
     // couvre le cas où l'app est restée ouverte à cheval sur minuit.
     renderDailyChallengeButton();
+    // Remember/Meditate: bascule disabled + badge "terminé" (voir
+    // renderModeMenuButtons) — un badge peut se débloquer PENDANT une
+    // session (via sa modale de récompense, qui redirige elle-même ici),
+    // donc jamais figé sur un état périmé.
+    renderModeMenuButtons();
   }
   renderActiveScreen();
   // alignDailyChallengeFab() mesure le DOM réel (getBoundingClientRect) —
@@ -3046,6 +3053,15 @@ function goBack() {
   if (viewStack.length <= 1) return;
   viewStack.pop();
   showView(viewStack[viewStack.length - 1]);
+}
+
+/** Retour utilisateur (Remember/Meditate terminés): "une fois la modale de
+ * récompense fermée, on redirige vers le menu" — réinitialise TOUTE la pile
+ * de navigation sur "title" plutôt qu'un simple goBack() (qui ne dépilerait
+ * qu'UN seul écran, pas forcément jusqu'au menu selon la pile en cours). */
+function goToTitle() {
+  viewStack = ["title"];
+  showView("title");
 }
 
 document.querySelectorAll("[data-back]").forEach((btn) => (btn.onclick = goBack));
@@ -3087,17 +3103,13 @@ function enterInfiniteDirect() {
  * saute toute étape intermédiaire (il n'y en a plus, l'ancienne boutique
  * Secrets a été retirée) et "Retour" ramène directement au menu titre.
  *
- * Round 12: une fois PixelArt débloqué, Remember est terminé et non-
- * rejouable (retour utilisateur: "ça veut dire qu'on a terminé Remember
- * donc il sera marqué comme terminé et ne sera plus jouable").
- *
- * Round 18 (retour utilisateur): "j'aimerais juste que ça ouvre la page
- * remember mais qu'à la place du jeu on a une page de réussite, de jeu
- * terminé" — donc on ouvre TOUJOURS l'écran Sommation (jamais Mon profil,
- * contrairement à avant ce round): c'est sommation.js: onShow() qui bascule
- * lui-même vers l'état "terminé" (#som-done-state) une fois PixelArt
- * débloqué, plutôt que main.js qui redirige ailleurs. */
+ * Une fois PixelArt débloqué (5e et dernière récompense), Remember est
+ * terminé et non-rejouable — le bouton #menu-remember est alors désactivé
+ * (voir renderModeMenuButtons ci-dessous), donc son onclick n'appelle même
+ * plus cette fonction ; le garde-fou ci-dessous n'est qu'un filet de
+ * sécurité si jamais elle était appelée dans cet état malgré tout. */
 function enterRememberDirect() {
+  if (isPixelArtUnlocked()) return;
   viewStack = ["title", "sommation"];
   showView("sommation");
 }
@@ -3110,7 +3122,6 @@ function enterRememberDirect() {
 // sommation.js pour Remember.
 const meditateEnergyEl = document.getElementById("meditate-energy");
 const meditatePlayStateEl = document.getElementById("meditate-play-state");
-const meditateDoneStateEl = document.getElementById("meditate-done-state");
 const meditatePreviewGridEl = document.getElementById("meditate-preview-grid");
 const meditatePreviewNameEl = document.getElementById("meditate-preview-name");
 const meditateSearchGridEl = document.getElementById("meditate-search-grid");
@@ -3312,13 +3323,17 @@ function renderMeditateEnergy() {
 // modale de récompense...), pour n'y rejouer AUCUNE animation.
 function renderMeditateView(justRevealedIndex = null, justFoundShapeId = null) {
   renderMeditateEnergy();
+  // Retour utilisateur: "on va retirer les 'pages' affichées lorsqu'on a
+  // terminé le mode [...] Meditate [...] le bouton dans le menu est
+  // disable avec un petit badge" — l'ancien écran "tout débloqué"
+  // (#meditate-done-state) est retiré ; le bouton #menu-meditate désactivé
+  // (voir renderModeMenuButtons) empêche normalement d'entrer ici une fois
+  // terminé, ce filet de sécurité redirige simplement vers le menu si cet
+  // écran était malgré tout atteint dans cet état.
   if (isMeditateAllUnlocked()) {
-    meditatePlayStateEl.classList.add("hidden");
-    meditateDoneStateEl.classList.remove("hidden");
+    goToTitle();
     return;
   }
-  meditatePlayStateEl.classList.remove("hidden");
-  meditateDoneStateEl.classList.add("hidden");
 
   const def = getMeditateCurrentDef();
   const grid = ensureMeditateGrid();
@@ -3381,12 +3396,13 @@ function onMeditateCellClick(index) {
     setTimeout(() => {
       hapticSuccess();
       saveProgressToCloud();
-      // Retour utilisateur: "on passe à la grille suivante une fois qu'on a
-      // fermé la modale de récompense" — renderMeditateView() (qui affiche
-      // la bannière suivante, ou l'écran "tout débloqué") est donc passé en
-      // onClose plutôt qu'appelé ici tout de suite: la grille "juste
-      // complétée" (voir ci-dessus) reste affichée derrière la modale
-      // jusqu'à sa fermeture explicite par le joueur.
+      // Retour utilisateur: "on ne doit pas passer à la grille suivante
+      // tant que la modale de récompense n'est pas fermée" — onClose
+      // plutôt qu'un appel immédiat, pour ne basculer qu'APRÈS que le
+      // joueur ait explicitement fermé la modale. Sur la DERNIÈRE bannière
+      // (result.allDone), on redirige vers le menu (retour utilisateur:
+      // "une fois la modale de récompense fermée, on redirige vers le
+      // menu") plutôt que de ré-afficher cet écran maintenant terminé.
       showCosmeticUnlockModal({
         kind: "badge",
         badgeTier: result.unlockedTier,
@@ -3394,7 +3410,7 @@ function onMeditateCellClick(index) {
         subtitle: result.allDone
           ? "Nouvelle bannière débloquée — tout le contenu de Meditate est désormais débloqué !"
           : "Nouvelle bannière débloquée !",
-        onClose: renderMeditateView,
+        onClose: result.allDone ? goToTitle : renderMeditateView,
       });
     }, MEDITATE_VICTORY_DELAY_MS);
   } else {
@@ -3624,16 +3640,47 @@ btnDailyReplayWatch.onclick = async () => {
 ensureTodayChallenge().then(() => renderDailyChallengeButton());
 renderDailyChallengeButton();
 
+/** Retour utilisateur: "on va retirer les 'pages' affichées lorsqu'on a
+ * terminé le mode Remember ou Meditate [...] le bouton dans le menu est
+ * disable avec un petit badge qui indique que le mode est terminé" —
+ * bascule `disabled` + la pastille "Terminé" (voir title.css:
+ * .menu-card-done-badge) sur #menu-remember/#menu-meditate selon
+ * isPixelArtUnlocked()/isMeditateAllUnlocked(). Appelée à chaque passage
+ * par le menu titre (voir showView: name === "title") — jamais figée sur un
+ * état périmé, même principe que renderDailyChallengeButton/
+ * renderTitleProfileBanner ci-dessus. */
+const menuRememberBtn = document.getElementById("menu-remember");
+const menuRememberDoneBadgeEl = document.getElementById("menu-remember-done-badge");
+const menuMeditateBtn = document.getElementById("menu-meditate");
+const menuMeditateDoneBadgeEl = document.getElementById("menu-meditate-done-badge");
+
+function renderModeMenuButtons() {
+  const rememberDone = isPixelArtUnlocked();
+  menuRememberBtn.disabled = rememberDone;
+  menuRememberDoneBadgeEl?.classList.toggle("hidden", !rememberDone);
+
+  const meditateDone = isMeditateAllUnlocked();
+  menuMeditateBtn.disabled = meditateDone;
+  menuMeditateDoneBadgeEl?.classList.toggle("hidden", !meditateDone);
+}
+
 document.getElementById("menu-story").onclick = enterStoryDirect;
 document.getElementById("menu-infinite").onclick = enterInfiniteDirect;
 document.getElementById("menu-community").onclick = () => pushView("community");
-document.getElementById("menu-remember").onclick = enterRememberDirect;
-document.getElementById("menu-meditate").onclick = () => pushView("meditate");
+menuRememberBtn.onclick = enterRememberDirect;
+// Garde-fou (voir renderModeMenuButtons): #menu-meditate est désactivé une
+// fois Meditate terminé, donc ce onclick ne devrait alors plus jamais se
+// déclencher (les navigateurs n'émettent pas de "click" sur un <button
+// disabled>) — vérifié malgré tout, même principe que enterRememberDirect.
+menuMeditateBtn.onclick = () => {
+  if (!isMeditateAllUnlocked()) pushView("meditate");
+};
 document.getElementById("menu-options").onclick = () => pushView("options");
 
 renderActiveScreen();
 renderTitleStoryProgress();
 renderTitleProfileBanner();
+renderModeMenuButtons();
 // Premier alignement (voir alignDailyChallengeFab ci-dessus): l'app démarre
 // TOUJOURS sur l'écran titre (viewStack initial, voir plus haut), donc
 // #view-title est déjà démasqué à ce stade sans passer par showView().

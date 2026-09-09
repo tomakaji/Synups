@@ -55,65 +55,6 @@
   flex-shrink: 0;
 }
 
-/* Round 19 (correctif): TOUTES les classes ".hidden" de cet écran (voir
-   sommation.js: onShow) sont scoped — cette codebase n'a pas de règle
-   ".hidden" générique (chaque élément bascule-visibilité doit la définir
-   lui-même, voir les autres ".xxx.hidden" du fichier). .som-progress-wrap
-   n'avait PAS la sienne : le badge "hidden" posé par onShow() n'avait donc
-   RIGOUREUSEMENT AUCUN EFFET visuel, ce qui provoquait exactement le bug
-   signalé ("l'écran affiche toujours la barre de progression [...] même une
-   fois Remember terminé" ET, symétriquement, l'inverse — voir
-   .som-done-state.hidden juste en dessous, touché par le même oubli). */
-.som-progress-wrap.hidden {
-  display: none;
-}
-
-/* État "terminé" (round 12, devenu l'écran normal du menu "Remember" round
-   18 — voir index.html: #som-done-state, main.js: enterRememberDirect).
-   Centré, sans interaction — "y a plus rien à voir ici" (retour
-   utilisateur), donc pas de bouton de jeu, juste une confirmation
-   chaleureuse + un lien vers le profil (voir .som-done-profile-link). */
-.som-done-state {
-  width: min(360px, 90vw);
-  margin: 72px auto 0;
-  text-align: center;
-}
-
-/* Voir commentaire de .som-progress-wrap.hidden ci-dessus: même oubli, même
-   correctif — c'est LUI qui causait le bug inverse ("on voit le message de
-   réussite" avant même d'avoir terminé Remember), #som-done-state restant
-   visible en permanence faute de cette règle. */
-.som-done-state.hidden {
-  display: none;
-}
-
-.som-done-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 16px;
-  border-radius: 999px;
-  background: rgba(110, 231, 255, 0.1);
-  border: 1px solid rgba(110, 231, 255, 0.4);
-  color: var(--accent);
-  font-size: 1.5rem;
-}
-
-.som-done-title {
-  margin: 0 0 8px;
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.som-done-message {
-  color: var(--text-dim);
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
 /* Teaser de la prochaine récompense — retour utilisateur round 11: "au
    dessus de la barre de progression, il faut teaser le joueur en affichant
    la prochaine récompense à débloquer". Masqué (voir sommation.js: render())
@@ -183,11 +124,6 @@
   align-items: center;
   justify-content: center;
   overflow: auto;
-}
-
-/* Voir .som-progress-wrap.hidden plus haut: même correctif nécessaire ici. */
-.som-board-wrap.hidden {
-  display: none;
 }
 
 .som-grid {
