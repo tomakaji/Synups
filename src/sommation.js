@@ -577,17 +577,24 @@ function genAccuracy(level) {
   return 0.1 + (1 - 0.1) * ((level - 1) / (MAX_GEN_LEVEL - 1));
 }
 
-/** 2% PAR couleur (r/g/b), FIXE quel que soit le niveau — retour utilisateur
+/** 3% PAR couleur (r/g/b), FIXE quel que soit le niveau — retour utilisateur
  * round 8: "le générateur blanc finalement progresse sur sa distribution
  * SANS augmenter les probabilités de sortir des couleurs" (revient sur le
- * round 7, où ces probas montaient jusqu'à 22%). Le blanc lui-même n'est
- * PAS tiré explicitement, il retombe en reste (voir rollGeneratorOutcome):
- * blanc = 1 - 3×each - fragmentDropChance(level). Comme fragmentDropChance
- * grandit avec le niveau alors que ce taux-ci reste fixe, seul le morceau
- * de générateur devient plus probable en montant de niveau — le blanc
- * absorbe la différence (voir fragmentDropChance ci-dessous). */
+ * round 7, où ces probas montaient jusqu'à 22%). Retour utilisateur
+ * (round suivant): "2% [...] c'est actuellement un peu trop faible [...]
+ * passe de 2% à 3%" — remonté à 3%, le blanc (calculé en reste ci-dessous)
+ * absorbant automatiquement la différence, sans qu'aucune autre proba n'ait
+ * besoin d'être touchée ici. Le blanc lui-même n'est PAS tiré explicitement,
+ * il retombe en reste (voir rollGeneratorOutcome): blanc = 1 - 3×each -
+ * fragmentDropChance(level). Comme fragmentDropChance grandit avec le niveau
+ * alors que ce taux-ci reste fixe, seul le morceau de générateur devient
+ * plus probable en montant de niveau — le blanc absorbe la différence (voir
+ * fragmentDropChance ci-dessous). Vérifié (audit round suivant, tous
+ * niveaux 1-10): 3×each + fragmentDropChance(level) reste toujours < 100%
+ * (max 39% au niveau 10), donc le blanc calculé en reste ne devient jamais
+ * négatif — la somme des 5 issues reste exactement 100% à tout niveau. */
 function whiteGenColorChance() {
-  return 0.02;
+  return 0.03;
 }
 
 /** Chance de loot un morceau de générateur — SEULE proba qui progresse avec
@@ -620,12 +627,21 @@ function maxSpawnTierFor(level) {
  * de niveau 1 que de niveaux supérieurs"): sa part ne descend jamais sous
  * 70%. La part restante (jusqu'à 30% au niveau max) se répartit entre les
  * rangs supérieurs débloqués, en décroissance géométrique (rang 2 > rang 3
- * > rang 4). */
+ * > rang 4).
+ * Bug corrigé (audit round suivant, retour utilisateur: "vérifie que les
+ * probas [...] ne dépassent jamais 100% [...] ni ne sont en dessous"):
+ * au niveau 2, maxSpawnTierFor(2) vaut 1 (le rang 2 ne se débloque qu'au
+ * niveau 3) mais higherShare (= 0.04×(niveau-1)) valait déjà 4% — l'ancien
+ * code soustrayait ces 4% du rang 1 PUIS retournait aussitôt (maxTier===1)
+ * SANS jamais les redistribuer à un rang supérieur inexistant: la somme des
+ * poids tombait à 96% au lieu de 100%. Corrigé en sortant tôt (maxTier===1
+ * -> tout au rang 1, 100%) avant même de calculer higherShare, pour tous
+ * les niveaux où aucun rang supérieur n'est débloqué (1 et 2). */
 function lightTierWeights(level) {
   const maxTier = maxSpawnTierFor(level);
+  if (maxTier === 1) return [1];
   const higherShare = Math.min(0.3, 0.04 * (level - 1));
   const weights = [1 - higherShare];
-  if (maxTier === 1) return weights;
   const decay = [];
   for (let t = 2; t <= maxTier; t++) decay.push(Math.pow(0.4, t - 2));
   const decaySum = decay.reduce((s, w) => s + w, 0);
