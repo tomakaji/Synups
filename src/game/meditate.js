@@ -81,8 +81,28 @@ function placeShapes(def, size) {
     for (const shape of def.shapes) {
       const rows = shape.cells.map((c) => c[0]);
       const cols = shape.cells.map((c) => c[1]);
-      const shapeH = Math.max(...rows) + 1;
-      const shapeW = Math.max(...cols) + 1;
+      // BUG corrigé (retour utilisateur: "j'ai l'impression qu'à chaque
+      // fois dans la grille les pièces sont toutes adjacentes [...] leur
+      // placement doit être complètement aléatoire, la seule retenue c'est
+      // qu'elles puissent toutes rentrer à l'intérieur") — `shape.cells`
+      // (MEDITATE_BADGE_DEFS) contient des coordonnées ABSOLUES dans la
+      // grille de preview division×division (nécessaire pour l'affichage,
+      // voir main.js: renderMeditatePreview), PAS des coordonnées déjà
+      // normalisées à l'origine (0,0) de la forme. Sans ce `minRow`/
+      // `minCol` (soustraits ci-dessous), une forme comme "verticale"
+      // ([[1,2],[2,2]] dans Comète) se voyait attribuer une boîte
+      // englobante 3×3 au lieu de 2×1 réels — réduisant à tort la plage
+      // d'ancrage ET conservant son décalage D'ORIGINE dans le preview une
+      // fois "replacée" dans la grille de recherche (anchorRow + r avec r
+      // non ramené à 0), au lieu d'un vrai placement libre sur TOUTE la
+      // grille. Plusieurs formes se retrouvaient ainsi systématiquement
+      // décalées vers la même zone (bas/droite selon leur position
+      // d'origine dans le preview) à chaque partie, jamais réparties
+      // uniformément.
+      const minRow = Math.min(...rows);
+      const minCol = Math.min(...cols);
+      const shapeH = Math.max(...rows) - minRow + 1;
+      const shapeW = Math.max(...cols) - minCol + 1;
       const maxRow = size - shapeH;
       const maxCol = size - shapeW;
       if (maxRow < 0 || maxCol < 0) {
@@ -93,7 +113,12 @@ function placeShapes(def, size) {
       for (let tries = 0; tries < 200 && !placed; tries++) {
         const anchorRow = Math.floor(Math.random() * (maxRow + 1));
         const anchorCol = Math.floor(Math.random() * (maxCol + 1));
-        const targetCells = shape.cells.map(([r, c]) => cellIndex(size, anchorRow + r, anchorCol + c));
+        // r - minRow / c - minCol: ramène chaque cellule à un décalage
+        // RELATIF à la forme (0-based) avant d'appliquer l'ancrage — la
+        // forme garde exactement la même géométrie interne, mais peut
+        // désormais être ancrée n'importe où dans la grille, pas seulement
+        // près de sa position d'origine dans le preview.
+        const targetCells = shape.cells.map(([r, c]) => cellIndex(size, anchorRow + (r - minRow), anchorCol + (c - minCol)));
         if (targetCells.every((idx) => !occupied.has(idx))) {
           // Retient, en plus de l'identifiant de forme, la case D'ORIGINE
           // dans la grille de preview division×division (shape.cells[i]
