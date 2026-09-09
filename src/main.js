@@ -826,6 +826,15 @@ const cosmeticUnlockRevealEl = document.getElementById("cosmetic-unlock-reveal")
 const cosmeticUnlockTitleEl = document.getElementById("cosmetic-unlock-title");
 const cosmeticUnlockTextEl = document.getElementById("cosmetic-unlock-text");
 
+// Retour utilisateur (Meditate): "on passe à la grille suivante une fois
+// qu'on a fermé la modale de récompense" — callback optionnel exécuté à la
+// fermeture (croix/bouton/clic extérieur, voir plus bas), jamais à
+// l'ouverture: seul onMeditateCellClick s'en sert pour l'instant (bascule
+// vers la bannière suivante/l'écran de fin SEULEMENT une fois la modale
+// refermée), mais généralisé ici plutôt que codé en dur pour Meditate, au
+// cas où un futur appelant en ait besoin aussi.
+let cosmeticUnlockOnClose = null;
+
 // Retour utilisateur (renommage): "avatar" (code, community-store.js:
 // AVATARS) s'appelle désormais "Badge" côté joueur, et l'ancien "badge"
 // (tier/cadre, sommation.js/dailyChallenge.js) s'appelle désormais
@@ -833,7 +842,8 @@ const cosmeticUnlockTextEl = document.getElementById("cosmetic-unlock-text");
 // pour un simple changement de vocabulaire visible), seulement dans les
 // libellés affichés ci-dessous et ailleurs dans ce fichier.
 /** @param {{kind: "avatar"|"badge"|"star", avatarId?: string, badgeTier?: number, title: string, subtitle: string}} opts */
-function showCosmeticUnlockModal({ kind, avatarId, badgeTier, title, subtitle }) {
+function showCosmeticUnlockModal({ kind, avatarId, badgeTier, title, subtitle, onClose }) {
+  cosmeticUnlockOnClose = typeof onClose === "function" ? onClose : null;
   cosmeticUnlockKickerEl.textContent =
     kind === "badge"
       ? "Nouvelle bannière débloquée"
@@ -877,7 +887,16 @@ function showCosmeticUnlockModal({ kind, avatarId, badgeTier, title, subtitle })
 }
 
 document.querySelectorAll("[data-cosmetic-unlock-close]").forEach((el) => {
-  el.onclick = () => cosmeticUnlockModal.classList.add("hidden");
+  el.onclick = () => {
+    cosmeticUnlockModal.classList.add("hidden");
+    // Exécute puis efface le callback AVANT de le lancer (pas après): s'il
+    // rouvrait lui-même une modale/déclenchait une nouvelle navigation, on
+    // ne veut jamais qu'un `cosmeticUnlockOnClose = null` tardif efface un
+    // callback entre-temps réassigné par ce nouvel appel.
+    const onClose = cosmeticUnlockOnClose;
+    cosmeticUnlockOnClose = null;
+    if (onClose) onClose();
+  };
 });
 
 // Round 21 (retour utilisateur: "intégrer une pub-récompense lorsqu'on
@@ -3326,6 +3345,12 @@ function onMeditateCellClick(index) {
     setTimeout(() => {
       hapticSuccess();
       saveProgressToCloud();
+      // Retour utilisateur: "on passe à la grille suivante une fois qu'on a
+      // fermé la modale de récompense" — renderMeditateView() (qui affiche
+      // la bannière suivante, ou l'écran "tout débloqué") est donc passé en
+      // onClose plutôt qu'appelé ici tout de suite: la grille "juste
+      // complétée" (voir ci-dessus) reste affichée derrière la modale
+      // jusqu'à sa fermeture explicite par le joueur.
       showCosmeticUnlockModal({
         kind: "badge",
         badgeTier: result.unlockedTier,
@@ -3333,8 +3358,8 @@ function onMeditateCellClick(index) {
         subtitle: result.allDone
           ? "Nouvelle bannière débloquée — tout le contenu de Meditate est désormais débloqué !"
           : "Nouvelle bannière débloquée !",
+        onClose: renderMeditateView,
       });
-      renderMeditateView();
     }, MEDITATE_VICTORY_DELAY_MS);
   } else {
     renderMeditateView();
