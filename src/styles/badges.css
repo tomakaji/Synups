@@ -305,42 +305,65 @@
   }
 }
 
-/* Tiers 6-7 "Comète"/"Supernova" — lot Défi Quotidien (voir la même
-   numérotation dans .badge-frame--tier-6/7 plus bas), repris du style sobre
-   du tier 1 pour la même raison (voir son commentaire là-bas). */
-/* Round suivant (retour utilisateur: "plus rouge/orange [...] la bordure
-   prendrait une autre forme, c'est trop classique là") — recoloré, et la
-   traînée/tête lumineuse d'une comète plutôt qu'une simple icône. La
-   miniature, elle, reste un carré classique aux bords arrondis (retour
-   utilisateur: "on la laisse dans un élément carré [...] c'est pas
-   gênant ici") — seule la bannière appliquée (plus bas) adopte une forme
-   en pointe. */
+/* Tiers 6-8 "Nébuleuse"/"Comète"/"Supernova" — lot Meditate (voir la même
+   numérotation dans .badge-frame--tier-6/7/8 plus bas), repris du style
+   sobre du tier 1 pour la même raison (voir son commentaire là-bas).
+   Retour utilisateur: "une troisième bannière débloquable avec des éclairs,
+   elle sera la première déblocable dans Meditate" — Nébuleuse (tier 6,
+   NOUVELLE) devient la première de la progression, Comète/Supernova
+   renumérotées 7/8 (simple décalage, pas de rétrocompatibilité nécessaire:
+   "c'est que du test y a pas de vrai joueur"). */
+/* Nébuleuse (tier 6, NOUVELLE): teal/cyan, nuage diffus (radial-gradient
+   flou, sans tête ponctuelle contrairement à Comète/Supernova ci-dessous)
+   pour rester visuellement distincte des deux autres tout en gardant le
+   même gabarit "pilule + repère décoratif" que le tier 1. */
 .badge-teaser--tier-6.earned {
+  border-color: rgba(94, 200, 255, 0.5);
+  background: linear-gradient(135deg, rgba(94, 200, 255, 0.18), var(--panel) 78%);
+}
+.badge-teaser--tier-6.earned .badge-teaser-deco {
+  background-image:
+    radial-gradient(10px 8px at 78% 24%, rgba(94, 200, 255, 0.55), transparent 70%),
+    radial-gradient(5px 5px at 70% 30%, rgba(160, 230, 255, 0.85), transparent);
+}
+.badge-teaser--tier-6.earned .badge-teaser-name {
+  color: #8fe0ff;
+}
+
+/* Comète (tier 7, ex-tier 6). Round suivant (retour utilisateur: "plus
+   rouge/orange [...] la bordure prendrait une autre forme, c'est trop
+   classique là") — recoloré, et la traînée/tête lumineuse d'une comète
+   plutôt qu'une simple icône. La miniature, elle, reste un carré classique
+   aux bords arrondis (retour utilisateur: "on la laisse dans un élément
+   carré [...] c'est pas gênant ici") — seule la bannière appliquée (plus
+   bas) adopte une forme en pointe. */
+.badge-teaser--tier-7.earned {
   border-color: rgba(255, 122, 69, 0.5);
   background: linear-gradient(135deg, rgba(255, 122, 69, 0.18), var(--panel) 78%);
 }
-.badge-teaser--tier-6.earned .badge-teaser-deco {
+.badge-teaser--tier-7.earned .badge-teaser-deco {
   background-image:
     radial-gradient(4px 4px at 80% 22%, #ff7a45, transparent),
     linear-gradient(150deg, transparent 45%, rgba(255, 150, 90, 0.35) 62%, rgba(255, 90, 40, 0.16) 80%, transparent 95%);
 }
-.badge-teaser--tier-6.earned .badge-teaser-name {
+.badge-teaser--tier-7.earned .badge-teaser-name {
   color: #ff9a63;
 }
 
-/* Round suivant (retour utilisateur: "c'est super, mais j'aimerais la même
-   chose sans bordure visible") — bordure retirée, l'éclat radiant (déjà
-   suffisamment lumineux) délimite la forme à lui seul. */
-.badge-teaser--tier-7.earned {
+/* Supernova (tier 8, ex-tier 7). Round suivant (retour utilisateur: "c'est
+   super, mais j'aimerais la même chose sans bordure visible") — bordure
+   retirée, l'éclat radiant (déjà suffisamment lumineux) délimite la forme à
+   lui seul. */
+.badge-teaser--tier-8.earned {
   border-color: transparent;
   background: linear-gradient(135deg, rgba(201, 143, 224, 0.2), var(--panel) 78%);
 }
-.badge-teaser--tier-7.earned .badge-teaser-deco {
+.badge-teaser--tier-8.earned .badge-teaser-deco {
   background-image:
     radial-gradient(circle at 78% 26%, rgba(201, 143, 224, 0.9) 0 4px, rgba(201, 143, 224, 0.35) 4px 13px, transparent 13px 70%),
     repeating-conic-gradient(from 0deg at 78% 26%, rgba(201, 143, 224, 0.14) 0deg 3deg, transparent 3deg 20deg);
 }
-.badge-teaser--tier-7.earned .badge-teaser-name {
+.badge-teaser--tier-8.earned .badge-teaser-name {
   color: #dcb8f0;
 }
 
@@ -655,30 +678,55 @@
   text-shadow: 0 0 8px rgba(57, 255, 20, 0.6);
 }
 
-/* Tiers 6-7 "Comète"/"Supernova" — lot dédié au mode Meditate (voir
-   game/meditate.js: MEDITATE_BADGE_DEFS — remplace l'ancien déblocage par
-   seuil d'Énergie du Défi Quotidien). Numérotation volontairement DISJOINTE
-   des tiers 1-5 ci-dessus (progression Remember) — même mécanisme visuel
-   (badge-frame--tier-N) mais deux progressions indépendantes, jamais
-   confondues. Repris du style sobre du tier 1 (pilule intacte + un repère
-   décoratif), simplement reteinté couleur "étoile" pour rester cohérent
-   avec .daily-challenge-fab/avatars comet/nova.
-   Tier 6 "Comète": rouge-orange, forme en pointe vers l'avant (au lieu
-   d'une pilule classique) — la tête lumineuse de la comète se loge dans la
-   pointe. Le CSS `border` ne suit pas les arêtes introduites par un
-   clip-path (seulement les bords d'origine du rectangle) : le contour est
-   donc simulé par un double clip-path — .badge-frame lui-même porte un
-   fond plein qui sert de "liseré", et .badge-frame-deco, légèrement
-   rétréci (inset) et redécoupé au même polygone, vient poser par-dessus le
-   fond sombre + la traînée, ne laissant dépasser qu'un fin bord coloré
-   tout du long, pointe comprise. */
+/* Tiers 6-8 "Nébuleuse"/"Comète"/"Supernova" — lot dédié au mode Meditate
+   (voir game/meditate.js: MEDITATE_BADGE_DEFS — remplace l'ancien
+   déblocage par seuil d'Énergie du Défi Quotidien). Numérotation
+   volontairement DISJOINTE des tiers 1-5 ci-dessus (progression Remember)
+   — même mécanisme visuel (badge-frame--tier-N) mais deux progressions
+   indépendantes, jamais confondues. Repris du style sobre du tier 1 (pilule
+   intacte + un repère décoratif), simplement reteinté couleur "étoile"
+   pour rester cohérent avec .daily-challenge-fab/avatars comet/nova.
+   Tier 6 "Nébuleuse" (NOUVELLE, retour utilisateur: "une troisième bannière
+   [...] la première déblocable dans Meditate"): pilule classique comme le
+   tier 1 (pas de clip-path en pointe comme Comète ni de glow sans bordure
+   comme Supernova, pour rester visuellement DISTINCTE des deux), teintée
+   teal/cyan (nuage diffus, sans tête lumineuse ponctuelle). Comète/
+   Supernova simplement renumérotées 7/8 ci-dessous (pas de changement
+   visuel pour elles). */
 .badge-frame--tier-6 {
+  border-color: rgba(94, 200, 255, 0.55);
+  background: linear-gradient(135deg, rgba(94, 200, 255, 0.16), transparent 78%);
+}
+.badge-frame--tier-6 .badge-frame-deco {
+  background-image:
+    radial-gradient(12px 9px at 85% 50%, rgba(94, 200, 255, 0.5), transparent 70%),
+    radial-gradient(5px 5px at 78% 42%, rgba(160, 230, 255, 0.85), transparent);
+}
+.badge-frame-preview .badge-frame--tier-6 .badge-frame-deco {
+  background-image:
+    radial-gradient(20px 15px at 85% 50%, rgba(94, 200, 255, 0.5), transparent 70%),
+    radial-gradient(8px 8px at 76% 40%, rgba(160, 230, 255, 0.85), transparent);
+}
+.badge-frame--tier-6 .badge-frame-pseudo {
+  color: #8fe0ff;
+}
+
+/* Tier 7 "Comète" (ex-tier 6): rouge-orange, forme en pointe vers l'avant
+   (au lieu d'une pilule classique) — la tête lumineuse de la comète se
+   loge dans la pointe. Le CSS `border` ne suit pas les arêtes introduites
+   par un clip-path (seulement les bords d'origine du rectangle) : le
+   contour est donc simulé par un double clip-path — .badge-frame lui-même
+   porte un fond plein qui sert de "liseré", et .badge-frame-deco,
+   légèrement rétréci (inset) et redécoupé au même polygone, vient poser
+   par-dessus le fond sombre + la traînée, ne laissant dépasser qu'un fin
+   bord coloré tout du long, pointe comprise. */
+.badge-frame--tier-7 {
   border-color: transparent;
   background: rgba(255, 122, 69, 0.55);
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
   padding-right: 18px;
 }
-.badge-frame--tier-6 .badge-frame-deco {
+.badge-frame--tier-7 .badge-frame-deco {
   inset: 1px;
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
   background-color: #1a1310;
@@ -689,39 +737,39 @@
 /* Le même angle (12px de profondeur) s'aplatirait presque à rien sur une
    bannière bien plus large/haute (avatar 40px) — profondeur reprise à
    28px pour garder le même angle visuel qu'en petit format. */
-.badge-frame-preview .badge-frame--tier-6 {
+.badge-frame-preview .badge-frame--tier-7 {
   clip-path: polygon(0 0, calc(100% - 28px) 0, 100% 50%, calc(100% - 28px) 100%, 0 100%);
   padding-right: 32px;
 }
-.badge-frame-preview .badge-frame--tier-6 .badge-frame-deco {
+.badge-frame-preview .badge-frame--tier-7 .badge-frame-deco {
   inset: 1.5px;
   clip-path: polygon(0 0, calc(100% - 28px) 0, 100% 50%, calc(100% - 28px) 100%, 0 100%);
   background-image:
     radial-gradient(6px 6px at calc(100% - 15px) 50%, #ff7a45, transparent),
     linear-gradient(200deg, transparent 40%, rgba(255, 150, 90, 0.35) 64%, rgba(255, 90, 40, 0.2) 85%, transparent 100%);
 }
-.badge-frame--tier-6 .badge-frame-pseudo {
+.badge-frame--tier-7 .badge-frame-pseudo {
   color: #ff9a63;
 }
 
-/* Tier 7 "Supernova" — éclat radiant, sans bordure visible (retour
-   utilisateur: "la même chose sans bordure visible"). */
-.badge-frame--tier-7 {
+/* Tier 8 "Supernova" (ex-tier 7) — éclat radiant, sans bordure visible
+   (retour utilisateur: "la même chose sans bordure visible"). */
+.badge-frame--tier-8 {
   border-color: transparent;
   background: linear-gradient(135deg, rgba(201, 143, 224, 0.18), transparent 75%);
   box-shadow: 0 0 12px -6px rgba(201, 143, 224, 0.6);
 }
-.badge-frame--tier-7 .badge-frame-deco {
+.badge-frame--tier-8 .badge-frame-deco {
   background-image:
     radial-gradient(circle at 85% 50%, rgba(201, 143, 224, 0.9) 0 2px, rgba(201, 143, 224, 0.35) 2px 7px, transparent 7px 65%),
     repeating-conic-gradient(from 0deg at 85% 50%, rgba(201, 143, 224, 0.14) 0deg 3deg, transparent 3deg 20deg);
 }
-.badge-frame-preview .badge-frame--tier-7 .badge-frame-deco {
+.badge-frame-preview .badge-frame--tier-8 .badge-frame-deco {
   background-image:
     radial-gradient(circle at 82% 50%, rgba(201, 143, 224, 0.9) 0 4px, rgba(201, 143, 224, 0.35) 4px 14px, transparent 14px 75%),
     repeating-conic-gradient(from 0deg at 82% 50%, rgba(201, 143, 224, 0.14) 0deg 3deg, transparent 3deg 20deg);
 }
-.badge-frame--tier-7 .badge-frame-pseudo {
+.badge-frame--tier-8 .badge-frame-pseudo {
   color: #dcb8f0;
 }
 

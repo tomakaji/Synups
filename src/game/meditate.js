@@ -18,12 +18,21 @@ import { loadMeditateState, saveMeditateState, spendStars } from "./storage.js";
  * Chaque forme n'est JAMAIS pivotée/retournée au moment du placement (voir
  * placeShapes) — seul son ancrage varie d'une partie à l'autre.
  *
- * Comète (tier 6, division 3x3, exemple donné par le retour utilisateur):
+ * Nébuleuse (tier 6, division 2x2, retour utilisateur: "une troisième
+ * bannière débloquable avec des éclairs, la première déblocable dans
+ * Meditate" — volontairement plus simple que Comète/Supernova ci-dessous,
+ * en guise d'introduction au mini-jeu): un tromino en L (3 cases) et une
+ * case seule — vérifié pour couvrir exactement les 4 cases une seule fois
+ * chacune (3+1=4). Pas de rétrocompatibilité nécessaire (retour
+ * utilisateur: "c'est que du test y a pas de vrai joueur") — Comète/
+ * Supernova simplement renumérotées 7/8 ci-dessous.
+ *
+ * Comète (tier 7, division 3x3, exemple donné par le retour utilisateur):
  * un T, une barre horizontale (2 cases), une barre verticale (2 cases) et
  * un carré seul — vérifié pour couvrir exactement les 9 cases une seule
  * fois chacune (4+2+2+1=9).
  *
- * Supernova (tier 7, division 4x4, découpage propre — pas donné par le
+ * Supernova (tier 8, division 4x4, découpage propre — pas donné par le
  * retour utilisateur, dessiné ici en suivant le même principe): un carré
  * 2x2, une barre verticale de 4 cases, un T, une barre verticale de 2
  * cases, et deux cases seules — vérifié pour couvrir exactement les 16
@@ -31,6 +40,15 @@ import { loadMeditateState, saveMeditateState, spendStars } from "./storage.js";
 export const MEDITATE_BADGE_DEFS = [
   {
     tier: 6,
+    name: "Nébuleuse",
+    division: 2,
+    shapes: [
+      { id: "l", cells: [[0, 0], [0, 1], [1, 1]] }, // tromino en L
+      { id: "solo", cells: [[1, 0]] }, // case seule
+    ],
+  },
+  {
+    tier: 7,
     name: "Comète",
     division: 3,
     shapes: [
@@ -41,7 +59,7 @@ export const MEDITATE_BADGE_DEFS = [
     ],
   },
   {
-    tier: 7,
+    tier: 8,
     name: "Supernova",
     division: 4,
     shapes: [

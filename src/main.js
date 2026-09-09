@@ -2636,7 +2636,7 @@ function refreshProfileBadges() {
   if (!profileSommationBadgesEl) return;
   profileSommationBadgesEl.innerHTML = "";
   // Deux lots de badges indépendants affichés dans la MÊME grille — voir
-  // game/meditate.js: MEDITATE_BADGE_DEFS, tiers 6-7 DISJOINTS des tiers 1-5
+  // game/meditate.js: MEDITATE_BADGE_DEFS, tiers 6-8 DISJOINTS des tiers 1-5
   // de getSommationBadges() (voir badges.css) donc aucun risque de
   // collision dans activeBadge (juste un numéro de tier, peu importe la
   // source — voir buildBadgeFrame). Round suivant (retour utilisateur):
@@ -2813,7 +2813,7 @@ profilePseudoInput.addEventListener("input", refreshProfileBadgePreview);
 // d'Options (voir plus haut btnPixelartDebugUnlock), donc même effet de
 // bord accepté (débloque aussi le thème PixelArt en même temps). Round
 // suivant (retour utilisateur: "ajoute les deux [bannières Étoiles] sur le
-// bouton admin"): débloque aussi Comète/Supernova (tiers 6-7). Round Meditate
+// bouton admin"): débloque aussi Nébuleuse/Comète/Supernova (tiers 6-8). Round Meditate
 // (retour utilisateur): l'ancien debugUnlockStarBadges (seuil d'Énergie,
 // dailyChallenge.js) est remplacé par debugUnlockMeditateBadges (voir
 // game/meditate.js) — ce bouton couvre ainsi toujours les 7 bannières d'un
@@ -3146,7 +3146,7 @@ function enterRememberDirect() {
   showView("sommation");
 }
 
-// ---------- Meditate (mini-jeu de révélation, bannières Comète/Supernova) ----------
+// ---------- Meditate (mini-jeu de révélation, bannières Nébuleuse/Comète/Supernova) ----------
 // Retour utilisateur: remplace l'ancien déblocage par seuil d'Énergie — voir
 // game/meditate.js pour toute la logique (génération de grille, révélation,
 // progression). Ce bloc ne fait que du rendu DOM + relais des clics vers ce
@@ -3175,14 +3175,29 @@ if (meditateDebugPointsBtn) {
  * `background-image` empilable sur un calque de taille arbitraire (voir
  * buildMeditateBackdrop ci-dessous). */
 const MEDITATE_ART_RECIPES = {
+  // Nébuleuse (tier 6, NOUVELLE — retour utilisateur: "une troisième
+  // bannière débloquable avec des éclairs, la première déblocable dans
+  // Meditate"): reprise TELLE QUELLE de .badge-teaser--tier-6.earned +
+  // .badge-teaser-deco (voir badges.css), même principe que les deux
+  // recettes ci-dessous.
   6: {
+    background: "#0d1a1f",
+    image:
+      "linear-gradient(135deg, rgba(94, 200, 255, 0.18), transparent 78%), " +
+      "radial-gradient(10px 8px at 78% 24%, rgba(94, 200, 255, 0.55), transparent 70%), " +
+      "radial-gradient(5px 5px at 70% 30%, rgba(160, 230, 255, 0.85), transparent)",
+  },
+  // Comète (tier 7, ex-tier 6 — simple renumérotation, pas de changement
+  // visuel: voir badges.css).
+  7: {
     background: "#1f130d",
     image:
       "linear-gradient(135deg, rgba(255, 122, 69, 0.18), transparent 78%), " +
       "radial-gradient(4px 4px at 80% 22%, #ff7a45, transparent), " +
       "linear-gradient(150deg, transparent 45%, rgba(255, 150, 90, 0.35) 62%, rgba(255, 90, 40, 0.16) 80%, transparent 95%)",
   },
-  7: {
+  // Supernova (tier 8, ex-tier 7 — simple renumérotation).
+  8: {
     background: "#170f1f",
     image:
       "linear-gradient(135deg, rgba(201, 143, 224, 0.2), transparent 78%), " +
@@ -3190,7 +3205,7 @@ const MEDITATE_ART_RECIPES = {
       "repeating-conic-gradient(from 0deg at 78% 26%, rgba(201, 143, 224, 0.14) 0deg 3deg, transparent 3deg 20deg)",
   },
 };
-const MEDITATE_NAME_COLORS = { 6: "#ff9a63", 7: "#dcb8f0" };
+const MEDITATE_NAME_COLORS = { 6: "#8fe0ff", 7: "#ff9a63", 8: "#dcb8f0" };
 
 /** Un seul grand calque ("backdrop") portant la recette d'imagerie complète
  * de la bannière, positionné en absolu à l'intérieur d'une "fenêtre"
