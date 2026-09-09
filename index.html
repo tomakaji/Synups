@@ -219,6 +219,28 @@
             <button data-i18n-attr="title:view-story-select.title;aria-label:view-story-select.title" id="btn-level-grid" class="icon-btn" aria-label="Sélection de niveau" title="Sélection de niveau">
               <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>
             </button>
+            <!-- Retour utilisateur: "on va retirer le nom des niveaux [en
+                 Histoire], et on va juste garder la fonctionnalité de
+                 navigation [...] un button-icon plutot que les fleches [...]
+                 qui s'accorde avec les autres boutons [...] alignés à
+                 gauche" — remplace les anciens boutons Précédent/Suivant
+                 (texte brut &larr;/&rarr;, sans classe icon-btn, qui
+                 vivaient dans #nav-static ci-dessous) par de vrais icon-btn,
+                 au même gabarit que btn-level-grid ci-dessus, directement
+                 dans .header-actions, visibles par défaut ici (Story
+                 UNIQUEMENT, comme btn-level-grid ci-dessus — PAS masqués
+                 par défaut comme btn-infinite-settings/btn-infinite-next
+                 ci-dessous, sans quoi ils resteraient invisibles au tout
+                 premier rendu avant que main.js:setMode("story") ne les
+                 révèle). Chevrons repris du back-btn (voir plus haut:
+                 polyline "15 18 9 12 15 6"), simplement inversé pour
+                 "suivant". -->
+            <button data-i18n-attr="title:common.niveau_precedent;aria-label:common.niveau_precedent" id="btn-prev" class="icon-btn" aria-label="Niveau précédent" title="Niveau précédent">
+              <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+            <button data-i18n-attr="title:common.niveau_suivant;aria-label:common.niveau_suivant" id="btn-next" class="icon-btn" aria-label="Niveau suivant" title="Niveau suivant">
+              <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
             <button data-i18n-attr="title:common.reglages;aria-label:common.reglages" id="btn-infinite-settings" class="icon-btn hidden" aria-label="Réglages" title="Réglages">
               <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="3"></circle>
@@ -238,13 +260,17 @@
             </button>
           </div>
           <div class="play-controls">
+            <!-- Retour utilisateur: "on va retirer le nom des niveaux [...]
+                 à droite, on affiche juste le numéro du niveau avec un
+                 dièse devant et sur deux chiffres" — les anciens boutons
+                 Précédent/Suivant ont migré en icon-btn dans .header-actions
+                 (voir plus haut), il ne reste ici que le numéro "#NN" (voir
+                 main.js: loadLevel, `#${String(n).padStart(2,"0")}`).
+                 #nav-static garde son id/sa classe .nav-group (masqué/révélé
+                 par setMode comme les 3 autres variantes ci-dessous), même
+                 s'il ne contient plus qu'un seul enfant. -->
             <span id="nav-static" class="nav-group">
-              <!-- Prev/Suivant: gardés pour le confort du développement, seront
-                   retirés à terme (voir demande utilisateur) une fois la
-                   sélection de niveau jugée suffisante pour naviguer. -->
-              <button data-i18n-attr="title:common.precedent_dev;aria-label:common.niveau_precedent" id="btn-prev" aria-label="Niveau précédent" title="Précédent (dev)">&larr;</button>
-              <span id="level-name">1</span>
-              <button data-i18n-attr="title:common.suivant_dev;aria-label:common.niveau_suivant" id="btn-next" aria-label="Niveau suivant" title="Suivant (dev)">&rarr;</button>
+              <span id="level-name">#01</span>
             </span>
             <!-- Retour utilisateur: "retire le bloc qui indique la
                  difficulté et montre le caractère infini [...] plutôt

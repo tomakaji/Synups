@@ -316,8 +316,15 @@ body {
   accent-color: var(--accent);
 }
 
+/* Retour utilisateur: "on va retirer le nom des niveaux [...] à droite, on
+   affiche juste le numéro du niveau [...] sur deux chiffres" — contenu
+   désormais toujours "#NN" (4 caractères fixes, voir main.js: loadLevel),
+   min-width élargi en conséquence (avant: un simple chiffre "1" à "10").
+   #nav-static (son parent, voir index.html) reste poussé à l'extrémité
+   droite du header par .play-controls (margin-left:auto, voir
+   screen-header.css) — rien à faire ici pour "à droite". */
 #level-name {
-  min-width: 1.5em;
+  min-width: 2.6em;
   text-align: center;
 }
 

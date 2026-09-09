@@ -552,7 +552,11 @@ function loadLevel(index, { silent = false } = {}) {
   currentLevelIndex = ((index % levels.length) + levels.length) % levels.length;
   currentLevel = levels[currentLevelIndex];
   grid = new LightUpGrid(currentLevel);
-  levelNameEl.textContent = `${currentLevelIndex + 1}. ${currentLevel.name}`;
+  // Retour utilisateur: "on va retirer le nom des niveaux [...] à droite,
+  // on affiche juste le numéro du niveau avec un dièse devant et sur deux
+  // chiffres (ex: '#13' ou '#06')" — remplace l'ancien
+  // "${index+1}. ${currentLevel.name}" (nom du niveau visible).
+  levelNameEl.textContent = `#${String(currentLevelIndex + 1).padStart(2, "0")}`;
   startBoard();
   // Round 23: voir queueNewMechanicSchemas() plus bas — uniquement le mode
   // Histoire (seul mode qui appelle loadLevel(), voir plus haut).
@@ -1912,10 +1916,19 @@ btnInfiniteSettings.onclick = () => {
   pushView("infinite-config");
 };
 
-document.getElementById("btn-prev").onclick = () => {
+// Retour utilisateur: "un button-icon plutot que les fleches [...] qui
+// s'accorde avec les autres boutons [...] alignés à gauche" — ces deux
+// boutons vivent maintenant dans .header-actions (voir index.html), au même
+// titre que btn-level-grid; conservés en `const` ici (au lieu d'un simple
+// `document.getElementById(...).onclick =` comme avant) car setMode() a
+// aussi besoin de les référencer pour les masquer/révéler par mode (voir
+// plus bas, même pattern que btnLevelGrid/btnInfiniteSettings).
+const btnPrev = document.getElementById("btn-prev");
+const btnNext = document.getElementById("btn-next");
+btnPrev.onclick = () => {
   if (!boardLocked) loadLevel(currentLevelIndex - 1);
 };
-document.getElementById("btn-next").onclick = () => {
+btnNext.onclick = () => {
   if (!boardLocked) loadLevel(currentLevelIndex + 1);
 };
 
@@ -2835,6 +2848,12 @@ function setMode(next) {
     navCommunityEl.classList.add("hidden");
     navDailyEl.classList.add("hidden");
     btnLevelGrid.classList.remove("hidden");
+    // Retour utilisateur: "un button-icon [...] alignés à gauche" — btnPrev/
+    // btnNext vivent maintenant dans .header-actions au même titre que
+    // btnLevelGrid (voir index.html), donc révélés/masqués de la même façon,
+    // Story UNIQUEMENT.
+    btnPrev.classList.remove("hidden");
+    btnNext.classList.remove("hidden");
     btnInfiniteSettings.classList.add("hidden");
     btnInfiniteNext.classList.add("hidden");
     btnCommunityLike.classList.add("hidden");
@@ -2848,6 +2867,8 @@ function setMode(next) {
     navCommunityEl.classList.remove("hidden");
     navDailyEl.classList.add("hidden");
     btnLevelGrid.classList.add("hidden");
+    btnPrev.classList.add("hidden");
+    btnNext.classList.add("hidden");
     btnInfiniteSettings.classList.add("hidden");
     btnInfiniteNext.classList.add("hidden");
     // Pas de `remove("hidden")` inconditionnel ici: sur sa PROPRE grille
@@ -2857,7 +2878,14 @@ function setMode(next) {
     // `currentCommunityLevel`, déjà positionné par `loadCommunityLevel` avant
     // que `setMode` ne soit appelée) pour ne pas la dupliquer ici.
     refreshCommunityLikeButton();
-    playControlsEl.classList.remove("play-controls--left");
+    // Retour utilisateur: "dans le mode communauté, le nom du niveau doit
+    // être aligné à gauche, pas à droite" — même override que le mode
+    // Défi Quotidien ci-dessous (.play-controls a margin-left:auto par
+    // défaut, voir screen-header.css): #btn-community-like vit dans
+    // .play-action-bar, un conteneur SÉPARÉ de .header-actions/
+    // .play-controls (voir index.html) — appliquer --left ici ne le
+    // déplace donc pas, seul le titre+auteur du niveau glisse à gauche.
+    playControlsEl.classList.add("play-controls--left");
     playView.classList.remove("hidden");
     return;
   }
@@ -2874,6 +2902,8 @@ function setMode(next) {
     navCommunityEl.classList.add("hidden");
     navDailyEl.classList.remove("hidden");
     btnLevelGrid.classList.add("hidden");
+    btnPrev.classList.add("hidden");
+    btnNext.classList.add("hidden");
     btnInfiniteSettings.classList.add("hidden");
     btnInfiniteNext.classList.add("hidden");
     btnCommunityLike.classList.add("hidden");
@@ -2887,6 +2917,8 @@ function setMode(next) {
   navCommunityEl.classList.add("hidden");
   navDailyEl.classList.add("hidden");
   btnLevelGrid.classList.add("hidden");
+  btnPrev.classList.add("hidden");
+  btnNext.classList.add("hidden");
   btnInfiniteSettings.classList.remove("hidden");
   btnInfiniteNext.classList.remove("hidden");
   btnCommunityLike.classList.add("hidden");
