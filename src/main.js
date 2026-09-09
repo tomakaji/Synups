@@ -2980,6 +2980,7 @@ function showView(name, opts) {
   if (name === "community-profile") renderCommunityProfile();
   if (name === "editor") editorApi.onShow();
   if (name === "sommation") sommationApi.onShow();
+  if (name === "meditate") renderMeditateView();
   if (name === "options") {
     renderPixelArtOption();
     renderPlayGamesSection();
@@ -3002,12 +3003,6 @@ function showView(name, opts) {
   // ne peut donner un résultat correct qu'UNE FOIS #view-title démasqué,
   // donc après renderActiveScreen() ci-dessus, jamais avant.
   if (name === "title") alignDailyChallengeFab();
-  // Même raisonnement pour Meditate: renderMeditateView() mesure la largeur
-  // RÉELLE de .meditate-search-wrap (clientWidth, voir
-  // renderMeditateSearchGrid) pour calculer la taille des cases — appelée
-  // AVANT renderActiveScreen() ci-dessus, #view-meditate serait encore
-  // display:none et clientWidth vaudrait 0 (grille cassée, cases de 1px).
-  if (name === "meditate") renderMeditateView();
 }
 
 /** Empile et affiche un nouvel écran — c'est la navigation "normale" (un
@@ -3127,32 +3122,34 @@ const MEDITATE_ART_RECIPES = {
   },
 };
 const MEDITATE_NAME_COLORS = { 6: "#ff9a63", 7: "#dcb8f0" };
-const MEDITATE_PREVIEW_CELL_SIZE = 60;
 
 /** Un seul grand calque ("backdrop") portant la recette d'imagerie complète
- * de la bannière, à la taille `division*cellSize` — chaque "fenêtre"
- * (`overflow:hidden`, cellSize×cellSize, voir meditate.css:
- * .meditate-window) le positionne en absolu, décalé de `-row*cellSize`/
- * `-col*cellSize`: même technique de "tuilage" partagée par la preview
- * (damier division×division) ET les fragments révélés de la grille de
- * recherche (à une échelle différente), pour ne jamais recomposer deux fois
- * la même image. */
-function makeMeditateWindow(tier, division, cellSize, row, col) {
+ * de la bannière, positionné en absolu à l'intérieur d'une "fenêtre"
+ * (`overflow:hidden`, voir meditate.css: .meditate-window) — TOUT en
+ * pourcentages plutôt qu'en pixels calculés en JS (retour utilisateur: "il
+ * faut pas calculer la largeur [...] juste un pourcentage, ou du flex en
+ * CSS pour que ce soit responsive"): un backdrop large de `division*100%`
+ * et décalé de `-row*100%`/`-col*100%` reproduit exactement la même
+ * découpe QUELLE QUE SOIT la taille réelle de la fenêtre (fixée par CSS —
+ * grid-template-columns: repeat(N, 1fr) + aspect-ratio:1, voir
+ * renderMeditatePreview/renderMeditateSearchGrid), sans jamais avoir besoin
+ * de connaître sa taille en pixels ici. Même technique de "tuilage"
+ * partagée par la preview (damier division×division) ET les fragments
+ * révélés de la grille de recherche, pour ne jamais recomposer deux fois la
+ * même image. */
+function makeMeditateWindow(tier, division, row, col) {
   const recipe = MEDITATE_ART_RECIPES[tier];
   const win = document.createElement("div");
   win.className = "meditate-window";
-  win.style.width = `${cellSize}px`;
-  win.style.height = `${cellSize}px`;
 
   const backdrop = document.createElement("div");
   backdrop.className = "meditate-art-backdrop";
-  const full = division * cellSize;
-  backdrop.style.width = `${full}px`;
-  backdrop.style.height = `${full}px`;
+  backdrop.style.width = `${division * 100}%`;
+  backdrop.style.height = `${division * 100}%`;
   backdrop.style.background = recipe.background;
   backdrop.style.backgroundImage = recipe.image;
-  backdrop.style.top = `${-row * cellSize}px`;
-  backdrop.style.left = `${-col * cellSize}px`;
+  backdrop.style.top = `${-row * 100}%`;
+  backdrop.style.left = `${-col * 100}%`;
 
   win.appendChild(backdrop);
   return win;
@@ -3170,7 +3167,10 @@ function makeMeditateWindow(tier, division, cellSize, row, col) {
  * constatables, donc détourées"), jamais deux cases de la même forme. */
 function renderMeditatePreview(def, revealState) {
   meditatePreviewGridEl.innerHTML = "";
-  meditatePreviewGridEl.style.gridTemplateColumns = `repeat(${def.division}, ${MEDITATE_PREVIEW_CELL_SIZE}px)`;
+  // 1fr: chaque colonne se partage également la largeur du conteneur (voir
+  // meditate.css: .meditate-preview-grid, largeur bornée via `min()`) —
+  // aucune taille de case calculée ici, purement délégué au CSS.
+  meditatePreviewGridEl.style.gridTemplateColumns = `repeat(${def.division}, 1fr)`;
 
   const shapeAt = Array.from({ length: def.division }, () => Array(def.division).fill(null));
   for (const shape of def.shapes) {
@@ -3179,7 +3179,7 @@ function renderMeditatePreview(def, revealState) {
 
   for (let row = 0; row < def.division; row++) {
     for (let col = 0; col < def.division; col++) {
-      const win = makeMeditateWindow(def.tier, def.division, MEDITATE_PREVIEW_CELL_SIZE, row, col);
+      const win = makeMeditateWindow(def.tier, def.division, row, col);
       const shapeId = shapeAt[row][col];
       const found = shapeId != null && revealState[shapeId];
       win.classList.add("meditate-preview-cell", found ? "meditate-preview-cell--found" : "meditate-preview-cell--locked");
@@ -3204,27 +3204,25 @@ function renderMeditatePreview(def, revealState) {
 function renderMeditateSearchGrid(def, grid) {
   meditateSearchGridEl.innerHTML = "";
   // Retour utilisateur: "la grille de jeu doit être grande, prendre la
-  // largeur du téléphone et s'adapter en hauteur" — taille de case calculée
-  // à partir de la largeur RÉELLE du conteneur (.meditate-search-wrap, déjà
-  // sans padding horizontal propre, voir meditate.css) plutôt qu'une valeur
-  // fixe: la grille occupe donc toujours toute la largeur disponible, quelle
-  // que soit la taille de l'écran, et sa hauteur suit mécaniquement
-  // (cellSize × grid.size) puisque chaque case reste un carré.
-  const wrapWidth = meditateSearchGridEl.parentElement?.clientWidth || window.innerWidth;
-  const cellSize = Math.max(1, Math.floor(wrapWidth / grid.size));
-  meditateSearchGridEl.style.gridTemplateColumns = `repeat(${grid.size}, ${cellSize}px)`;
+  // largeur du téléphone et s'adapter en hauteur [...] juste un
+  // pourcentage, ou du flex en CSS" — aucune taille de case calculée en JS:
+  // `1fr` fait que chaque colonne se partage également la largeur RÉELLE de
+  // .meditate-search-grid (width:100%, voir meditate.css), et `aspect-ratio:
+  // 1` (posé sur .meditate-search-cell) fait suivre la hauteur de chaque
+  // case sur sa propre largeur — donc sur toute la grille, entièrement
+  // recalculé par le navigateur à chaque reflow (rotation, redimensionnement
+  // desktop...), sans le moindre JS.
+  meditateSearchGridEl.style.gridTemplateColumns = `repeat(${grid.size}, 1fr)`;
 
   grid.cells.forEach((cell, index) => {
     let el;
     if (cell.revealed && cell.shapeId != null) {
-      el = makeMeditateWindow(def.tier, def.division, cellSize, cell.originRow, cell.originCol);
+      el = makeMeditateWindow(def.tier, def.division, cell.originRow, cell.originCol);
       el.classList.add("meditate-search-cell", "meditate-search-cell--fragment");
     } else {
       el = document.createElement("button");
       el.type = "button";
       el.className = "meditate-search-cell";
-      el.style.width = `${cellSize}px`;
-      el.style.height = `${cellSize}px`;
       if (cell.revealed) {
         el.classList.add("meditate-search-cell--empty");
         el.disabled = true;
@@ -3560,13 +3558,6 @@ window.addEventListener("resize", () => {
     // passer le logo à la ligne différemment (mobile étroit) et décaler sa
     // position verticale — sans effet si l'écran titre n'est pas affiché.
     alignDailyChallengeFab();
-    // Meditate (retour utilisateur: "la grille de jeu doit [...] prendre la
-    // largeur du téléphone") — la taille des cases est calculée depuis la
-    // largeur RÉELLE du conteneur (voir renderMeditateSearchGrid), donc un
-    // changement de largeur (rotation, redimensionnement desktop) doit
-    // redessiner la grille pour rester pleine largeur ; sans effet si
-    // l'écran Meditate n'est pas actif.
-    if (viewStack[viewStack.length - 1] === "meditate") renderMeditateView();
   }, 120);
 });
 

@@ -6,10 +6,10 @@
 /* Retour utilisateur: "la grille de jeu doit [...] prendre la largeur du
    téléphone" — pas de padding HORIZONTAL ici (contrairement à avant): c'est
    ce qui permet à .meditate-search-wrap ci-dessous de s'étirer sur toute la
-   largeur réellement disponible (voir main.js: renderMeditateSearchGrid, qui
-   mesure cette largeur pour calculer la taille des cases). Les autres
-   éléments (indice, preview) restent centrés/à largeur limitée via leur
-   propre padding, voir .meditate-hint ci-dessous. */
+   largeur réellement disponible (pur CSS — voir son commentaire plus bas,
+   plus aucun calcul en JS). Les autres éléments (indice, preview) restent
+   centrés/à largeur limitée via leur propre padding, voir .meditate-hint
+   ci-dessous. */
 .meditate-play-state {
   width: 100%;
   display: flex;
@@ -41,7 +41,13 @@
   line-height: 1.4;
 }
 
+/* `width:100%` explicite (même raisonnement que .meditate-search-wrap plus
+   bas): sans lui, ce wrap — un flex item sans largeur déclarée — se
+   dimensionne au contenu ("shrink-to-fit"), rendant `min(280px, 100%)`
+   ci-dessous ambigu (100% de QUOI ?) plutôt que de vraiment plafonner à
+   280px sur un écran large. */
 .meditate-preview-wrap {
+  width: 100%;
   display: flex;
   justify-content: center;
 }
@@ -49,13 +55,24 @@
 /* Damier division×division reconstruisant la preview de la bannière (voir
    main.js: renderMeditatePreview) — cadre carré aux bords arrondis (retour
    utilisateur: "on la laisse dans un élément carré aux bords arrondis, c'est
-   pas gênant ici"), jamais cropé/déformé. */
+   pas gênant ici"), jamais cropé/déformé. Largeur BORNÉE (min(280px,100%),
+   contrairement à .meditate-search-grid plus bas): reste une miniature
+   décorative, jamais concernée par la demande "pleine largeur" (qui ne vise
+   que la grille de recherche). Colonnes en `1fr` (voir main.js:
+   renderMeditatePreview) + `aspect-ratio:1` sur chaque case
+   (.meditate-preview-cell ci-dessous) suffisent à garder un carré parfait
+   quelle que soit cette largeur, sans aucun calcul en JS. */
 .meditate-preview-grid {
   display: grid;
+  width: min(280px, 100%);
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid #1c2130;
   box-shadow: 0 0 22px -8px rgba(0, 0, 0, 0.6);
+}
+
+.meditate-preview-cell {
+  aspect-ratio: 1;
 }
 
 .meditate-preview-name {
@@ -109,9 +126,16 @@
   border-bottom: 2px solid rgba(255, 255, 255, 0.55);
 }
 
+/* Retour utilisateur: "la grille de jeu doit être grande, prendre la
+   largeur du téléphone [...] juste un pourcentage, ou du flex [...] pour
+   que ça soit responsive" — `width:100%` de bout en bout (ce wrap, PUIS
+   .meditate-search-grid ci-dessous) plutôt qu'un `display:flex` centré:
+   un flex item sans largeur explicite se dimensionne au contenu
+   ("shrink-to-fit"), ce qui rendait un enfant à `width:100%` minuscule
+   (aucune largeur de référence à résoudre) — c'était le bug précédent.
+   Un simple bloc `width:100%` a une largeur directe et sans ambiguïté. */
 .meditate-search-wrap {
-  display: flex;
-  justify-content: center;
+  width: 100%;
   /* Compense le décalage de -1px induit par les marges négatives ci-dessous
      (retour utilisateur: "toutes les cases doivent se toucher") sur la
      toute première ligne/colonne, pour ne jamais la laisser rognée par ce
@@ -122,7 +146,8 @@
 /* Retour utilisateur: "la grille où l'on clique peut avoir des bords
    carrés (pas besoin de l'arrondi)" — contrairement à .meditate-preview-grid
    ci-dessus (qui reste un carré aux bords arrondis), pas de border-radius
-   ici. */
+   ici. Colonnes en `1fr` (voir main.js: renderMeditateSearchGrid): chacune
+   se partage également cette largeur RÉELLE, sans aucun calcul en JS. */
 .meditate-search-grid {
   display: grid;
   width: 100%;
@@ -130,8 +155,13 @@
 
 /* Retour utilisateur: "je préfère que toutes les cases se touchent" — même
    technique que sommation.js: .som-grid (marges négatives qui superposent
-   la bordure d'une case sur sa voisine), plutôt qu'un `gap`. */
+   la bordure d'une case sur sa voisine), plutôt qu'un `gap`. `aspect-ratio:
+   1` fait suivre la HAUTEUR de chaque case sur sa propre largeur (donc sur
+   la largeur de l'écran, voir .meditate-search-grid ci-dessus) — c'est ce
+   qui fait "s'adapter en hauteur" toute la grille, sans jamais fixer de
+   taille en pixels. */
 .meditate-search-cell {
+  aspect-ratio: 1;
   box-sizing: border-box;
   margin: -1px 0 0 -1px;
   border: 1px solid #1c2130;
