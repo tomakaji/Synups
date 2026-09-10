@@ -170,65 +170,94 @@ function genReq(color, level, qty = 1) {
   return { kind: "generator", color, level, qty };
 }
 
-// Bande 1 (1-10): une seule exigence, rang 1-3.
-// Bande 2 (11-20): deux exigences, rang 2-4, qty 1-2.
-// Bande 3 (21-30): deux à trois exigences, rang 3-6.
-// Bande 4 (31-40): trois exigences, rang 5-8, qty 2-3.
-// Bande 5 (41-50): trois à quatre exigences, rang 7-10, forte présence de blanc.
+// Round suivant (retour utilisateur): "la difficulté est pas bien ajustée
+// [...] on génère beaucoup de lumières blanches par rapport aux autres
+// couleurs, surtout au début. Du coup lorsqu'on demande du blanc, il faut
+// être plus exigeant [...] et il faut en demander assez souvent (en plus
+// des autres couleurs) [...] l'objectif juste avant de débloquer une
+// récompense doit être symboliquement bien designé et difficile" —
+// rééquilibrage complet à partir des probas réelles du générateur blanc
+// (voir whiteGenColorChance/fragmentDropChance ci-dessous): à taux fixe de
+// SEULEMENT 3% par couleur pure contre 61-87% pour le blanc lui-même, une
+// lumière rouge/verte/bleue coûte 20 à 29 FOIS plus de générations qu'une
+// blanche de même rang (vérifié: qty×2^(rang-1) / proba-par-génération,
+// simulé pour tous les niveaux de générateur 1-10). Trois principes
+// appliqués systématiquement ci-dessous:
+//   1. le blanc est TOUJOURS demandé en quantité/rang au moins aussi
+//      exigeant que la couleur la plus dure du même palier (jamais l'inverse)
+//      — voir le calcul qty×2^(rang-1), qui reste ici SUPÉRIEUR pour le
+//      blanc à chaque palier ;
+//   2. le blanc apparaît dans PRESQUE CHAQUE palier (quasiment jamais isolé
+//      des couleurs, dès la Bande 1) plutôt qu'en alternance stricte —
+//      pour que le surplus de blanc généré en visant une couleur rare ne
+//      soit jamais perçu comme inutile ;
+//   3. les 5 paliers juste avant une récompense (10/20/30/40/50 — voir
+//      OBJECTIVES_PER_BADGE plus bas, une récompense tombe tous les 10
+//      objectifs réussis) sont des paliers "capstone": ils exigent les 3
+//      couleurs primaires (rouge/vert/bleu) simultanément EN PLUS d'un tas
+//      de blanc conséquent, avec une intensité qui monte à chaque capstone
+//      — jusqu'au Palier 50 (rang MAXIMAL des 3 couleurs + 5 blancs),
+//      écho volontaire de l'objectif final "Le Sommet" ci-dessous (mêmes 4
+//      couleurs, au niveau maximal des GÉNÉRATEURS cette fois).
+// Bande 1 (1-10): rang 1-2 (couleur) / 2-5 (blanc), qty 1-2.
+// Bande 2 (11-20): rang 2-3 (couleur) / 5-7 (blanc), qty 1-3.
+// Bande 3 (21-30): rang 3-5 (couleur, mélanges introduits) / 7-9 (blanc), qty 1-3.
+// Bande 4 (31-40): rang 5-7 (couleur) / 9-10 (blanc), qty 2-3.
+// Bande 5 (41-50): rang 7-10 (couleur) / 10 (blanc), qty 2-5.
 // 51e (final, "pour finir le mini-jeu"): nourrir les 4 générateurs au niveau
 // maximum (10) — exigences "generator" (voir genReq), traitées à part par
 // doDropOnObjective()/predictDrop().
 const OBJECTIVE_SCRIPT = [
-  { name: "Palier 1", requirements: [req("w", 1)] },
-  { name: "Palier 2", requirements: [req("r", 1)] },
-  { name: "Palier 3", requirements: [req("w", 1)] },
-  { name: "Palier 4", requirements: [req("g", 1)] },
-  { name: "Palier 5", requirements: [req("w", 2)] },
-  { name: "Palier 6", requirements: [req("b", 2)] },
-  { name: "Palier 7", requirements: [req("w", 2)] },
-  { name: "Palier 8", requirements: [req("r", 2)] },
-  { name: "Palier 9", requirements: [req("w", 3)] },
-  { name: "Palier 10", requirements: [req("g", 3)] },
-  { name: "Palier 11", requirements: [req("w", 2), req("g", 2)] },
-  { name: "Palier 12", requirements: [req("b", 2), req("w", 2)] },
-  { name: "Palier 13", requirements: [req("w", 2), req("w", 2)] },
-  { name: "Palier 14", requirements: [req("r", 2), req("r", 2)] },
-  { name: "Palier 15", requirements: [req("w", 3, 2), req("w", 3)] },
-  { name: "Palier 16", requirements: [req("w", 3), req("g", 3)] },
-  { name: "Palier 17", requirements: [req("r", 3), req("y", 3)] },
-  { name: "Palier 18", requirements: [req("w", 3), req("w", 3)] },
-  { name: "Palier 19", requirements: [req("g", 4), req("b", 4)] },
-  { name: "Palier 20", requirements: [req("w", 4, 2), req("w", 4)] },
-  { name: "Palier 21", requirements: [req("w", 3), req("r", 2)] },
-  { name: "Palier 22", requirements: [req("b", 3), req("m", 2)] },
-  { name: "Palier 23", requirements: [req("w", 3, 2), req("w", 2)] },
-  { name: "Palier 24", requirements: [req("c", 4), req("g", 3), req("w", 4)] },
-  { name: "Palier 25", requirements: [req("w", 4), req("w", 3)] },
-  { name: "Palier 26", requirements: [req("r", 4, 2), req("w", 3)] },
-  { name: "Palier 27", requirements: [req("m", 5), req("r", 4)] },
-  { name: "Palier 28", requirements: [req("w", 5), req("w", 4), req("w", 5)] },
-  { name: "Palier 29", requirements: [req("g", 5, 2), req("g", 4)] },
-  { name: "Palier 30", requirements: [req("w", 6), req("y", 5)] },
-  { name: "Palier 31", requirements: [req("w", 5, 2), req("w", 5), req("w", 3)] },
-  { name: "Palier 32", requirements: [req("w", 5), req("r", 5), req("c", 3)] },
-  { name: "Palier 33", requirements: [req("w", 5), req("w", 5), req("w", 3)] },
-  { name: "Palier 34", requirements: [req("w", 6, 2), req("g", 6), req("r", 4, 2)] },
-  { name: "Palier 35", requirements: [req("w", 6), req("w", 6), req("m", 4)] },
-  { name: "Palier 36", requirements: [req("w", 6), req("b", 6), req("w", 4)] },
-  { name: "Palier 37", requirements: [req("w", 7, 2), req("w", 7), req("g", 5)] },
-  { name: "Palier 38", requirements: [req("w", 7), req("r", 7), req("w", 5, 2)] },
-  { name: "Palier 39", requirements: [req("w", 7), req("w", 7), req("w", 5)] },
-  { name: "Palier 40", requirements: [req("w", 8, 2), req("g", 8), req("r", 6)] },
-  { name: "Palier 41", requirements: [req("w", 7, 2), req("w", 7), req("y", 4, 2)] },
-  { name: "Palier 42", requirements: [req("w", 7, 2), req("b", 7), req("w", 4)] },
-  { name: "Palier 43", requirements: [req("w", 7, 2), req("w", 7), req("b", 4, 2), req("w", 5)] },
-  { name: "Palier 44", requirements: [req("w", 8, 2), req("r", 8), req("w", 5)] },
-  { name: "Palier 45", requirements: [req("w", 8, 2), req("w", 8), req("c", 5, 2)] },
-  { name: "Palier 46", requirements: [req("w", 8, 2), req("w", 8), req("w", 5), req("w", 6)] },
-  { name: "Palier 47", requirements: [req("w", 9, 2), req("r", 9), req("r", 6, 2)] },
-  { name: "Palier 48", requirements: [req("w", 9, 2), req("w", 9), req("m", 6)] },
-  { name: "Palier 49", requirements: [req("w", 9, 2), req("g", 9), req("w", 6, 2), req("w", 7)] },
-  { name: "Palier 50", requirements: [req("w", 10, 2), req("w", 10), req("g", 7)] },
+  { name: "Palier 1", requirements: [req("w", 2)] },
+  { name: "Palier 2", requirements: [req("r", 1), req("w", 2)] },
+  { name: "Palier 3", requirements: [req("w", 2, 2)] },
+  { name: "Palier 4", requirements: [req("g", 1), req("w", 3)] },
+  { name: "Palier 5", requirements: [req("w", 3, 2)] },
+  { name: "Palier 6", requirements: [req("b", 1), req("w", 3, 2)] },
+  { name: "Palier 7", requirements: [req("w", 4)] },
+  { name: "Palier 8", requirements: [req("r", 1, 2), req("w", 4)] },
+  { name: "Palier 9", requirements: [req("w", 4, 2)] },
+  { name: "Palier 10", requirements: [req("r", 2), req("g", 2), req("b", 2), req("w", 5, 2)] },
+  { name: "Palier 11", requirements: [req("g", 2), req("w", 5, 2)] },
+  { name: "Palier 12", requirements: [req("b", 2), req("w", 5, 2)] },
+  { name: "Palier 13", requirements: [req("w", 5, 3)] },
+  { name: "Palier 14", requirements: [req("r", 2, 2), req("w", 6)] },
+  { name: "Palier 15", requirements: [req("w", 6, 2), req("w", 5)] },
+  { name: "Palier 16", requirements: [req("g", 3), req("w", 6, 2)] },
+  { name: "Palier 17", requirements: [req("r", 3), req("y", 2), req("w", 6, 2)] },
+  { name: "Palier 18", requirements: [req("b", 3), req("w", 6, 2)] },
+  { name: "Palier 19", requirements: [req("g", 3), req("b", 3), req("w", 7)] },
+  { name: "Palier 20", requirements: [req("r", 3), req("g", 3), req("b", 3), req("w", 7, 3)] },
+  { name: "Palier 21", requirements: [req("r", 3), req("w", 7)] },
+  { name: "Palier 22", requirements: [req("b", 3), req("m", 3), req("w", 7, 2)] },
+  { name: "Palier 23", requirements: [req("g", 4), req("w", 7, 2)] },
+  { name: "Palier 24", requirements: [req("c", 4), req("r", 4), req("w", 8)] },
+  { name: "Palier 25", requirements: [req("r", 4), req("w", 8, 2)] },
+  { name: "Palier 26", requirements: [req("r", 4, 2), req("w", 8, 2)] },
+  { name: "Palier 27", requirements: [req("m", 5), req("g", 4), req("w", 8, 2)] },
+  { name: "Palier 28", requirements: [req("b", 5), req("w", 8, 3)] },
+  { name: "Palier 29", requirements: [req("g", 5, 2), req("w", 9)] },
+  { name: "Palier 30", requirements: [req("r", 5), req("g", 5), req("b", 5), req("y", 4), req("w", 9, 3)] },
+  { name: "Palier 31", requirements: [req("b", 5), req("w", 9, 3)] },
+  { name: "Palier 32", requirements: [req("r", 6), req("b", 6), req("w", 9, 2)] },
+  { name: "Palier 33", requirements: [req("g", 6, 2), req("w", 9, 3)] },
+  { name: "Palier 34", requirements: [req("b", 6, 2), req("r", 5, 2), req("w", 9, 3)] },
+  { name: "Palier 35", requirements: [req("c", 6), req("g", 5), req("w", 9, 3)] },
+  { name: "Palier 36", requirements: [req("r", 7), req("b", 6), req("w", 10)] },
+  { name: "Palier 37", requirements: [req("g", 7, 2), req("b", 6), req("w", 10)] },
+  { name: "Palier 38", requirements: [req("b", 7), req("r", 7), req("w", 9, 3)] },
+  { name: "Palier 39", requirements: [req("m", 7), req("g", 7), req("w", 10, 2)] },
+  { name: "Palier 40", requirements: [req("r", 7), req("g", 7), req("b", 7), req("w", 10, 3)] },
+  { name: "Palier 41", requirements: [req("r", 8), req("w", 10, 3)] },
+  { name: "Palier 42", requirements: [req("b", 8), req("w", 10, 3)] },
+  { name: "Palier 43", requirements: [req("g", 8, 2), req("b", 6, 2), req("w", 10, 3)] },
+  { name: "Palier 44", requirements: [req("r", 8, 2), req("w", 10, 4)] },
+  { name: "Palier 45", requirements: [req("c", 8), req("g", 6), req("w", 10, 4)] },
+  { name: "Palier 46", requirements: [req("r", 7, 2), req("w", 10, 4)] },
+  { name: "Palier 47", requirements: [req("r", 9), req("g", 9), req("w", 10, 4)] },
+  { name: "Palier 48", requirements: [req("m", 9), req("b", 7), req("w", 10, 4)] },
+  { name: "Palier 49", requirements: [req("g", 9, 2), req("b", 8), req("w", 10, 4)] },
+  { name: "Palier 50", requirements: [req("r", 10), req("g", 10), req("b", 10), req("w", 10, 5)] },
   {
     name: "Le Sommet",
     final: true,
