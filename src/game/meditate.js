@@ -18,38 +18,36 @@ import { loadMeditateState, saveMeditateState, spendStars } from "./storage.js";
  * Chaque forme n'est JAMAIS pivotée/retournée au moment du placement (voir
  * placeShapes) — seul son ancrage varie d'une partie à l'autre.
  *
- * Nébuleuse (tier 6, division 2x2, retour utilisateur: "une troisième
- * bannière débloquable avec des éclairs, la première déblocable dans
- * Meditate" — volontairement plus simple que Comète/Supernova ci-dessous,
- * en guise d'introduction au mini-jeu): un tromino en L (3 cases) et une
- * case seule — vérifié pour couvrir exactement les 4 cases une seule fois
- * chacune (3+1=4). Pas de rétrocompatibilité nécessaire (retour
- * utilisateur: "c'est que du test y a pas de vrai joueur") — Comète/
- * Supernova simplement renumérotées 7/8 ci-dessous.
+ * Round suivant (retour utilisateur: "je veux que le premier niveau de
+ * meditate soit sur une grille 5x5 pour une forme 3x3 [...] la suivante
+ * prendra bien du 4x4 sur du 7x7 puis du 5x5 sur du 9x9") — l'ancien
+ * premier niveau (Nébuleuse, division 2x2 sur grille 3x3) était jugé trop
+ * minuscule (un seul tromino + une case). Toute la progression est
+ * DÉCALÉE d'un cran plutôt que redessinée de zéro: chaque tier reprend le
+ * découpage qui appartenait au tier suivant AVANT ce round (searchSizeFor
+ * Division: 2×division-1, donc division 3->grille 5x5, 4->7x7, 5->9x9),
+ * et seule la toute dernière case (désormais division 5x5, jamais vue
+ * avant) est un découpage neuf.
  *
- * Comète (tier 7, division 3x3, exemple donné par le retour utilisateur):
- * un T, une barre horizontale (2 cases), une barre verticale (2 cases) et
- * un carré seul — vérifié pour couvrir exactement les 9 cases une seule
- * fois chacune (4+2+2+1=9).
+ * Nébuleuse (tier 6, division 3x3 — ex-découpage de Comète, simplement
+ * décalé ici): un T, une barre horizontale (2 cases), une barre verticale
+ * (2 cases) et un carré seul — vérifié pour couvrir exactement les 9
+ * cases une seule fois chacune (4+2+2+1=9).
  *
- * Supernova (tier 8, division 4x4, découpage propre — pas donné par le
- * retour utilisateur, dessiné ici en suivant le même principe): un carré
- * 2x2, une barre verticale de 4 cases, un T, une barre verticale de 2
- * cases, et deux cases seules — vérifié pour couvrir exactement les 16
- * cases une seule fois chacune (4+4+4+2+1+1=16). */
+ * Comète (tier 7, division 4x4 — ex-découpage de Supernova, simplement
+ * décalé ici): un carré 2x2, une barre verticale de 4 cases, un T, une
+ * barre verticale de 2 cases, et deux cases seules — vérifié pour couvrir
+ * exactement les 16 cases une seule fois chacune (4+4+4+2+1+1=16).
+ *
+ * Supernova (tier 8, division 5x5, NOUVEAU découpage — thème "explosion":
+ * une croix centrale (5 cases), les 4 coins en bloc 2x2 (4 cases chacun),
+ * et les 4 cases restantes au milieu de chaque bord en solo — vérifié pour
+ * couvrir exactement les 25 cases une seule fois chacune
+ * (5+4+4+4+4+1+1+1+1=25). */
 export const MEDITATE_BADGE_DEFS = [
   {
     tier: 6,
     name: "Nébuleuse",
-    division: 2,
-    shapes: [
-      { id: "l", cells: [[0, 0], [0, 1], [1, 1]] }, // tromino en L
-      { id: "solo", cells: [[1, 0]] }, // case seule
-    ],
-  },
-  {
-    tier: 7,
-    name: "Comète",
     division: 3,
     shapes: [
       { id: "t", cells: [[0, 0], [0, 1], [0, 2], [1, 1]] }, // T
@@ -59,8 +57,8 @@ export const MEDITATE_BADGE_DEFS = [
     ],
   },
   {
-    tier: 8,
-    name: "Supernova",
+    tier: 7,
+    name: "Comète",
     division: 4,
     shapes: [
       { id: "carre", cells: [[0, 0], [0, 1], [1, 0], [1, 1]] },
@@ -69,6 +67,22 @@ export const MEDITATE_BADGE_DEFS = [
       { id: "verticale", cells: [[0, 2], [1, 2]] },
       { id: "solo1", cells: [[3, 0]] },
       { id: "solo2", cells: [[3, 2]] },
+    ],
+  },
+  {
+    tier: 8,
+    name: "Supernova",
+    division: 5,
+    shapes: [
+      { id: "croix", cells: [[1, 2], [2, 1], [2, 2], [2, 3], [3, 2]] }, // croix centrale (5 cases)
+      { id: "coin-hg", cells: [[0, 0], [0, 1], [1, 0], [1, 1]] }, // coin haut-gauche (2x2)
+      { id: "coin-hd", cells: [[0, 3], [0, 4], [1, 3], [1, 4]] }, // coin haut-droit (2x2)
+      { id: "coin-bg", cells: [[3, 0], [3, 1], [4, 0], [4, 1]] }, // coin bas-gauche (2x2)
+      { id: "coin-bd", cells: [[3, 3], [3, 4], [4, 3], [4, 4]] }, // coin bas-droit (2x2)
+      { id: "solo-haut", cells: [[0, 2]] },
+      { id: "solo-gauche", cells: [[2, 0]] },
+      { id: "solo-droite", cells: [[2, 4]] },
+      { id: "solo-bas", cells: [[4, 2]] },
     ],
   },
 ];

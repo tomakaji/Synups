@@ -313,21 +313,33 @@
    NOUVELLE) devient la première de la progression, Comète/Supernova
    renumérotées 7/8 (simple décalage, pas de rétrocompatibilité nécessaire:
    "c'est que du test y a pas de vrai joueur"). */
-/* Nébuleuse (tier 6, NOUVELLE): teal/cyan, nuage diffus (radial-gradient
-   flou, sans tête ponctuelle contrairement à Comète/Supernova ci-dessous)
-   pour rester visuellement distincte des deux autres tout en gardant le
-   même gabarit "pilule + repère décoratif" que le tier 1. */
+/* Nébuleuse (tier 6). Round suivant (retour utilisateur: "qu'il ne soit
+   pas bleu déjà, mais plutôt entre le vert et le jaune ou rouge [...] et
+   aussi qu'il ait une forme un peu différente (plus carrée peut-être) et
+   un motif un peu plus fort/présent") — l'ancien bleu/cyan se confondait
+   trop avec l'identité "étoile" (--accent) déjà utilisée partout ailleurs
+   dans l'app. Recoloré vert-citron (#9ae04a, entre vert et jaune, à
+   l'opposé de l'orange de Comète et du violet de Supernova ci-dessous —
+   aucune des trois couleurs ne se ressemble plus). Motif: DEUX points
+   lumineux + un `repeating-conic-gradient` (même technique que Supernova,
+   voir tier-8 plus bas) pour un rendu "éclat électrique" plus dense que
+   l'ancien simple nuage flou, ET border-radius resserré (coins nettement
+   moins arrondis que la pilule par défaut) pour casser la forme
+   différemment des deux autres tiers de ce lot. */
 .badge-teaser--tier-6.earned {
-  border-color: rgba(94, 200, 255, 0.5);
-  background: linear-gradient(135deg, rgba(94, 200, 255, 0.18), var(--panel) 78%);
+  border-color: rgba(154, 224, 74, 0.5);
+  background: linear-gradient(135deg, rgba(154, 224, 74, 0.18), var(--panel) 78%);
+  border-radius: 6px;
 }
 .badge-teaser--tier-6.earned .badge-teaser-deco {
   background-image:
-    radial-gradient(10px 8px at 78% 24%, rgba(94, 200, 255, 0.55), transparent 70%),
-    radial-gradient(5px 5px at 70% 30%, rgba(160, 230, 255, 0.85), transparent);
+    radial-gradient(10px 8px at 78% 24%, rgba(154, 224, 74, 0.6), transparent 70%),
+    radial-gradient(5px 5px at 70% 30%, rgba(224, 247, 154, 0.9), transparent),
+    radial-gradient(3px 3px at 84% 40%, rgba(224, 247, 154, 0.85), transparent),
+    repeating-conic-gradient(from 15deg at 78% 24%, rgba(154, 224, 74, 0.18) 0deg 4deg, transparent 4deg 22deg);
 }
 .badge-teaser--tier-6.earned .badge-teaser-name {
-  color: #8fe0ff;
+  color: #b6ec6a;
 }
 
 /* Comète (tier 7, ex-tier 6). Round suivant (retour utilisateur: "plus
@@ -686,29 +698,37 @@
    indépendantes, jamais confondues. Repris du style sobre du tier 1 (pilule
    intacte + un repère décoratif), simplement reteinté couleur "étoile"
    pour rester cohérent avec .daily-challenge-fab/avatars comet/nova.
-   Tier 6 "Nébuleuse" (NOUVELLE, retour utilisateur: "une troisième bannière
-   [...] la première déblocable dans Meditate"): pilule classique comme le
-   tier 1 (pas de clip-path en pointe comme Comète ni de glow sans bordure
-   comme Supernova, pour rester visuellement DISTINCTE des deux), teintée
-   teal/cyan (nuage diffus, sans tête lumineuse ponctuelle). Comète/
-   Supernova simplement renumérotées 7/8 ci-dessous (pas de changement
-   visuel pour elles). */
+   Tier 6 "Nébuleuse". Round suivant (retour utilisateur: "qu'il ne soit pas
+   bleu déjà [...] et aussi qu'il ait une forme un peu différente (plus
+   carrée peut-être) et un motif un peu plus fort/présent" — même
+   changement que .badge-teaser--tier-6.earned ci-dessus, cohérent entre le
+   petit carré de sélection et le rendu appliqué): vert-citron (#9ae04a) au
+   lieu du bleu/cyan d'origine, border-radius resserré (coins nets plutôt
+   que la pilule pleine des tiers 1/7/8) pour casser la forme différemment,
+   et deux points lumineux + repeating-conic-gradient (même technique que
+   Supernova, tier-8 plus bas) pour un motif plus dense/présent que
+   l'ancien simple nuage flou. */
 .badge-frame--tier-6 {
-  border-color: rgba(94, 200, 255, 0.55);
-  background: linear-gradient(135deg, rgba(94, 200, 255, 0.16), transparent 78%);
+  border-color: rgba(154, 224, 74, 0.55);
+  background: linear-gradient(135deg, rgba(154, 224, 74, 0.16), transparent 78%);
+  border-radius: 8px;
 }
 .badge-frame--tier-6 .badge-frame-deco {
   background-image:
-    radial-gradient(12px 9px at 85% 50%, rgba(94, 200, 255, 0.5), transparent 70%),
-    radial-gradient(5px 5px at 78% 42%, rgba(160, 230, 255, 0.85), transparent);
+    radial-gradient(12px 9px at 85% 50%, rgba(154, 224, 74, 0.55), transparent 70%),
+    radial-gradient(5px 5px at 78% 42%, rgba(224, 247, 154, 0.9), transparent),
+    radial-gradient(3px 3px at 90% 58%, rgba(224, 247, 154, 0.85), transparent),
+    repeating-conic-gradient(from 15deg at 85% 50%, rgba(154, 224, 74, 0.16) 0deg 4deg, transparent 4deg 22deg);
 }
 .badge-frame-preview .badge-frame--tier-6 .badge-frame-deco {
   background-image:
-    radial-gradient(20px 15px at 85% 50%, rgba(94, 200, 255, 0.5), transparent 70%),
-    radial-gradient(8px 8px at 76% 40%, rgba(160, 230, 255, 0.85), transparent);
+    radial-gradient(20px 15px at 85% 50%, rgba(154, 224, 74, 0.55), transparent 70%),
+    radial-gradient(8px 8px at 76% 40%, rgba(224, 247, 154, 0.9), transparent),
+    radial-gradient(5px 5px at 90% 60%, rgba(224, 247, 154, 0.85), transparent),
+    repeating-conic-gradient(from 15deg at 85% 50%, rgba(154, 224, 74, 0.16) 0deg 4deg, transparent 4deg 22deg);
 }
 .badge-frame--tier-6 .badge-frame-pseudo {
-  color: #8fe0ff;
+  color: #b6ec6a;
 }
 
 /* Tier 7 "Comète" (ex-tier 6): rouge-orange, forme en pointe vers l'avant

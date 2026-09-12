@@ -3194,17 +3194,20 @@ if (meditateDebugPointsBtn) {
  * `background-image` empilable sur un calque de taille arbitraire (voir
  * buildMeditateBackdrop ci-dessous). */
 const MEDITATE_ART_RECIPES = {
-  // Nébuleuse (tier 6, NOUVELLE — retour utilisateur: "une troisième
-  // bannière débloquable avec des éclairs, la première déblocable dans
-  // Meditate"): reprise TELLE QUELLE de .badge-teaser--tier-6.earned +
+  // Nébuleuse (tier 6). Round suivant (retour utilisateur: "redesign un peu
+  // Nébuleuse [...] qu'il ne soit pas bleu déjà [...] un motif un peu plus
+  // fort/présent") — reprise TELLE QUELLE de .badge-teaser--tier-6.earned +
   // .badge-teaser-deco (voir badges.css), même principe que les deux
-  // recettes ci-dessous.
+  // recettes ci-dessous: vert-citron + repeating-conic-gradient au lieu du
+  // bleu/cyan + simple nuage flou d'origine.
   6: {
-    background: "#0d1a1f",
+    background: "#141f0d",
     image:
-      "linear-gradient(135deg, rgba(94, 200, 255, 0.18), transparent 78%), " +
-      "radial-gradient(10px 8px at 78% 24%, rgba(94, 200, 255, 0.55), transparent 70%), " +
-      "radial-gradient(5px 5px at 70% 30%, rgba(160, 230, 255, 0.85), transparent)",
+      "linear-gradient(135deg, rgba(154, 224, 74, 0.18), transparent 78%), " +
+      "radial-gradient(10px 8px at 78% 24%, rgba(154, 224, 74, 0.6), transparent 70%), " +
+      "radial-gradient(5px 5px at 70% 30%, rgba(224, 247, 154, 0.9), transparent), " +
+      "radial-gradient(3px 3px at 84% 40%, rgba(224, 247, 154, 0.85), transparent), " +
+      "repeating-conic-gradient(from 15deg at 78% 24%, rgba(154, 224, 74, 0.18) 0deg 4deg, transparent 4deg 22deg)",
   },
   // Comète (tier 7, ex-tier 6 — simple renumérotation, pas de changement
   // visuel: voir badges.css).
@@ -3224,7 +3227,7 @@ const MEDITATE_ART_RECIPES = {
       "repeating-conic-gradient(from 0deg at 78% 26%, rgba(201, 143, 224, 0.14) 0deg 3deg, transparent 3deg 20deg)",
   },
 };
-const MEDITATE_NAME_COLORS = { 6: "#8fe0ff", 7: "#ff9a63", 8: "#dcb8f0" };
+const MEDITATE_NAME_COLORS = { 6: "#b6ec6a", 7: "#ff9a63", 8: "#dcb8f0" };
 
 /** Un seul grand calque ("backdrop") portant la recette d'imagerie complète
  * de la bannière, positionné en absolu à l'intérieur d'une "fenêtre"
@@ -3337,13 +3340,39 @@ function renderMeditateSearchGrid(def, grid, justRevealedIndex = null) {
   // desktop...), sans le moindre JS.
   meditateSearchGridEl.style.gridTemplateColumns = `repeat(${grid.size}, 1fr)`;
 
+  // Retour utilisateur: "sur la grille, j'aimerais que les formes soient
+  // aussi contourées. On s'y perd sinon" — même principe que
+  // meditate-preview-cell--edge-right/--edge-bottom ci-dessus (preview du
+  // haut), mais appliqué ici case par case sur la grille de recherche.
+  // Contrairement à la preview (qui connaît TOUJOURS le shapeId de chaque
+  // case), on ne compare deux cases que si elles sont TOUTES LES DEUX déjà
+  // révélées: comparer au shapeId d'une case pas encore trouvée
+  // dévoilerait silencieusement où s'arrête une forme non découverte,
+  // simplement via la présence/absence d'un contour.
+  const revealedShapeAt = (row, col) => {
+    if (row < 0 || row >= grid.size || col < 0 || col >= grid.size) return undefined;
+    const c = grid.cells[row * grid.size + col];
+    return c.revealed && c.shapeId != null ? c.shapeId : undefined;
+  };
+
   grid.cells.forEach((cell, index) => {
     const justRevealed = index === justRevealedIndex;
+    const row = Math.floor(index / grid.size);
+    const col = index % grid.size;
     let el;
     if (cell.revealed && cell.shapeId != null) {
       el = makeMeditateWindow(def.tier, def.division, cell.originRow, cell.originCol);
       el.classList.add("meditate-search-cell", "meditate-search-cell--fragment");
       if (justRevealed) el.classList.add("meditate-search-cell--reveal-fragment");
+      // Comme la preview (voir ci-dessus): ne comparer qu'aux voisins
+      // droite/bas suffit à détourer TOUTES les paires de cases adjacentes
+      // de formes différentes une seule fois chacune (jamais aux voisins
+      // gauche/haut, sinon même paire comparée deux fois pour le même
+      // contour visuel).
+      const rightShape = revealedShapeAt(row, col + 1);
+      if (rightShape !== undefined && rightShape !== cell.shapeId) el.classList.add("meditate-search-cell--edge-right");
+      const bottomShape = revealedShapeAt(row + 1, col);
+      if (bottomShape !== undefined && bottomShape !== cell.shapeId) el.classList.add("meditate-search-cell--edge-bottom");
     } else {
       el = document.createElement("button");
       el.type = "button";
@@ -3432,12 +3461,43 @@ function renderMeditateView(justRevealedIndex = null, justFoundShapeId = null) {
 // "juste complété".
 const MEDITATE_VICTORY_DELAY_MS = 1000;
 
+// Retour utilisateur: "quand on clique sans avoir d'éclairs à dépenser, ça
+// ne doit pas sélectionner la case [...] plutôt faire vibrer la chip de la
+// ressource Éclairs, ou [...] l'animation + son qu'on utilise [...] quand
+// on ne découvre pas de case vide" — la case elle-même reste un <button>
+// (voir .meditate-search-cell:focus, meditate.css: outline supprimé), donc
+// plus aucun retour visuel n'y reste "collé" après un clic refusé ; à la
+// place, on secoue #meditate-energy (même classe générique
+// input-error/input-error--shake que l'éditeur, voir editor.js:
+// markImportError) et on rejoue le SFX déjà utilisé pour "case vide" côté
+// grille (playMeditateEmpty) plutôt que d'en créer un nouveau.
+function flashMeditateEnergyShortage() {
+  if (!meditateEnergyEl) return;
+  meditateEnergyEl.classList.remove("input-error--shake");
+  void meditateEnergyEl.offsetWidth; // force le redémarrage de l'animation si déjà en cours
+  meditateEnergyEl.classList.add("input-error", "input-error--shake");
+  playMeditateEmpty();
+}
+
+// Nettoie la classe d'erreur une fois l'anim terminée (0.4s, voir
+// som-shake-fail dans sommation-fx.css) plutôt que de la laisser en
+// permanence sur la pilule — sinon la bordure resterait teintée "erreur"
+// même après une résolution normale du clic suivant.
+document.addEventListener("animationend", (e) => {
+  if (e.target === meditateEnergyEl && e.animationName === "som-shake-fail") {
+    meditateEnergyEl.classList.remove("input-error", "input-error--shake");
+  }
+});
+
 function onMeditateCellClick(index) {
   const def = getMeditateCurrentDef();
   const grid = ensureMeditateGrid();
   const result = revealMeditateCell(index);
   if (!result.ok) {
-    if (result.reason === "not-enough-energy") hapticWarning();
+    if (result.reason === "not-enough-energy") {
+      hapticWarning();
+      flashMeditateEnergyShortage();
+    }
     return;
   }
   hapticLight();

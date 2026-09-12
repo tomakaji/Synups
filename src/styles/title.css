@@ -109,8 +109,13 @@
   font-size: 0.65rem;
   font-weight: 700;
   white-space: nowrap;
-  background: var(--panel);
-  border: 1px solid #2a3040;
+  /* Retour utilisateur: "le background doit etre opaque, pas a moitie
+     transparent" — var(--panel) (#12151c) est TECHNIQUEMENT opaque, mais
+     visuellement quasi identique à --bg (#0b0d12, le fond du menu derrière),
+     d'où l'impression de transparence. Couleur dédiée, nettement plus claire
+     que les deux, pour que la pastille se détache clairement. */
+  background: #232a3d;
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .title-profile-stat--star {
