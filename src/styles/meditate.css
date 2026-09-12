@@ -247,17 +247,46 @@
 }
 
 /* Retour utilisateur: "sur la grille, j'aimerais que les formes soient
-   aussi contourées. On s'y perd sinon" — même traitement que
-   .meditate-preview-cell--edge-right/--edge-bottom plus haut (preview du
-   haut), posé ici sur les cases de la grille de recherche (voir main.js:
-   renderMeditateSearchGrid) uniquement entre deux fragments DÉJÀ révélés
-   de formes différentes. */
-.meditate-search-cell--edge-right {
-  border-right: 2px solid rgba(255, 255, 255, 0.55);
+   aussi contourées. On s'y perd sinon [...] les contours doivent être à
+   l'intérieur des cases, car là on ne les voit pas forcément, et plus
+   épais" — même intention que .meditate-preview-cell--edge-right/
+   --edge-bottom plus haut (preview du haut), mais PAS la même technique.
+   Deux pièges écartés ici:
+   1) Un `border` classique se pose à la limite exacte de la case, or
+      .meditate-search-cell utilise des marges négatives (margin: -1px 0 0
+      -1px, voir plus haut: "toutes les cases doivent se toucher") qui font
+      PEINDRE la case suivante par-dessus ce bord d'1px — invisible par
+      endroits.
+   2) Un `box-shadow: inset` sur .meditate-search-cell lui-même serait,
+      lui, entièrement recouvert par son PROPRE enfant .meditate-art-
+      backdrop (le fragment d'image, opaque, qui remplit tout l'intérieur
+      via overflow:hidden sur .meditate-window — même élément que
+      .meditate-search-cell pour une case fragment, voir main.js:
+      makeMeditateWindow) : un box-shadow se peint au même niveau que le
+      fond, donc SOUS le contenu, jamais visible ici.
+   Solution: un `::after` généré, peint TOUJOURS en dernier (après le
+   fragment d'image) et positionné en `inset: 0` — donc réellement À
+   L'INTÉRIEUR de la case (jamais sur la limite partagée avec la voisine,
+   jamais recouvert par le fragment). border-right/border-bottom sont deux
+   propriétés distinctes qui s'additionnent naturellement sur ce même
+   ::after quand une case a besoin des deux contours à la fois (rien à
+   combiner manuellement, contrairement à box-shadow). Plus épais (4px,
+   contre 2px sur la preview) et plus opaque pour rester net même sur les
+   petits fragments. */
+.meditate-search-cell--edge-right::after,
+.meditate-search-cell--edge-bottom::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
-.meditate-search-cell--edge-bottom {
-  border-bottom: 2px solid rgba(255, 255, 255, 0.55);
+.meditate-search-cell--edge-right::after {
+  border-right: 4px solid rgba(255, 255, 255, 0.85);
+}
+
+.meditate-search-cell--edge-bottom::after {
+  border-bottom: 4px solid rgba(255, 255, 255, 0.85);
 }
 
 /* Retour utilisateur: "une animation sur les cases autant lorsqu'on a rien

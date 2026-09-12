@@ -98,6 +98,21 @@
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+  /* Retour utilisateur: "dès que je change la bannière, les chips sont à
+     nouveau en transparence" — .badge-frame-deco (badges.css) est
+     `position: absolute` mais placé EN PREMIER dans le DOM (avant les
+     stats, voir main.js: buildBadgeFrame/renderTitleProfileBanner) ; or un
+     élément positionné se peint TOUJOURS après les éléments non positionnés
+     de son groupe d'empilement, quel que soit l'ordre DOM. Tant qu'aucun
+     badge actif n'est sélectionné, .badge-frame-deco n'a aucune image de
+     fond (rien à peindre, donc rien de visible) — mais dès qu'un tier est
+     actif, son halo/glow (background-image) se peint PAR-DESSUS les chips
+     malgré leur fond désormais opaque, redonnant l'impression de
+     transparence. `position:relative` + `z-index` explicite ici fait
+     gagner les chips face au calque déco (z-index:auto), peu importe le
+     tier actif. */
+  position: relative;
+  z-index: 1;
 }
 
 .title-profile-stat {
