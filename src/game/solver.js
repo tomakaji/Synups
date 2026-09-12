@@ -57,6 +57,34 @@
 // l'une d'elles s'allume quand même plus tard via un duplicata, la
 // prochaine passe de `propagate` le détecte immédiatement (adjacentLights
 // recalculé sur l'état réel de la grille) et remonte la contradiction.
+//
+// Neurone miroir [expérimental], second risque symétrique (bug retour
+// utilisateur, niveau "Cauchemar IV" modifié): le paragraphe ci-dessus
+// couvre les fausses certitudes issues d'une case EXCLUE mais atteignable.
+// Il existe un risque symétrique côté FORÇAGE: quand Stage 1/1.5/2 conclut
+// qu'une case doit forcément être allumée (dernier candidat restant pour un
+// indice, seul candidat d'illumination, ou variable forcée dans une paire),
+// et que CETTE case précise est elle-même sur la ligne/colonne d'un neurone
+// miroir, la forcer comme pose RÉELLE (via `forceLit`/`toggleLight`) n'est
+// pas neutre: elle pourrait tout aussi bien finir allumée comme DUPLICATA
+// d'une lumière posée à l'AUTRE bout du même neurone. Or un duplicata
+// hérite TOUJOURS de la couleur de son origine (jamais l'inverse) et bloque
+// tout laser de charge colorée qui le toucherait directement (voir grid.js:
+// `_mirrorLaserBlocked`) — la couleur effective de la paire dépend donc de
+// LAQUELLE des deux cases devient l'origine. Un niveau réellement soluble
+// à la main (solution fournie par l'utilisateur, vérifiée directement via
+// `LightUpGrid.toggleLight`/`isWon`) a été rapporté à tort insoluble par ce
+// bug : la case forcée par Stage 1 absorbait directement un laser coloré
+// qu'elle aurait dû laisser passer en restant duplicata, corrompant la
+// couleur reçue par une case-cible plus loin dans la chaîne — et comme ce
+// forçage est une conclusion (pas une hypothèse de branchement), il
+// s'appliquait sur TOUT l'arbre de recherche, empêchant la polarité
+// correcte d'être explorée nulle part. Voir dans `propagate`/`pairDeductions`
+// les trois points (Stage 1, Stage 1.5, Stage 2) qui vérifient désormais
+// `mirrorReachable` côté case candidate au forçage (pas seulement côté
+// voisin exclu) et s'abstiennent — la case redevient un candidat de
+// branchement normal, les deux polarités sont alors essayées par le
+// backtracking plutôt qu'imposées.
 
 import { LightUpGrid, CellType } from "./grid.js";
 
@@ -250,6 +278,48 @@ function refreshForLeafCheck(grid, hasColorTargets) {
   // sont déjà à jour depuis le dernier toggleLight({full:false}).
 }
 
+/**
+ * Signature du plateau final à une feuille GAGNANTE — sert à dédupliquer
+ * les solutions comptées par `countSolutions`/`enumerateSolutions`/
+ * `analyzeAndCount` (voir leur usage de `seenSignatures`).
+ *
+ * Neurone miroir [expérimental], nécessaire depuis le fix ci-dessus
+ * (voir le commentaire en tête de fichier, "second risque symétrique") :
+ * quand une paire origine/duplicata n'a AUCUNE contrainte qui départage
+ * laquelle des deux doit être l'origine (aucun laser coloré ne touche
+ * spécifiquement l'une des deux cases différemment de l'autre), les DEUX
+ * polarités sont maintenant explorées par le backtracking (au lieu d'une
+ * seule imposée à tort comme avant le fix) — et aboutissent à un plateau
+ * final RIGOUREUSEMENT IDENTIQUE (mêmes cases allumées, mêmes couleurs),
+ * seule la case techniquement enregistrée comme "posée par le joueur" (par
+ * opposition à "duplicata") diffère dans `getPlacedLights()`. Sans
+ * déduplication, ces deux chemins de recherche distincts seraient comptés
+ * comme deux solutions différentes, cassant à tort l'unicité de niveaux qui
+ * n'ont pourtant qu'un seul plateau final possible — un simple changement
+ * de polarité sans conséquence visuelle ou fonctionnelle n'est pas une
+ * "autre solution".
+ *
+ * La signature capture donc l'ensemble des cases allumées (réelles ET
+ * duplicatas confondus, voir `grid.lights`) et, seulement si le plateau a
+ * au moins une cible de couleur (`hasColorTargets`, voir
+ * `boardHasColorTargets` — sinon `_lit` n'est pas forcément frais, voir
+ * `refreshForLeafCheck`), la couleur effective de chacune : deux plateaux
+ * avec les mêmes cases allumées dans les mêmes couleurs sont le MÊME
+ * plateau du point de vue du joueur, quelle que soit la case qui a
+ * techniquement "déclenché" quel duplicata.
+ */
+function boardSignature(grid, hasColorTargets) {
+  const litKeys = Array.from(grid.lights).sort();
+  if (!hasColorTargets) return litKeys.join(",");
+  let colorSig = "";
+  for (const k of litKeys) {
+    const [r, c] = k.split(",").map(Number);
+    const lit = grid.cellAt(r, c)._lit;
+    colorSig += (lit.r ? "1" : "0") + (lit.g ? "1" : "0") + (lit.b ? "1" : "0");
+  }
+  return litKeys.join(",") + "|" + colorSig;
+}
+
 /** Toutes les cases EMPTY ni allumées, ni exclues: ce qui reste à décider. */
 function getUndecided(grid, excluded) {
   const result = [];
@@ -313,7 +383,7 @@ function mutuallyVisible(grid, [r1, c1], [r2, c2]) {
  * ~19% du temps JS total — cette seule redondance en repartait pour une part
  * significative (n indices → jusqu'à n-1 recalculs identiques chacun).
  */
-function pairDeductions(grid, infoA, infoB) {
+function pairDeductions(grid, infoA, infoB, mirrorReachable) {
   const { needed: neededA, free: freeA, risky: riskyA } = infoA;
   const { needed: neededB, free: freeB, risky: riskyB } = infoB;
   if (freeA.length === 0 || freeB.length === 0) return null;
@@ -380,8 +450,19 @@ function pairDeductions(grid, infoA, infoB) {
   for (let i = 0; i < n; i++) {
     const allLit = validMasks.every((m) => (m >> i) & 1);
     const allDark = !allLit && validMasks.every((m) => !((m >> i) & 1));
-    if (allLit) forcedLit.push(vars[i]);
-    else if (allDark) forcedDark.push(vars[i]);
+    if (allLit) {
+      // Neurone miroir [expérimental]: même prudence que Stage 1/1.5 (voir
+      // leurs commentaires dans `propagate`) — si CETTE variable précise
+      // est sur la ligne/colonne d'un neurone miroir, la déclarer "forcée
+      // allumée" imposerait nous-mêmes une pose RÉELLE ici plutôt que de
+      // laisser la possibilité qu'elle s'allume comme duplicata d'une
+      // lumière posée à l'autre bout du neurone — polarité qui peut fausser
+      // une couleur plus loin dans la chaîne (voir le bug corrigé). On
+      // s'abstient donc pour CETTE variable (les autres, non concernées,
+      // restent forcées normalement).
+      if (mirrorReachable && mirrorReachable.has(idxOf(grid, vars[i][0], vars[i][1]))) continue;
+      forcedLit.push(vars[i]);
+    } else if (allDark) forcedDark.push(vars[i]);
   }
   return { ok: true, forcedLit, forcedDark };
 }
@@ -481,7 +562,30 @@ function propagate(grid, excluded, mirrorReachable, stats) {
           undo();
           return { ok: false };
         }
-        if (needed > 0 && needed === free.length) {
+        // Neurone miroir [expérimental], bug retour utilisateur (niveau
+        // "Cauchemar IV" modifié): si au moins une des cases qu'on
+        // s'apprêterait à forcer allumée ici est elle-même sur la
+        // ligne/colonne d'un neurone miroir, une pose RÉELLE ici n'est pas
+        // sûre — cette case pourrait tout aussi bien finir allumée comme
+        // DUPLICATA d'une lumière posée à l'AUTRE bout du même neurone (voir
+        // grid.js: `_computeMirrorDuplicates`). Or laquelle des deux devient
+        // "origine" (par opposition à duplicata) n'est pas neutre : un
+        // duplicata hérite TOUJOURS de la couleur de son origine (jamais
+        // l'inverse) et bloque tout laser de charge colorée qui le
+        // toucherait directement (voir grid.js, `_mirrorLaserBlocked`) — un
+        // niveau réellement soluble à la main a été rapporté à tort
+        // insoluble par ce même bug: la case forcée ici absorbait
+        // directement un laser coloré qu'elle aurait dû laisser passer (en
+        // restant duplicata), ce qui corrompait la couleur reçue par une
+        // case-cible plus loin dans la chaîne. On s'abstient donc de la
+        // conclusion "forcé" pour CE tour et on traite la case comme un
+        // simple candidat de branchement (les deux polarités seront
+        // essayées par le backtracking, voir `else if` juste en dessous)
+        // plutôt que d'imposer nous-mêmes, à tort, une polarité précise.
+        const forcesRiskyCell =
+          mirrorReachable.size > 0 && free.some(([fr, fc]) => mirrorReachable.has(idxOf(grid, fr, fc)));
+
+        if (needed > 0 && needed === free.length && !forcesRiskyCell) {
           for (const [fr, fc] of free) {
             if (!forceLit(fr, fc)) {
               undo();
@@ -535,6 +639,16 @@ function propagate(grid, excluded, mirrorReachable, stats) {
         }
         if (candidates.length === 1) {
           const [fr, fc] = candidates[0];
+          // Neurone miroir [expérimental]: même prudence que Stage 1
+          // ci-dessus (voir son commentaire) — si l'unique candidat restant
+          // capable d'illuminer (r,c) est lui-même sur la ligne/colonne d'un
+          // neurone miroir, le forcer comme pose RÉELLE ici imposerait une
+          // polarité (origine vs duplicata) qui n'est pas certaine et qui
+          // peut fausser la couleur d'un duplicata plus loin dans la
+          // chaîne. On s'abstient : cette case reste "non décidée" pour ce
+          // tour — soit le branchement normal la reprendra, soit une pose
+          // réelle décidée ailleurs la crée directement comme duplicata.
+          if (mirrorReachable.size > 0 && mirrorReachable.has(idxOf(grid, fr, fc))) continue;
           if (!forceLit(fr, fc)) {
             undo();
             return { ok: false };
@@ -574,7 +688,7 @@ function propagate(grid, excluded, mirrorReachable, stats) {
     }));
     outer: for (let i = 0; i < clues.length; i++) {
       for (let j = i + 1; j < clues.length; j++) {
-        const result = pairDeductions(grid, clueInfo[i], clueInfo[j]);
+        const result = pairDeductions(grid, clueInfo[i], clueInfo[j], mirrorReachable);
         if (!result) continue;
         if (!result.ok) {
           undo();
@@ -728,6 +842,12 @@ export function countSolutions(level, cap = 2, maxNodes = 2_000_000, options = {
   const hasColorTargets = boardHasColorTargets(grid);
   let count = 0;
   let nodes = 0;
+  // Voir boardSignature: dédoublonne les feuilles gagnantes qui ne
+  // diffèrent que par la polarité (origine/duplicata) d'une paire de
+  // neurone miroir sans conséquence visuelle — sinon comptées à tort comme
+  // deux solutions distinctes depuis que les deux polarités sont explorées
+  // (voir le fix "second risque symétrique" en tête de fichier).
+  const seenSignatures = new Set();
 
   function search() {
     if (count >= cap) return;
@@ -740,7 +860,13 @@ export function countSolutions(level, cap = 2, maxNodes = 2_000_000, options = {
 
     if (undecided.length === 0) {
       refreshForLeafCheck(grid, hasColorTargets);
-      if (grid.isWon(options)) count++;
+      if (grid.isWon(options)) {
+        const sig = boardSignature(grid, hasColorTargets);
+        if (!seenSignatures.has(sig)) {
+          seenSignatures.add(sig);
+          count++;
+        }
+      }
     } else {
       const [r, c] = pickBranchCell(grid, undecided, excluded);
       const idx = idxOf(grid, r, c);
@@ -785,6 +911,10 @@ export function enumerateSolutions(level, cap = 5, maxNodes = 3_000_000, options
   const hasColorTargets = boardHasColorTargets(grid);
   const found = [];
   let nodes = 0;
+  // Voir boardSignature / countSolutions: même déduplication, pour ne pas
+  // renvoyer deux entrées de `found` qui ne représentent qu'une seule et
+  // même solution visuelle (polarité miroir sans conséquence).
+  const seenSignatures = new Set();
 
   // Priorité 1 (indice de solution) : `options.hint`, si fourni, est une
   // solution déjà connue (même format que ce que retourne cette fonction :
@@ -814,7 +944,13 @@ export function enumerateSolutions(level, cap = 5, maxNodes = 3_000_000, options
 
     if (undecided.length === 0) {
       refreshForLeafCheck(grid, hasColorTargets);
-      if (grid.isWon(winOptions)) found.push(currentLights());
+      if (grid.isWon(winOptions)) {
+        const sig = boardSignature(grid, hasColorTargets);
+        if (!seenSignatures.has(sig)) {
+          seenSignatures.add(sig);
+          found.push(currentLights());
+        }
+      }
     } else {
       // pickBranchCell incrémental: la cellule de branchement a déjà été
       // repérée par propagate() pendant sa dernière passe Stage 1 (voir
@@ -1108,6 +1244,8 @@ export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = 
   let firstSolution = null;
   let count = 0;
   let nodes = 0;
+  // Voir boardSignature / countSolutions: même déduplication.
+  const seenSignatures = new Set();
 
   // Priorité 1, cf. enumerateSolutions. IMPORTANT (voir decideSearchOrder
   // ci-dessous) : contrairement à enumerateSolutions, cette réorganisation
@@ -1141,10 +1279,14 @@ export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = 
     if (undecided.length === 0) {
       refreshForLeafCheck(grid, hasColorTargets);
       if (grid.isWon(winOptions)) {
-        count++;
-        if (!frozen) {
-          firstSolution = currentLights();
-          frozen = true;
+        const sig = boardSignature(grid, hasColorTargets);
+        if (!seenSignatures.has(sig)) {
+          seenSignatures.add(sig);
+          count++;
+          if (!frozen) {
+            firstSolution = currentLights();
+            frozen = true;
+          }
         }
       }
     } else {
