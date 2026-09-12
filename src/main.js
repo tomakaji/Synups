@@ -3340,24 +3340,39 @@ function renderMeditateSearchGrid(def, grid, justRevealedIndex = null) {
   // desktop...), sans le moindre JS.
   meditateSearchGridEl.style.gridTemplateColumns = `repeat(${grid.size}, 1fr)`;
 
-  // Retour utilisateur: "il faut qu'on voit les contours intérieurs et
-  // extérieurs de la forme, le contour doit englober" — ne détourer que
-  // les paires de fragments DÉJÀ révélés (round précédent) ne montrait que
-  // les frontières internes entre deux formes DIFFÉRENTES toutes deux
-  // trouvées, jamais le pourtour EXTÉRIEUR d'une forme (contre une case pas
-  // encore trouvée, ou contre le bord de la grille) — d'où des bouts de
-  // contour épars, jamais une forme visuellement "fermée". Nouvelle règle,
-  // sur les 4 côtés de CHAQUE case révélée: contour affiché SAUF quand le
-  // voisin est du côté confirmé comme faisant partie de LA MÊME forme
-  // (déjà révélé, même shapeId) — un voisin non révélé, d'une forme
-  // différente, ou hors grille, affiche donc TOUJOURS un contour. Aucune
-  // fuite d'info sur le contenu d'une case cachée: on ne dit jamais QUEL
-  // est son contenu, seulement que la forme connue s'arrête là (exactement
-  // ce qu'un contour est censé montrer au fur et à mesure qu'on révèle).
-  const sameRevealedShape = (row, col, shapeId) => {
+  // Retour utilisateur: "les contours s'adaptent en fonction des cases
+  // voisines dévoilées, l'idée c'est d'avoir CONSTAMMENT les contours de la
+  // forme à trouver, pas les contours de la case puis de la forme" — la
+  // version précédente comparait au statut RÉVÉLÉ des voisins
+  // (sameRevealedShape), donc le contour changeait de forme au fil des
+  // clics (une case de plus révélée = une ligne interne qui disparaît),
+  // recomposant progressivement un contour approximatif plutôt que de
+  // montrer d'emblée le VRAI contour, fixe, de la pièce entière.
+  // Désormais: dès qu'UNE SEULE case d'une forme est révélée, cette forme
+  // est "repérée" (touchedShapeIds) et son contour COMPLET s'affiche
+  // immédiatement sur la totalité de ses cases réelles (grid.cells connaît
+  // le shapeId de CHAQUE case, y compris non révélées — voir
+  // game/meditate.js: generateGrid), qu'elles soient déjà cliquées ou non.
+  // Le contour ne bouge plus ensuite: sameShapeStatic compare au shapeId
+  // RÉEL du voisin (pas à son statut révélé), donc la géométrie affichée
+  // est celle de la pièce elle-même, stable du premier au dernier clic sur
+  // cette forme. Les cases pas encore cliquées à l'intérieur restent de
+  // simples boutons sombres (aucune fuite du FRAGMENT/image, juste son
+  // contour) — jamais un contour sur une forme pas encore repérée, jamais
+  // sur les cases sans forme (shapeId null).
+  const touchedShapeIds = new Set();
+  for (const c of grid.cells) if (c.revealed && c.shapeId != null) touchedShapeIds.add(c.shapeId);
+
+  const sameShapeStatic = (row, col, shapeId) => {
     if (row < 0 || row >= grid.size || col < 0 || col >= grid.size) return false;
-    const c = grid.cells[row * grid.size + col];
-    return c.revealed && c.shapeId === shapeId;
+    return grid.cells[row * grid.size + col].shapeId === shapeId;
+  };
+
+  const addEdgeClasses = (el, row, col, shapeId) => {
+    if (!sameShapeStatic(row, col + 1, shapeId)) el.classList.add("meditate-search-cell--edge-right");
+    if (!sameShapeStatic(row, col - 1, shapeId)) el.classList.add("meditate-search-cell--edge-left");
+    if (!sameShapeStatic(row + 1, col, shapeId)) el.classList.add("meditate-search-cell--edge-bottom");
+    if (!sameShapeStatic(row - 1, col, shapeId)) el.classList.add("meditate-search-cell--edge-top");
   };
 
   grid.cells.forEach((cell, index) => {
@@ -3369,10 +3384,7 @@ function renderMeditateSearchGrid(def, grid, justRevealedIndex = null) {
       el = makeMeditateWindow(def.tier, def.division, cell.originRow, cell.originCol);
       el.classList.add("meditate-search-cell", "meditate-search-cell--fragment");
       if (justRevealed) el.classList.add("meditate-search-cell--reveal-fragment");
-      if (!sameRevealedShape(row, col + 1, cell.shapeId)) el.classList.add("meditate-search-cell--edge-right");
-      if (!sameRevealedShape(row, col - 1, cell.shapeId)) el.classList.add("meditate-search-cell--edge-left");
-      if (!sameRevealedShape(row + 1, col, cell.shapeId)) el.classList.add("meditate-search-cell--edge-bottom");
-      if (!sameRevealedShape(row - 1, col, cell.shapeId)) el.classList.add("meditate-search-cell--edge-top");
+      addEdgeClasses(el, row, col, cell.shapeId);
     } else {
       el = document.createElement("button");
       el.type = "button";
@@ -3383,6 +3395,12 @@ function renderMeditateSearchGrid(def, grid, justRevealedIndex = null) {
         el.disabled = true;
       } else {
         el.addEventListener("click", () => onMeditateCellClick(index));
+        // Case pas encore cliquée mais appartenant à une forme déjà
+        // repérée ailleurs sur la grille: son contour fait partie du
+        // pourtour global de cette forme (voir commentaire ci-dessus),
+        // même si le fragment lui-même reste caché tant qu'elle n'est pas
+        // cliquée individuellement.
+        if (cell.shapeId != null && touchedShapeIds.has(cell.shapeId)) addEdgeClasses(el, row, col, cell.shapeId);
       }
     }
     meditateSearchGridEl.appendChild(el);

@@ -209,6 +209,13 @@
   background: #06070a;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
+  /* Retour utilisateur: le contour d'une forme repérée doit désormais
+     s'afficher aussi sur ses cases PAS ENCORE cliquées (simples <button>,
+     voir main.js: renderMeditateSearchGrid) — position:relative ici
+     (plutôt que seulement sur .meditate-window, qui ne couvre que les
+     fragments déjà révélés) pour que le ::after du contour (position:
+     absolute, voir plus bas) s'ancre correctement sur CES boutons aussi. */
+  position: relative;
 }
 
 .meditate-search-cell:not(:disabled):hover {
@@ -246,20 +253,23 @@
   cursor: default;
 }
 
-/* Retour utilisateur: "les contours sont tjrs pas bien visibles [...] il
-   faut qu'on voit les contours intérieurs et extérieurs de la forme, le
-   contour doit englober" — l'ancienne règle ne détourait que les paires de
-   fragments DÉJÀ révélés entre eux (droite/bas uniquement), donc jamais le
-   pourtour EXTÉRIEUR d'une forme (contre une case pas encore trouvée, ou
-   contre le bord de la grille) : une forme fraîchement commencée n'avait
-   donc souvent qu'un bout de contour épars sur un seul côté, jamais
-   "fermée". Désormais un contour sur CHACUN des 4 côtés d'une case révélée,
-   affiché SAUF quand ce côté touche une autre case CONFIRMÉE comme faisant
-   partie de la MÊME forme (déjà révélée, même shapeId — voir main.js:
-   sameRevealedShape) — un voisin non révélé, d'une forme différente, ou
-   hors grille, montre donc TOUJOURS un contour, ce qui referme
-   systématiquement tout le pourtour de la portion déjà révélée d'une
-   forme, jamais seulement un bord isolé.
+/* Retour utilisateur (rounds successifs): d'abord "il faut qu'on voit les
+   contours intérieurs et extérieurs de la forme, le contour doit
+   englober", puis "les contours s'adaptent en fonction des cases voisines
+   dévoilées, l'idée c'est d'avoir CONSTAMMENT les contours de la forme à
+   trouver, pas les contours de la case puis de la forme" — comparer au
+   statut RÉVÉLÉ des voisins (ancienne sameRevealedShape) donnait un
+   contour qui changeait de forme au fil des clics. Désormais (voir main.js:
+   sameShapeStatic/touchedShapeIds) le contour compare au shapeId RÉEL du
+   voisin, jamais à son statut révélé: dès qu'UNE case d'une forme est
+   trouvée, le contour COMPLET et définitif de cette forme s'affiche
+   d'un coup sur la totalité de ses cases réelles (même celles pas encore
+   cliquées, qui restent de simples boutons sombres — seul leur CONTOUR est
+   visible, jamais leur fragment), et ne bouge plus ensuite. Un contour sur
+   CHACUN des 4 côtés d'une case, affiché SAUF quand ce côté touche une
+   autre case de LA MÊME forme (shapeId identique) — un voisin d'une forme
+   différente, sans forme, ou hors grille, montre donc TOUJOURS un contour,
+   refermant systématiquement tout le pourtour réel de la forme.
    Technique ::after (inchangée depuis le round précédent — voir son
    explication historique ci-dessous): un `border` classique se pose à la
    limite exacte de la case, or .meditate-search-cell utilise des marges
