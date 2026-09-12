@@ -110,7 +110,7 @@
                 <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
                 <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
               </svg>
-              <span data-i18n="menu-story.label" class="menu-card-label">Histoire</span>
+              <span data-i18n="menu-story.label" class="menu-card-label">Jouer</span>
             </span>
             <span class="menu-card-progress" aria-hidden="true">
               <span id="story-progress-fill" class="menu-card-progress-fill"></span>
@@ -123,7 +123,7 @@
               <svg viewBox="0 0 24 24" class="menu-card-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18.18 8a4 4 0 1 0 0 8 6 6 0 0 0 0-12 8 8 0 0 0-8 8 6 6 0 0 1-6 6 4 4 0 1 1 0-8 6 6 0 0 1 6 6 8 8 0 0 0 8-8 6 6 0 0 0-6-6 4 4 0 0 0-4 4"></path>
               </svg>
-              <span data-i18n="menu-infinite.label" class="menu-card-label">Infini</span>
+              <span data-i18n="menu-infinite.label" class="menu-card-label">Arcade</span>
             </span>
             <span data-i18n="menu-infinite.sub" class="menu-card-sub">Un niveau différent à chaque partie</span>
           </button>
@@ -285,7 +285,7 @@
               <span id="infinite-level-label"></span>
               <span data-i18n="infinite-badge" id="infinite-badge" class="infinite-badge hidden" title="Ce niveau n'a pas de solution unique confirmée — plusieurs façons de le résoudre existent peut-être">variante multiple</span>
               <span class="infinite-points-row">
-                <span data-i18n-attr="title:common.etoiles_gagnees_en_mode_infi" id="infinite-points" class="infinite-points" title="Étoiles gagnées en mode Infini">0</span>
+                <span data-i18n-attr="title:common.etoiles_gagnees_en_mode_infi" id="infinite-points" class="infinite-points" title="Étoiles gagnées en mode Arcade">0</span>
                 <span id="infinite-gain" class="infinite-gain"></span>
               </span>
             </span>
@@ -362,7 +362,7 @@
           <button data-i18n-attr="title:common.retour;aria-label:common.retour" class="back-btn icon-btn" data-back aria-label="Retour" title="Retour">
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
-          <h2 data-i18n="view-infinite-config.title" class="screen-title">Infini</h2>
+          <h2 data-i18n="view-infinite-config.title" class="screen-title">Arcade</h2>
         </header>
         <div id="infinite-config-view">
           <div class="infinite-config">
@@ -456,7 +456,7 @@
           <div class="options-section">
             <span data-i18n="misc.mecaniques" class="options-label">Mécaniques</span>
             <button data-i18n="btn-mechanics-reference" id="btn-mechanics-reference" class="options-btn">Voir les mécaniques découvertes</button>
-            <p data-i18n="misc.retrouve_les_explication" class="options-hint">Retrouve les explications déjà débloquées en Histoire, au cas où tu en aurais oublié une.</p>
+            <p data-i18n="misc.retrouve_les_explication" class="options-hint">Retrouve les explications déjà débloquées en mode Jouer, au cas où tu en aurais oublié une.</p>
           </div>
 
           <!-- Mode daltonien (retour utilisateur: "intégrer un mode Daltonien
@@ -498,7 +498,7 @@
           <div class="options-section">
             <span data-i18n="misc.donnees" class="options-label">Données</span>
             <button data-i18n="btn-reset-save" id="btn-reset-save" class="options-btn options-btn--danger">Réinitialiser le jeu</button>
-            <p data-i18n="misc.efface_la_progression_hi" class="options-hint">Efface la progression Histoire, les étoiles/l'Énergie et les réglages. Impossible à annuler.</p>
+            <p data-i18n="misc.efface_la_progression_hi" class="options-hint">Efface la progression du mode Jouer, les étoiles/l'Énergie et les réglages. Impossible à annuler.</p>
           </div>
         </div>
       </section>
@@ -749,8 +749,9 @@
             <button data-i18n-attr="title:common.reinitialiser_le_test;aria-label:common.reinitialiser_le_test" id="ed-test-reset" class="icon-btn hidden" aria-label="Réinitialiser le test" title="Réinitialiser le test">
               <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>
             </button>
-            <button data-i18n-attr="title:common.tester;aria-label:common.tester" id="ed-test" class="icon-btn" aria-label="Tester" title="Tester">
+            <button data-i18n-attr="title:common.tester;aria-label:common.tester" id="ed-test" class="icon-btn icon-btn--wide" aria-label="Tester" title="Tester">
               <svg viewBox="0 0 24 24" class="icon-svg" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+              <span class="icon-btn-label">Tester</span>
             </button>
           </div>
         </header>
@@ -775,7 +776,13 @@
                    sont donc plus qu'une mémoire technique, jamais montrés). -->
               <input id="ed-rows" type="hidden" value="5" />
               <input id="ed-cols" type="hidden" value="5" />
-              <div class="resize-frame">
+              <div class="resize-tab-layout">
+                <div class="resize-presets" id="ed-size-presets">
+                  <button data-i18n="common.petit" data-preset-rows="8" data-preset-cols="6" class="resize-preset-btn" type="button">Petit</button>
+                  <button data-i18n="common.moyen" data-preset-rows="10" data-preset-cols="8" class="resize-preset-btn" type="button">Moyen</button>
+                  <button data-i18n="common.grand" data-preset-rows="12" data-preset-cols="8" class="resize-preset-btn" type="button">Grand</button>
+                </div>
+                <div class="resize-frame">
                 <div class="resize-edge-duo" data-edge="top">
                   <button data-i18n-attr="title:common.retirer_la_ligne_du_haut;aria-label:common.retirer_la_ligne_du_haut" id="ed-remove-row-top" class="frame-btn" title="Retirer la ligne du haut" aria-label="Retirer la ligne du haut">
                     <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -810,6 +817,7 @@
                   <button data-i18n-attr="title:common.inserer_une_ligne_en_bas;aria-label:common.inserer_une_ligne_en_bas" id="ed-insert-row-bottom" class="frame-btn" title="Insérer une ligne en bas" aria-label="Insérer une ligne en bas">
                     <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                   </button>
+                </div>
                 </div>
               </div>
             </section>
@@ -950,7 +958,7 @@
 
             <section class="editor-tab hidden" id="ed-tab-options" data-tab="options">
               <label class="editor-field">Titre
-                <input data-i18n-attr="placeholder:common.nom_du_niveau_obligatoire" id="ed-name" type="text" value="" placeholder="Nom du niveau (obligatoire)" />
+                <input data-i18n-attr="placeholder:common.nom_du_niveau_obligatoire" id="ed-name" type="text" value="" placeholder="Nom du niveau" />
               </label>
 
               <label class="editor-field">Mes niveaux
@@ -959,7 +967,7 @@
 
               <div class="options-actions">
                 <button data-i18n-attr="title:common.effacer_nouveau_niveau;aria-label:common.effacer_nouveau_niveau" id="ed-new" class="icon-btn" aria-label="Effacer (nouveau niveau)" title="Effacer (nouveau niveau)">
-                  <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="12" x2="12" y2="18"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                  <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
                 <button data-i18n-attr="title:btn-playgames-save;aria-label:btn-playgames-save" id="ed-save" class="icon-btn" aria-label="Sauvegarder" title="Sauvegarder">
                   <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
@@ -967,21 +975,28 @@
                 <button data-i18n-attr="title:common.supprimer;aria-label:common.supprimer" id="ed-delete" class="icon-btn" aria-label="Supprimer" title="Supprimer">
                   <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
                 </button>
-                <!-- Round 26 (retour utilisateur): "importer un code peut
-                     être effacé, tout comme exporter un code, on ne garde
-                     pour l'instant que la fonctionnalité de copier le code
-                     d'un level pour l'intégrer directement dans le code pour
-                     les devs" — Exporter (copie) reste, Importer (collage)
-                     retiré ci-dessous avec son panneau. -->
                 <button data-i18n-attr="title:common.exporter_le_code;aria-label:common.exporter_le_code" id="ed-export" class="icon-btn" aria-label="Exporter le code" title="Exporter le code">
                   <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
                 </button>
-                <button data-i18n-attr="title:common.publie_ce_niveau_dans_la_com;aria-label:btn-editor-publish-confirm" id="ed-publish" class="icon-btn icon-btn--accent" aria-label="Publier" title="Publie ce niveau dans la Communauté (nécessite qu'il ait une solution)">
+                <!-- Retour utilisateur: la zone de texte ci-dessous (voir
+                     #ed-export-output) sert maintenant aussi bien a
+                     exporter (Exporter la remplit) qu'a importer (l'user
+                     peut y coller/editer un code a la main, puis Charger
+                     l'applique a l'editeur) -- voir editor.js: codeToLevel. -->
+                <button data-i18n-attr="title:common.charger_le_code;aria-label:common.charger_le_code" id="ed-import" class="icon-btn" aria-label="Charger le code" title="Charger le code colle ci-dessous dans l'editeur">
+                  <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 2 12 8 18"></polyline><polyline points="16 18 22 12 16 6"></polyline><line x1="2" y1="12" x2="22" y2="12"></line></svg>
+                </button>
+                <button data-i18n-attr="title:common.publie_ce_niveau_dans_la_com;aria-label:btn-editor-publish-confirm" id="ed-publish" class="icon-btn icon-btn--accent icon-btn--wide" aria-label="Publier" title="Publie ce niveau dans la Communaute (necessite qu'il ait une solution)">
                   <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                  <span data-i18n="common.publier" class="icon-btn-label">Publier</span>
                 </button>
               </div>
 
-              <textarea id="ed-export-output" class="hidden" readonly rows="6"></textarea>
+              <!-- Retour utilisateur: plus de `readonly`/`hidden` -- cette
+                   zone sert a la fois de sortie (Exporter la remplit) et
+                   d'entree (coller/editer un code a la main puis cliquer
+                   Charger, voir editor.js: importBtn). -->
+              <textarea data-i18n-attr="placeholder:common.code_du_niveau_placeholder" id="ed-export-output" rows="6" placeholder="Colle ici le code d'un niveau pour le charger, ou clique sur Exporter pour generer celui du niveau actuel."></textarea>
               </section>
             </div>
 
@@ -1221,7 +1236,7 @@
         <div class="modal-backdrop" data-reset-modal-close></div>
         <div class="modal-card">
           <h3 data-i18n="reset-confirm-modal.title" class="modal-title">Réinitialiser le jeu ?</h3>
-          <p data-i18n="reset-confirm-modal.text" class="modal-text">Toute la progression (Histoire, Infini, Remember, Défi Quotidien) ainsi que les récompenses débloquées (bannières, badges, thème Rétro) seront définitivement effacées. Tes niveaux et favoris Communauté, tes réglages son et ton pseudo seront conservés.</p>
+          <p data-i18n="reset-confirm-modal.text" class="modal-text">Toute la progression (Jouer, Arcade, Remember, Défi Quotidien) ainsi que les récompenses débloquées (bannières, badges, thème Rétro) seront définitivement effacées. Tes niveaux et favoris Communauté, tes réglages son et ton pseudo seront conservés.</p>
           <div class="modal-actions">
             <button data-i18n="btn-reset-cancel" id="btn-reset-cancel" class="options-btn" data-reset-modal-close>Annuler</button>
             <button data-i18n="btn-reset-confirm" id="btn-reset-confirm" class="options-btn options-btn--danger">Réinitialiser</button>

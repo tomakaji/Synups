@@ -177,6 +177,42 @@
    (steppers −/valeur/+ + bouton "Appliquer") est retiré — seule la croix
    d'insertion/retrait ci-dessous subsiste, elle agit déjà en immédiat. */
 
+/* Retour utilisateur: 3 presets de taille (Petit/Moyen/Grand) en colonne à
+   gauche de la croix d'insertion/retrait — layout en ligne, la colonne de
+   presets garde une largeur fixe pour ne jamais déséquilibrer le centrage
+   de .resize-frame (voir ed-tab-grid > .editor-tab-panel: max-width
+   centrée) quand elle est présente. */
+.resize-tab-layout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.resize-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 84px;
+  flex-shrink: 0;
+}
+
+.resize-preset-btn {
+  background: none;
+  border: 1px solid #2a3040;
+  color: var(--text);
+  padding: 8px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: all 0.15s;
+}
+
+.resize-preset-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* Croix compacte d'icônes autour d'un repère central (taille actuelle) —
    même idée qu'avant (voir historique: boutons pleine largeur "+ ligne
    haut" etc.) mais en icônes minuscules pour prendre le moins de place
@@ -344,6 +380,22 @@
   background: rgba(110, 231, 255, 0.06);
 }
 
+/* Retour utilisateur: Publier doit être plus long que les autres icon-btn
+   de la rangée (44px carré partout ailleurs) ET porter son texte — largeur
+   automatique + padding horizontal au lieu du carré fixe, le texte prenant
+   la place que .icon-btn seul n'a pas besoin de réserver. */
+.icon-btn--wide {
+  width: auto;
+  padding: 0 16px;
+  gap: 8px;
+}
+
+.icon-btn-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .editor-btn {
   background: none;
   border: 1px solid #2a3040;
@@ -373,6 +425,10 @@
   margin: 0;
 }
 
+/* Retour utilisateur: n'est plus jamais readonly/cachée (voir index.html)
+   — sert aussi bien à afficher un code exporté qu'à en coller/éditer un
+   pour le charger (voir editor.js: importBtn) ; `.input-error` (générique,
+   voir plus haut) réutilisée telle quelle en cas d'échec du Charger. */
 #ed-export-output {
   width: 100%;
   background: #0e1119;
@@ -385,8 +441,9 @@
   resize: vertical;
 }
 
-#ed-export-output.hidden {
-  display: none;
+#ed-export-output::placeholder {
+  color: var(--text-dim);
+  font-family: inherit;
 }
 
 /* ---------- Barre d'onglets (dernier enfant du sheet .editor-bottom-panel) ---------- */

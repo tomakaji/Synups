@@ -37,8 +37,13 @@ const MIN_SIZE = 1;
 // à PLAY_ICON) — permutées via innerHTML plutôt que deux <svg> imbriqués,
 // même approche que #btn-infinite-next/#btn-reset (voir main.js) pour rester
 // cohérent avec le reste de l'appli.
-const PLAY_ICON = '<svg viewBox="0 0 24 24" class="icon-svg" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>';
-const EDIT_ICON = '<svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>';
+// Retour utilisateur: le bouton doit aussi afficher son texte ("Tester"/
+// "Éditer" au lieu de l'icône seule) — .icon-btn-label réutilisée telle
+// quelle (même classe que le bouton Publier, voir editor.css).
+const PLAY_ICON =
+  '<svg viewBox="0 0 24 24" class="icon-svg" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg><span class="icon-btn-label">Tester</span>';
+const EDIT_ICON =
+  '<svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg><span class="icon-btn-label">Éditer</span>';
 
 const sounds = {
   targetSuccess: playTargetSuccess,
@@ -92,6 +97,49 @@ function levelToCode(level) {
   return `  {\n    name: "${name}",\n    rows: ${level.rows},\n    cols: ${level.cols},\n    cells: [\n${rowsCode}\n    ],\n  },`;
 }
 
+/** Inverse d'escapeJsString: défait dans l'ordre inverse (guillemet d'abord,
+ * antislash ensuite) — sinon un "\\"" (antislash+guillemet échappé)
+ * literal se déferait dans le désordre et corromprait le token. */
+function unescapeJsString(s) {
+  return s.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+}
+
+/**
+ * Inverse de levelToCode: relit un bloc `{ name: "...", rows: N, cols: N,
+ * cells: [ "...", ... ] }` collé/édité à la main dans #ed-export-output
+ * (voir importBtn) et reconstruit un niveau chargeable dans l'éditeur.
+ * Volontairement tolérant sur ce qui entoure ce bloc (accolades/virgule de
+ * fin, retours à la ligne) — seuls name/rows/cols/cells sont extraits par
+ * expression régulière, pas un vrai parseur JS (inutile ici: le format en
+ * sortie de levelToCode est fixe, et c'est la seule chose qu'on doit
+ * pouvoir relire). Retourne `null` si rows/cols/cells sont introuvables ou
+ * incohérents entre eux (nombre de lignes ≠ rows) plutôt que de charger un
+ * niveau à moitié valide.
+ */
+function codeToLevel(text) {
+  const rowsMatch = text.match(/rows\s*:\s*(\d+)/);
+  const colsMatch = text.match(/cols\s*:\s*(\d+)/);
+  const cellsMatch = text.match(/cells\s*:\s*\[([\s\S]*?)\]/);
+  if (!rowsMatch || !colsMatch || !cellsMatch) return null;
+  const rows = Number(rowsMatch[1]);
+  const cols = Number(colsMatch[1]);
+  if (!rows || !cols) return null;
+
+  const rowRe = /"((?:\\.|[^"\\])*)"/g;
+  const cellRows = [];
+  let m;
+  while ((m = rowRe.exec(cellsMatch[1]))) {
+    cellRows.push(tokenizeRow(unescapeJsString(m[1])));
+  }
+  if (cellRows.length !== rows) return null;
+  if (cellRows.some((row) => row.length !== cols)) return null;
+
+  const nameMatch = text.match(/name\s*:\s*"((?:\\.|[^"\\])*)"/);
+  const name = nameMatch ? unescapeJsString(nameMatch[1]) : "";
+
+  return { name, rows, cols, cells: cellRows };
+}
+
 export function initEditor({ levels }) {
   const boardEl = document.getElementById("editor-board");
   // Conteneur dont dépend le layout plein écran mobile (voir style.css:
@@ -133,11 +181,20 @@ export function initEditor({ levels }) {
   const removeColLeftBtn = document.getElementById("ed-remove-col-left");
   const insertColRightBtn = document.getElementById("ed-insert-col-right");
   const removeColRightBtn = document.getElementById("ed-remove-col-right");
+  // Presets de taille (retour utilisateur): 3 boutons Petit/Moyen/Grand qui
+  // redimensionnent la grille en une fois (voir resizeTo ci-dessous), les
+  // dimensions cible viennent des attributs data-preset-rows/cols posés sur
+  // chaque bouton dans index.html plutôt que d'une table dupliquée ici.
+  const presetBtns = document.querySelectorAll(".resize-preset-btn");
   const solveBtn = document.getElementById("ed-solve");
   const newBtn = document.getElementById("ed-new");
   const saveBtn = document.getElementById("ed-save");
   const deleteBtn = document.getElementById("ed-delete");
   const exportBtn = document.getElementById("ed-export");
+  // Retour utilisateur: la zone d'export sert aussi à coller/éditer un code
+  // à la main — importBtn (Charger) le parse et l'applique à l'éditeur
+  // (voir codeToLevel plus bas), même esprit que loadLevelIntoEditor.
+  const importBtn = document.getElementById("ed-import");
   const publishBtn = document.getElementById("ed-publish");
   const publishModal = document.getElementById("editor-publish-modal");
   const publishAuthorPreviewEl = document.getElementById("editor-publish-author-preview");
@@ -185,25 +242,11 @@ export function initEditor({ levels }) {
   // dernière action effectuée") est retiré — la plupart des actions de
   // l'éditeur sont déjà visibles directement dans la grille/le panneau
   // (une ligne ajoutée, une solution qui s'affiche...), ce texte ne faisait
-  // que dupliquer ce qui se voit déjà. Les deux cas où une action pouvait
-  // échouer SILENCIEUSEMENT sans lui (nom manquant à l'export, import
-  // invalide) ont chacun leur propre remplacement ciblé : markNameError()
-  // ci-dessous pour le premier, importStatusEl pour le second (voir plus
-  // bas).
-  function markNameError(shake = true) {
-    nameInput.classList.add("input-error");
-    if (shake) {
-      nameInput.classList.remove("input-error--shake");
-      // eslint-disable-next-line no-unused-expressions
-      nameInput.offsetWidth; // force un reflow pour rejouer l'animation même si elle vient déjà de tourner
-      nameInput.classList.add("input-error--shake");
-      nameInput.focus();
-    }
-  }
-
-  function clearNameError() {
-    nameInput.classList.remove("input-error", "input-error--shake");
-  }
+  // que dupliquer ce qui se voit déjà. Le nom n'étant plus obligatoire pour
+  // AUCUNE action sur ce champ (Exporter ne l'exige plus non plus, voir
+  // exportBtn) — l'ancien markNameError/clearNameError dédiés au champ
+  // Titre sont retirés ; l'échec de Charger a son propre remplacement
+  // ciblé, voir markImportError/clearImportError plus bas.
 
   // Onglets du bas (Format grille / Features / Expérimentales / Options,
   // voir index.html: .editor-tabbar) : un seul visible à la fois, purement
@@ -458,19 +501,56 @@ export function initEditor({ levels }) {
     rebuildEditGrid();
   });
 
+  /** Redimensionne la grille courante vers rows×cols en une fois (presets
+   * Petit/Moyen/Grand) — grandit/rétrécit depuis le bas/la droite, exactement
+   * comme insertRowBottom/removeRowBottom/insertColRight/removeColRight
+   * ci-dessus répétés autant de fois que nécessaire, pour préserver le
+   * contenu déjà dessiné au lieu de repartir d'une grille vierge. Cases
+   * bornées par MIN_SIZE/MAX_SIZE comme partout ailleurs dans l'éditeur. */
+  function resizeTo(targetRows, targetCols) {
+    if (!guardStructureEdit()) return;
+    const rows = Math.max(MIN_SIZE, Math.min(MAX_SIZE, targetRows));
+    const cols = Math.max(MIN_SIZE, Math.min(MAX_SIZE, targetCols));
+
+    while (editLevel.rows < rows) {
+      editLevel.cells.push(Array.from({ length: editLevel.cols }, () => "."));
+      editLevel.rows += 1;
+    }
+    while (editLevel.rows > rows) {
+      editLevel.cells.pop();
+      editLevel.rows -= 1;
+    }
+    while (editLevel.cols < cols) {
+      editLevel.cells.forEach((row) => row.push("."));
+      editLevel.cols += 1;
+    }
+    while (editLevel.cols > cols) {
+      editLevel.cells.forEach((row) => row.pop());
+      editLevel.cols -= 1;
+    }
+
+    rowsInput.value = editLevel.rows;
+    colsInput.value = editLevel.cols;
+    testLights.clear();
+    rebuildEditGrid();
+  }
+
+  presetBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      resizeTo(Number(btn.dataset.presetRows), Number(btn.dataset.presetCols));
+    });
+  });
+
   testResetBtn.addEventListener("click", () => {
     testLights.clear();
     if (testMode) rebuildEditGrid();
   });
 
+  // Le nom n'est plus obligatoire pour aucune action (voir plus haut) — on
+  // laisse simplement le champ vide tel quel plutôt que de retomber sur un
+  // nom générique qui masquerait l'absence de nom réel.
   nameInput.addEventListener("input", () => {
-    // Le nom est obligatoire pour sauvegarder/exporter/publier (voir
-    // saveBtn/exportBtn/publishBtn) : on laisse le champ vide tel quel
-    // plutôt que de retomber sur un nom générique qui masquerait
-    // l'obligation. Dès que le joueur tape quelque chose, l'état d'erreur
-    // (voir markNameError) n'a plus lieu d'être.
     editLevel.name = nameInput.value;
-    if (nameInput.value.trim()) clearNameError();
   });
 
   // Centralise tout ce qui dépend du mode Test (icône Play/Edit du header,
@@ -506,15 +586,17 @@ export function initEditor({ levels }) {
     colsInput.value = editLevel.cols;
     testLights = new Set();
     setTestMode(false);
-    exportOutput.classList.add("hidden");
+    // Retour utilisateur: la zone n'est plus cachée/readonly (voir
+    // index.html) — on vide juste son contenu pour ne pas laisser affiché
+    // le code d'un AUTRE niveau que celui qu'on vient de charger.
+    exportOutput.value = "";
+    clearImportError();
     // Retour utilisateur: zoom tactile — un vrai changement de niveau dans
     // l'éditeur réinitialise le zoom/pan (voir render.js: resetZoom).
     renderer.resetZoom();
-    // Round 19 (retour utilisateur): le nom n'est plus obligatoire en
-    // général (voir saveBtn) — un niveau chargé sans nom n'est donc plus
-    // signalé en erreur par défaut ; l'état d'erreur ne sert plus qu'à
-    // Exporter, qui le pose lui-même à son propre clic si besoin.
-    clearNameError();
+    // Round 19 (retour utilisateur): le nom n'est plus obligatoire, ni
+    // pour Sauvegarder ni pour Exporter (voir saveBtn/exportBtn) — un
+    // niveau chargé sans nom n'est donc jamais signalé en erreur.
     rebuildEditGrid();
     refreshLevelList();
   }
@@ -574,11 +656,11 @@ export function initEditor({ levels }) {
     refreshLevelList();
   });
 
+  // Retour utilisateur: le titre n'est plus obligatoire pour exporter (il
+  // ne l'est plus nulle part sur ce champ — seul le titre du modal Publier,
+  // voir markPublishTitleError plus bas, reste requis) : un niveau sans nom
+  // exporte simplement `name: ""`, à renommer plus tard si besoin.
   exportBtn.addEventListener("click", () => {
-    if (!editLevel.name.trim()) {
-      markNameError();
-      return;
-    }
     // levelToCode attend des cellules en tableaux de tokens (comme
     // editLevel.cells), pas les chaînes déjà jointes que renvoie
     // buildLevelObject() pour LightUpGrid.
@@ -589,11 +671,37 @@ export function initEditor({ levels }) {
       cells: editLevel.cells,
     });
     exportOutput.value = code;
-    exportOutput.classList.remove("hidden");
     exportOutput.focus();
     exportOutput.select();
     navigator.clipboard?.writeText(code).catch(() => {});
   });
+
+  function markImportError() {
+    exportOutput.classList.remove("input-error--shake");
+    void exportOutput.offsetWidth;
+    exportOutput.classList.add("input-error", "input-error--shake");
+    exportOutput.focus();
+  }
+
+  function clearImportError() {
+    exportOutput.classList.remove("input-error", "input-error--shake");
+  }
+
+  // Charger: relit le code collé/édité dans la même zone (voir
+  // codeToLevel) et l'applique à l'éditeur — symétrique d'Exporter, sans
+  // toucher à "Mes niveaux" (currentCustomIndex repart à -1, comme pour
+  // Effacer: un code chargé n'est pas encore un niveau sauvegardé).
+  importBtn.addEventListener("click", () => {
+    const parsed = codeToLevel(exportOutput.value);
+    if (!parsed) {
+      markImportError();
+      return;
+    }
+    clearImportError();
+    loadLevelIntoEditor(parsed);
+  });
+
+  exportOutput.addEventListener("input", () => clearImportError());
 
   // Publier: envoie le niveau courant dans la Communauté (voir
   // community-store.js). Round 19 (retour utilisateur): "on demande le nom

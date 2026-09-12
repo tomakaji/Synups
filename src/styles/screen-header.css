@@ -69,6 +69,18 @@
   height: 38px;
 }
 
+/* Retour utilisateur (bouton Tester/Éditer de l'éditeur): doit afficher son
+   texte en plus de l'icône, donc plus large que le carré 38px ci-dessus —
+   .icon-btn--wide (voir editor.css) l'emporterait normalement, mais
+   `.screen-header .icon-btn` (2 classes) est plus spécifique qu'une seule
+   classe, d'où ce contre-override scopé ici plutôt que dans editor.css. */
+.screen-header .icon-btn--wide {
+  width: auto;
+  height: 38px;
+  padding: 0 14px;
+  gap: 6px;
+}
+
 /* Réserve, sur chaque écran secondaire (tous sauf l'écran titre, qui n'a pas
    de .screen-header), exactement l'espace que .screen-header occupait
    auparavant dans le flux normal — sans ça son contenu se retrouverait
