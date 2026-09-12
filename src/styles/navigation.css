@@ -44,3 +44,34 @@
   align-items: center;
 }
 
+/* Retour utilisateur: "ajouter un peu de transition entre les différentes
+   pages lorsqu'on navigue [...] le passage d'un ecran à l'autre est un peu
+   brutal [...] restons simple mais efficace" — simple fondu d'ENTRÉE sur le
+   nouvel écran affiché (voir main.js: renderActiveScreen, classe rejouée à
+   chaque vrai changement d'écran via un reflow forcé, même technique que
+   showHintAt). Opacité SEULE, jamais de transform: un léger glissement
+   aurait été plus joli mais `transform` ne reflow pas — alignDailyChallengeFab()
+   (main.js), appelée juste après sur l'écran titre, lirait alors une
+   position temporairement décalée via getBoundingClientRect() pendant que
+   l'animation tourne. Pas d'animation de SORTIE sur l'ancien écran: il
+   suffit d'adoucir l'arrivée pour que la coupure soit beaucoup moins
+   sèche, sans avoir à coordonner deux écrans en même temps. */
+@keyframes screen-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.screen.screen--enter {
+  animation: screen-enter 0.18s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen.screen--enter {
+    animation: none;
+  }
+}
+

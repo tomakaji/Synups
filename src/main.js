@@ -3108,10 +3108,26 @@ const SCREEN_IDS = {
 
 let viewStack = ["title"];
 
+// Retour utilisateur ("un peu de transition entre les pages [...] restons
+// simple") — évite de rejouer l'animation d'entrée (voir navigation.css:
+// .screen--enter) si renderActiveScreen() est rappelée alors que l'écran
+// actif n'a pas réellement changé (aucun appelant actuel ne fait ça, mais
+// mieux vaut ne jamais faire "clignoter" un écran que le joueur regarde
+// déjà si un futur appel le faisait).
+let lastRenderedScreenId = null;
+
 function renderActiveScreen() {
   const active = viewStack[viewStack.length - 1];
+  const activeId = SCREEN_IDS[active];
   for (const [name, id] of Object.entries(SCREEN_IDS)) {
     document.getElementById(id).classList.toggle("hidden", name !== active);
+  }
+  if (activeId !== lastRenderedScreenId) {
+    const el = document.getElementById(activeId);
+    el.classList.remove("screen--enter");
+    void el.offsetWidth; // force le reflow: permet de rejouer l'animation même si la classe était déjà posée juste avant (même technique que showHintAt)
+    el.classList.add("screen--enter");
+    lastRenderedScreenId = activeId;
   }
 }
 

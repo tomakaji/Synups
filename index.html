@@ -743,15 +743,23 @@
           </button>
           <h2 data-i18n="view-editor.title" class="screen-title">Éditeur</h2>
           <div class="header-actions">
+            <!-- Retour utilisateur: "en mode test, le bouton Editer doit être
+                 AVANT les deux icon-buttons d'actions (Résoudre/Réinitialiser),
+                 pas après" — #ed-test en premier dans le DOM (.header-actions
+                 est un simple flex-row, l'ordre visuel suit l'ordre du DOM,
+                 voir screen-header.css). Hors mode test, ed-solve/ed-test-reset
+                 sont masqués (.hidden, voir editor.js: setTestMode) donc cet
+                 ordre n'a aucun effet visible tant qu'on n'a pas basculé en
+                 test — seul le mode test change de disposition. -->
+            <button data-i18n-attr="title:common.tester;aria-label:common.tester" id="ed-test" class="icon-btn icon-btn--wide" aria-label="Tester" title="Tester">
+              <svg viewBox="0 0 24 24" class="icon-svg" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+              <span class="icon-btn-label">Tester</span>
+            </button>
             <button data-i18n-attr="title:common.trouve_et_pose_automatiqueme;aria-label:common.resoudre" id="ed-solve" class="icon-btn hidden" aria-label="Résoudre" title="Trouve et pose automatiquement une solution">
               <svg viewBox="0 0 24 24" class="icon-svg" fill="currentColor" stroke="none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
             </button>
             <button data-i18n-attr="title:common.reinitialiser_le_test;aria-label:common.reinitialiser_le_test" id="ed-test-reset" class="icon-btn hidden" aria-label="Réinitialiser le test" title="Réinitialiser le test">
               <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>
-            </button>
-            <button data-i18n-attr="title:common.tester;aria-label:common.tester" id="ed-test" class="icon-btn icon-btn--wide" aria-label="Tester" title="Tester">
-              <svg viewBox="0 0 24 24" class="icon-svg" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
-              <span class="icon-btn-label">Tester</span>
             </button>
           </div>
         </header>
