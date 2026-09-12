@@ -124,7 +124,7 @@ import {
   avatarUnlockLabel,
   getAvatarSvg,
   DEFAULT_AVATAR,
-  initCommunityCloud,
+  refreshCommunityCloud,
   onLevelsChanged,
 } from "./game/community-store.js";
 import { t, applyI18n } from "./game/i18n.js";
@@ -1043,17 +1043,18 @@ onBannerHeightChange((px) => {
   document.documentElement.style.setProperty("--ad-banner-height", `${px > 0 ? px + AD_BANNER_MARGIN : 0}px`);
 });
 
-// Round 20 (Firestore): démarre l'écoute temps réel du fil communautaire +
-// l'authentification anonyme (voir game/community-store.js). Comme initAds()
-// ci-dessus, ne bloque jamais le chargement (pas de await) — tant que la
-// première réponse Firestore n'est pas arrivée, le fil affiche juste la
-// seed, sans jamais planter faute de réseau.
-initCommunityCloud();
+// Round "audit coûts serveur" (retour utilisateur: "j'aimerais que le
+// serveur tienne bien") — plus d'écoute temps réel démarrée ici au
+// chargement: voir showView() plus bas, refreshCommunityCloud() n'est
+// appelée QUE quand le joueur entre vraiment sur l'écran Communauté/Mon
+// profil (démarrage paresseux : un joueur qui ne visite jamais ces écrans
+// ne déclenche plus aucune lecture Firestore au lancement de l'app).
 // Ré-affiche l'écran Communauté/Mon profil s'il est actif quand le fil
 // change (nouvelle grille publiée par vous ou un autre joueur, résolution de
-// l'uid anonyme...) — même logique de rendu que showView() pour ces deux
-// écrans (voir plus bas), pour ne jamais laisser un fil périmé à l'écran
-// après un aller-retour Firestore qui arrive après coup.
+// l'uid anonyme, retour d'un refreshCommunityCloud()...) — même logique de
+// rendu que showView() pour ces deux écrans (voir plus bas), pour ne jamais
+// laisser un fil périmé à l'écran après un aller-retour Firestore qui arrive
+// après coup.
 onLevelsChanged(() => {
   const active = viewStack[viewStack.length - 1];
   if (active === "community") renderCommunityFeed();
@@ -3036,6 +3037,13 @@ function showView(name, opts) {
   if (name === "play") setMode(opts?.mode ?? mode);
   if (opts?.levelIndex != null) loadLevel(opts.levelIndex);
   if (name === "story-select") renderLevelGrid();
+  // refreshCommunityCloud() est throttlée en interne (voir community-store.js:
+  // REFRESH_MIN_INTERVAL_MS) — sûr d'appeler à CHAQUE entrée sur ces deux
+  // écrans, un aller-retour rapide entre écrans ne redéclenche pas de lecture
+  // réseau. Rendu immédiat avec le cache déjà en mémoire ci-dessous, puis
+  // re-rendu automatique (voir onLevelsChanged plus haut) une fois la
+  // réponse réseau arrivée.
+  if (name === "community" || name === "community-profile") refreshCommunityCloud();
   if (name === "community") renderCommunityFeed(true); // vraie entrée dans l'écran: page 1
   if (name === "community-profile") renderCommunityProfile();
   if (name === "editor") editorApi.onShow();
@@ -3121,7 +3129,18 @@ function enterStoryDirect() {
 function enterInfiniteDirect() {
   viewStack = ["title", "play"];
   if (lastInfiniteResult) {
+    // Bug (retour utilisateur): Jouer -> retour -> Arcade affichait encore
+    // le niveau de Jouer. showView() bascule bien le mode/l'UI vers
+    // "infinite" mais ne recharge PAS le plateau (contrairement au cas
+    // "story" ci-dessus qui passe par opts.levelIndex) : `grid`/`currentLevel`
+    // restaient donc ceux du dernier mode joué (ex: Histoire) entre-temps.
+    // On force explicitement le rechargement du dernier résultat Infini —
+    // même mécanisme que le handler de btn-reset. loadInfiniteLevel() est
+    // sûr à rappeler avec la même référence: son effet de bord (comptage
+    // pub interstitielle) est gardé par `result !== lastInfiniteResult`,
+    // qui vaut false ici et saute donc ce comptage.
     showView("play", { mode: "infinite" });
+    loadInfiniteLevel(lastInfiniteResult);
   } else {
     setMode("infinite");
     renderActiveScreen();
