@@ -110,6 +110,8 @@ import {
   spendStars,
   addStars,
   resetMeditateProgress,
+  isStoryMasteryUnlocked,
+  markStoryMasteryUnlocked,
 } from "./game/storage.js";
 import {
   listLevels,
@@ -288,7 +290,17 @@ async function advanceAfterWin() {
       });
     }
   } else {
-    markStoryLevelCompleted(currentLevelIndex);
+    // `levels.length` peut grandir plus tard (retour utilisateur: "42
+    // actuellement mais pourrait changer à l'avenir") — capturé AVANT
+    // loadLevel() ci-dessous, qui mute currentLevelIndex, pour que la
+    // détection "était-ce le DERNIER niveau" reste correcte sans jamais
+    // dépendre d'une constante en dur.
+    const wasLastLevel = currentLevelIndex === levels.length - 1;
+    markStoryLevelCompleted(currentLevelIndex, {
+      onDone: () => {
+        if (wasLastLevel) triggerCampaignFinished();
+      },
+    });
     loadLevel(currentLevelIndex + 1);
   }
   const elapsed = performance.now() - holdStart;
@@ -367,9 +379,16 @@ let storyProgress = loadStoryProgress();
 // réinitialisation complète du jeu.
 let seenMechanics = loadSeenMechanics();
 
-function markStoryLevelCompleted(index) {
-  if (index < 0 || index >= levels.length) return; // garde-fou: index invalide (ne devrait pas arriver)
-  if (storyProgress.has(index)) return; // déjà fait: rejouer un niveau ne change rien à la progression
+// Round "Fusion" (retour utilisateur: prévoir la suite après un
+// déblocage d'avatar palier) — `onDone` est optionnel et sert à CHAÎNER une
+// action après la récompense (voir advanceAfterWin: déclencher
+// triggerCampaignFinished() seulement APRÈS que la modale avatar palier 40
+// éventuelle ait été refermée, jamais en parallèle). Invoqué immédiatement
+// dans les cas où aucune modale n'est affichée (garde-fous / déjà fait /
+// pas de palier atteint), ou différé via onClose sinon — jamais les deux.
+function markStoryLevelCompleted(index, { onDone } = {}) {
+  if (index < 0 || index >= levels.length) { onDone?.(); return; } // garde-fou: index invalide (ne devrait pas arriver)
+  if (storyProgress.has(index)) { onDone?.(); return; } // déjà fait: rejouer un niveau ne change rien à la progression
   storyProgress.add(index);
   saveStoryProgress(storyProgress);
   renderTitleStoryProgress();
@@ -387,8 +406,39 @@ function markStoryLevelCompleted(index) {
       avatarId: unlockedAvatar.id,
       title: t("cosmeticUnlockBadgeTitle", { name: t(`avatar.${unlockedAvatar.id}`) }),
       subtitle: t("cosmeticUnlockStorySubtitle", { count: storyProgress.size }),
+      onClose: onDone,
     });
+  } else {
+    onDone?.();
   }
+}
+
+// Tier "badge-frame"/"badge-teaser" de la bannière Fusion (voir badges.css)
+// — volontairement PAS 0: buildBadgeFrame() fait `badgeTier ? ... : ""`
+// (vérité JS), donc un tier 0 serait traité comme "aucun badge" et
+// perdrait sa classe CSS. 9 choisi car libre (tiers 1-5 Remember, 6-8
+// Meditate, voir sommation.js/meditate.js).
+const STORY_MASTERY_BADGE_TIER = 9;
+
+// Retour utilisateur: "il faut ajouter une banniere qu'on débloque à la fin
+// du mode Jouer [...] positionnée en premier dans la liste [...] les 3
+// couleurs [...] proposer au joueur (apres les récompenses) de noter
+// l'application" — appelée depuis advanceAfterWin() UNIQUEMENT une fois la
+// modale avatar palier 40 (éventuelle) refermée, jamais avant/en parallèle
+// (voir onDone ci-dessus). isStoryMasteryUnlocked()/markStoryMasteryUnlocked()
+// (storage.js) gardent CETTE fonction idempotente indépendamment du nombre
+// de fois où le joueur rejoue le dernier niveau après coup.
+function triggerCampaignFinished() {
+  if (isStoryMasteryUnlocked()) return; // déjà fait: ne jamais re-proposer
+  markStoryMasteryUnlocked();
+  refreshProfileBadges();
+  showCosmeticUnlockModal({
+    kind: "badge",
+    badgeTier: STORY_MASTERY_BADGE_TIER,
+    title: t("cosmeticUnlockStoryMasteryTitle"),
+    subtitle: t("cosmeticUnlockStoryMasterySubtitle"),
+    onClose: () => openRateAppModal(),
+  });
 }
 
 function renderTitleStoryProgress() {
@@ -1701,6 +1751,26 @@ document.querySelectorAll("[data-mechanics-reference-close]").forEach((el) => {
   el.onclick = () => mechanicsReferenceModal.classList.add("hidden");
 });
 
+// ---------- Modale "Noter sur Google Play" (fin du mode Jouer) ----------
+// Retour utilisateur: "proposer au joueur (apres les récompenses) de noter
+// l'application si il a aimé sur googleplay" — approche "modale simple +
+// lien Play Store" plutôt qu'un plugin natif d'avis in-app (pas de
+// garantie d'affichage même testé, et demanderait un rebuild Android) —
+// window.open() fonctionne aussi bien en WebView Capacitor que sur le web.
+const rateAppModal = document.getElementById("rate-app-modal");
+const RATE_APP_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.synups.game";
+
+function openRateAppModal() {
+  rateAppModal.classList.remove("hidden");
+}
+document.querySelectorAll("[data-rate-app-close]").forEach((el) => {
+  el.onclick = () => rateAppModal.classList.add("hidden");
+});
+document.getElementById("btn-rate-app-now").onclick = () => {
+  window.open(RATE_APP_PLAY_STORE_URL, "_blank");
+  rateAppModal.classList.add("hidden");
+};
+
 // Amorce le buffer de niveaux Infini dès le chargement de l'app (pas
 // seulement au premier changement de réglage) — retour utilisateur: "je
 // veux qu'on preload les niveaux dès le chargement de l'app", pour que
@@ -2643,7 +2713,16 @@ function refreshProfileBadges() {
   // source — voir buildBadgeFrame). Round suivant (retour utilisateur):
   // getStarBadges() (ancien seuil d'Énergie) remplacé par
   // getMeditateBadges() (mini-jeu de révélation).
-  for (const badge of [...getSommationBadges(), ...getMeditateBadges()]) {
+  // Bannière "Fusion" (retour utilisateur: fin du mode Jouer, positionnée
+  // en PREMIER) — objet synthétique au même format `{name, earned, tier}`
+  // que getSommationBadges()/getMeditateBadges() (voir ces fonctions),
+  // mais lue directement depuis storage.js (isStoryMasteryUnlocked) plutôt
+  // que depuis un module de badges dédié: il n'y a qu'UNE seule bannière
+  // ici, pas tout un système de paliers. Prépendue par ordre d'insertion
+  // (refreshProfileBadges() n'affiche PAS par numéro de tier) donc elle
+  // s'affiche toujours en tête, sans dépendre de STORY_MASTERY_BADGE_TIER.
+  const storyMasteryBadge = { name: "Fusion", earned: isStoryMasteryUnlocked(), tier: STORY_MASTERY_BADGE_TIER };
+  for (const badge of [storyMasteryBadge, ...getSommationBadges(), ...getMeditateBadges()]) {
     const tile = document.createElement(badge.earned ? "button" : "div");
     if (badge.earned) tile.type = "button";
     tile.className =

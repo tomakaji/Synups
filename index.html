@@ -1075,6 +1075,32 @@
         </div>
       </div>
 
+      <!-- Modale "Noter sur Google Play" (retour utilisateur: "une fois le
+           dernier niveau terminé [...] proposer au joueur (apres les
+           récompenses) de noter l'application si il a aimé sur googleplay")
+           — déclenchée par main.js: triggerCampaignFinished(), uniquement
+           via l'onClose de la modale "Bannière Fusion" (jamais avant/en
+           parallèle), donc TOUJOURS après les récompenses. Contrairement à
+           #cosmetic-unlock-modal, PAS de contenu "à ne pas manquer": clic
+           extérieur ET bouton "Plus tard" ferment sans rien faire — seul
+           "Noter maintenant" ouvre la fiche Google Play (voir main.js:
+           openRateAppModal, lien en dur vers com.synups.game). -->
+      <div id="rate-app-modal" class="modal rate-app-modal hidden">
+        <div class="modal-backdrop" data-rate-app-close></div>
+        <div class="modal-card rate-app-card">
+          <button data-i18n-attr="aria-label:common.fermer" type="button" class="modal-close-x" data-rate-app-close aria-label="Fermer">
+            <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+          <p data-i18n="rate-app-kicker" class="cosmetic-unlock-kicker">Une dernière chose</p>
+          <h3 data-i18n="rate-app-title" class="modal-title">Tu as aimé Fusion RGB ?</h3>
+          <p data-i18n="rate-app-text" class="modal-text">Une note sur Google Play aide beaucoup l'application à se faire connaître — ça prend 10 secondes.</p>
+          <div class="modal-actions">
+            <button data-i18n="btn-rate-app-later" id="btn-rate-app-later" type="button" class="options-btn" data-rate-app-close>Plus tard</button>
+            <button data-i18n="btn-rate-app-now" id="btn-rate-app-now" type="button" class="options-btn options-btn--accent">Noter maintenant</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Modale "schéma" pédagogique (mode Histoire, round 23, retour
            utilisateur): "ça n'est pas assez clair pour le joueur de
            comprendre les mécaniques [...] intégrer des 'schéma' qui

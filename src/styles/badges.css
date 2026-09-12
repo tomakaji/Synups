@@ -151,6 +151,41 @@
   white-space: nowrap;
 }
 
+/* Tier 9 "Fusion" — bannière ultime débloquée en terminant TOUT le mode
+   Jouer (retour utilisateur: "une bannière qu'on débloque à la fin du mode
+   Jouer [...] positionnée en premier dans la liste [...] les 3 couleurs")
+   — persistée séparément (voir storage.js: isStoryMasteryUnlocked), pas un
+   tier Meditate ni Remember. Affichée en premier dans
+   refreshProfileBadges() (main.js) par ordre d'insertion, pas par ce numéro
+   de tier (9 choisi car libre — 1-5 Remember, 6-8 Meditate — ET surtout
+   PAS 0: buildBadgeFrame fait `badgeTier ? ... : ""`, un tier 0 serait
+   silencieusement traité comme "aucun badge" et perdrait sa classe CSS).
+   Seule bannière TRICOLORE du jeu: reprend telles quelles les 3 couleurs de
+   lumière (rouge/vert/bleu) du logo officiel "Fusion RGB" (voir title.css:
+   .game-logo, mêmes teintes #ff5d6c/#59e39d/#5da9ff) plutôt que la palette
+   mono-couleur de chaque tier existant — matérialise la fusion des trois
+   couleurs de base plutôt qu'une mécanique particulière (aucune mécanique
+   unique ne représenterait "avoir tout terminé"). */
+.badge-teaser--tier-9.earned {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: linear-gradient(135deg, rgba(255, 93, 108, 0.16), rgba(89, 227, 157, 0.14) 50%, rgba(93, 169, 255, 0.16));
+}
+.badge-teaser--tier-9.earned .badge-teaser-deco {
+  background-image:
+    radial-gradient(6px 6px at 68% 22%, #ff5d6c, transparent 70%),
+    radial-gradient(6px 6px at 80% 32%, #59e39d, transparent 70%),
+    radial-gradient(6px 6px at 74% 44%, #5da9ff, transparent 70%),
+    repeating-conic-gradient(from 0deg at 76% 30%, rgba(255, 255, 255, 0.12) 0deg 3deg, transparent 3deg 18deg);
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.35));
+}
+.badge-teaser--tier-9.earned .badge-teaser-name {
+  background: linear-gradient(90deg, #ff5d6c, #59e39d, #5da9ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
 /* Tier 1 "Étincelle" — sobre: contour accent + une étincelle. */
 .badge-teaser--tier-1.earned {
   border-color: rgba(110, 231, 255, 0.4);
@@ -498,6 +533,37 @@
   width: 16px;
   height: 16px;
   font-size: 0.58rem;
+}
+
+/* Tier 9 "Fusion" — voir le commentaire complet sur .badge-teaser--tier-9
+   plus haut (bannière ultime, fin du mode Jouer, tricolore, tier 9 plutôt
+   que 0 pour ne pas être traité comme "aucun badge" par buildBadgeFrame).
+   Ici: la version "appliquée" (pilule intacte, comme le tier 1), avec les
+   3 couleurs de lumière au lieu du halo mono-couleur habituel. */
+.badge-frame--tier-9 {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: linear-gradient(120deg, rgba(255, 93, 108, 0.18), rgba(89, 227, 157, 0.16) 50%, rgba(93, 169, 255, 0.18));
+}
+.badge-frame--tier-9 .badge-frame-deco {
+  background-image:
+    radial-gradient(10px 8px at 78% 40%, #ff5d6c, transparent 70%),
+    radial-gradient(10px 8px at 86% 52%, #59e39d, transparent 70%),
+    radial-gradient(10px 8px at 80% 64%, #5da9ff, transparent 70%),
+    repeating-conic-gradient(from 0deg at 82% 52%, rgba(255, 255, 255, 0.1) 0deg 3deg, transparent 3deg 18deg);
+}
+.badge-frame-preview .badge-frame--tier-9 .badge-frame-deco {
+  background-image:
+    radial-gradient(16px 13px at 78% 40%, #ff5d6c, transparent 70%),
+    radial-gradient(16px 13px at 86% 52%, #59e39d, transparent 70%),
+    radial-gradient(16px 13px at 80% 64%, #5da9ff, transparent 70%),
+    repeating-conic-gradient(from 0deg at 82% 52%, rgba(255, 255, 255, 0.1) 0deg 3deg, transparent 3deg 18deg);
+}
+.badge-frame--tier-9 .badge-frame-pseudo {
+  background: linear-gradient(90deg, #ff5d6c, #59e39d, #5da9ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 /* Tier 1 "Étincelle" — le plus sobre: pilule intacte + une étincelle. */

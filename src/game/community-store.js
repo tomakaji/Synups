@@ -147,6 +147,18 @@ export const AVATARS = [
     svg: '<svg viewBox="0 0 100 100"><line x1="18" y1="82" x2="82" y2="18" stroke="#4a5468" stroke-width="16" stroke-linecap="round"/><line x1="18" y1="82" x2="82" y2="18" stroke="#9fb4d8" stroke-width="6" stroke-linecap="round"/></svg>',
   },
   {
+    // 4e avatar débloqué par la progression campagne (retour utilisateur:
+    // "au niveau 40, ajouter un avatar à débloquer") — même schéma
+    // unlock.type "story" que Charge/Synapse/Miroir ci-dessus, palier
+    // suivant naturel (10/20/30/40). Nom et motif (rayons émis depuis un
+    // point central) reprennent "impulsion", le terme du jeu pour désigner
+    // une lumière posée (voir round "Terminologie: lumière→impulsion").
+    id: "impulsion",
+    label: "Impulsion",
+    unlock: { type: "story", level: 40 },
+    svg: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="14" fill="#fff2b8"/><line x1="50" y1="8" x2="50" y2="28" stroke="#ffd23f" stroke-width="7" stroke-linecap="round"/><line x1="50" y1="72" x2="50" y2="92" stroke="#ffd23f" stroke-width="7" stroke-linecap="round"/><line x1="8" y1="50" x2="28" y2="50" stroke="#ffd23f" stroke-width="7" stroke-linecap="round"/><line x1="72" y1="50" x2="92" y2="50" stroke="#ffd23f" stroke-width="7" stroke-linecap="round"/></svg>',
+  },
+  {
     id: "wall",
     label: "Mur",
     unlock: { type: "purchase", cost: 100 },

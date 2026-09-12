@@ -32,6 +32,14 @@ const KEYS = {
   // pour toute la logique, ce module ne fait que porter le stockage, même
   // convention que `dailyChallenge` ci-dessus.
   meditate: "lightup-meditate",
+  // Bannière "Fusion" (retour utilisateur: "bannière qu'on débloque à la
+  // fin du mode Jouer [...] positionnée en premier dans la liste") — un
+  // simple booléen suffit (pas de palier/tier multiple comme
+  // Meditate/Remember, un seul jalon: toute la campagne terminée), clé
+  // dédiée pour ne jamais se mélanger avec `progress` (Set d'index de
+  // niveaux) ni les tiers Meditate — voir isStoryMasteryUnlocked/
+  // markStoryMasteryUnlocked ci-dessous.
+  storyMastery: "lightup-story-mastery",
 };
 
 function readJson(key, fallback) {
@@ -200,6 +208,22 @@ export function loadSeenMechanics() {
 
 export function saveSeenMechanics(seenSet) {
   writeJson(KEYS.seenMechanics, { seen: Array.from(seenSet) });
+}
+
+/** Bannière "Fusion" (voir KEYS.storyMastery ci-dessus) : vrai une fois
+ * tous les niveaux du mode Jouer terminés au moins une fois. Jamais
+ * recalculé depuis `storyProgress.size >= levels.length` ailleurs que par
+ * `markStoryMasteryUnlocked` (voir main.js: triggerCampaignFinished) —
+ * persisté une fois pour toutes comme n'importe quel autre cosmétique
+ * débloqué, pour ne jamais être repris si `levels.length` grandit plus tard
+ * (nouveaux niveaux ajoutés après coup, voir retour utilisateur: "pourrait
+ * changer à l'avenir"). */
+export function isStoryMasteryUnlocked() {
+  return readJson(KEYS.storyMastery, false) === true;
+}
+
+export function markStoryMasteryUnlocked() {
+  writeJson(KEYS.storyMastery, true);
 }
 
 /** Nombre de niveaux accessibles (1 à `total`) : les niveaux complétés, EN

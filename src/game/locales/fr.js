@@ -194,6 +194,7 @@ export const fr = {
   "avatar.charge": "Charge",
   "avatar.synapse": "Synapse",
   "avatar.mirror": "Miroir",
+  "avatar.impulsion": "Impulsion",
   "avatar.wall": "Mur",
   "avatar.target": "Cible",
   "avatar.pyra": "Pyra",
@@ -213,6 +214,16 @@ export const fr = {
   "cosmeticUnlockStorySubtitle": "Débloqué en terminant {{count}} niveaux du mode Jouer !",
   "cosmeticUnlockBoltSubtitle": "Débloqué pour {{cost}} Énergie !",
   "cosmeticUnlockStarSubtitle": "Débloqué pour {{cost}} Étoiles !",
+  // Bannière "Fusion" (fin du mode Jouer, voir main.js: triggerCampaignFinished).
+  "cosmeticUnlockStoryMasteryTitle": "Bannière « Fusion »",
+  "cosmeticUnlockStoryMasterySubtitle": "Bravo, tu as terminé tout le mode Jouer !",
+
+  // ---------- Modale "Noter sur Google Play" (fin du mode Jouer) ----------
+  "rate-app-kicker": "Une dernière chose",
+  "rate-app-title": "Tu as aimé Fusion RGB ?",
+  "rate-app-text": "Une note sur Google Play aide beaucoup l'application à se faire connaître — ça prend 10 secondes.",
+  "btn-rate-app-later": "Plus tard",
+  "btn-rate-app-now": "Noter maintenant",
 
   // ---------- Tutos de mécanique (MECHANIC_SCHEMAS, voir main.js) ----------
   // C'est ICI qu'il faut modifier le texte d'un tuto de mécanique (retour
