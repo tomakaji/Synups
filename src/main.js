@@ -3507,7 +3507,27 @@ document.addEventListener("animationend", (e) => {
   }
 });
 
+// Retour utilisateur: "on ne charge pas le prochain niveau tant que la
+// modale de récompense n'est pas fermée ! [...] si je clique vite, je peux
+// à la fois terminer le niveau et commencer le suivant avant que la modale
+// ne soit ouverte" — bug de course: revealMeditateCell (meditate.js) fait
+// avancer l'état RÉEL de façon synchrone dès que la dernière pièce d'une
+// bannière est trouvée (bannerIndex incrémenté, nouvelle grille prête pour
+// la bannière suivante), MAIS l'écran continue d'afficher l'ANCIENNE grille
+// (capturée plus bas) pendant tout MEDITATE_VICTORY_DELAY_MS avant que la
+// modale n'apparaisse — ses boutons restent donc cliquables tout ce temps.
+// Un clic pendant cette fenêtre appelait de nouveau onMeditateCellClick,
+// qui relit ensureMeditateGrid()/getMeditateCurrentDef() (déjà ceux de la
+// bannière SUIVANTE) : le clic, destiné à l'écran "victoire" encore
+// affiché, dépensait donc en réalité un Éclair sur le NOUVEAU niveau avant
+// même que le joueur ait vu la modale. meditateInputLocked bloque tout
+// nouveau clic dès l'entrée dans la branche bannerUnlocked ci-dessous,
+// jusqu'à la fermeture de la modale (onClose), qui le relâche juste avant
+// de (re)construire l'écran suivant.
+let meditateInputLocked = false;
+
 function onMeditateCellClick(index) {
+  if (meditateInputLocked) return;
   const def = getMeditateCurrentDef();
   const grid = ensureMeditateGrid();
   const result = revealMeditateCell(index);
@@ -3527,6 +3547,10 @@ function onMeditateCellClick(index) {
   else playMeditateEmpty();
 
   if (result.bannerUnlocked && def && grid) {
+    // Voir commentaire de meditateInputLocked ci-dessus: verrouillé DÈS ICI,
+    // avant même le délai, pour couvrir toute la fenêtre où l'ancienne
+    // grille reste affichée et cliquable.
+    meditateInputLocked = true;
     // Ré-affiche D'ABORD la case qui vient d'être cliquée dans la grille
     // encore "actuelle" (celle capturée ci-dessus) — le joueur voit la
     // dernière pièce se révéler entièrement (avec son animation, voir
@@ -3554,7 +3578,11 @@ function onMeditateCellClick(index) {
         subtitle: result.allDone
           ? "Nouvelle bannière débloquée — tout le contenu de Meditate est désormais débloqué !"
           : "Nouvelle bannière débloquée !",
-        onClose: result.allDone ? goToTitle : renderMeditateView,
+        onClose: () => {
+          meditateInputLocked = false;
+          if (result.allDone) goToTitle();
+          else renderMeditateView();
+        },
       });
     }, MEDITATE_VICTORY_DELAY_MS);
   } else {
