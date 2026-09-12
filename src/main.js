@@ -3340,19 +3340,24 @@ function renderMeditateSearchGrid(def, grid, justRevealedIndex = null) {
   // desktop...), sans le moindre JS.
   meditateSearchGridEl.style.gridTemplateColumns = `repeat(${grid.size}, 1fr)`;
 
-  // Retour utilisateur: "sur la grille, j'aimerais que les formes soient
-  // aussi contourées. On s'y perd sinon" — même principe que
-  // meditate-preview-cell--edge-right/--edge-bottom ci-dessus (preview du
-  // haut), mais appliqué ici case par case sur la grille de recherche.
-  // Contrairement à la preview (qui connaît TOUJOURS le shapeId de chaque
-  // case), on ne compare deux cases que si elles sont TOUTES LES DEUX déjà
-  // révélées: comparer au shapeId d'une case pas encore trouvée
-  // dévoilerait silencieusement où s'arrête une forme non découverte,
-  // simplement via la présence/absence d'un contour.
-  const revealedShapeAt = (row, col) => {
-    if (row < 0 || row >= grid.size || col < 0 || col >= grid.size) return undefined;
+  // Retour utilisateur: "il faut qu'on voit les contours intérieurs et
+  // extérieurs de la forme, le contour doit englober" — ne détourer que
+  // les paires de fragments DÉJÀ révélés (round précédent) ne montrait que
+  // les frontières internes entre deux formes DIFFÉRENTES toutes deux
+  // trouvées, jamais le pourtour EXTÉRIEUR d'une forme (contre une case pas
+  // encore trouvée, ou contre le bord de la grille) — d'où des bouts de
+  // contour épars, jamais une forme visuellement "fermée". Nouvelle règle,
+  // sur les 4 côtés de CHAQUE case révélée: contour affiché SAUF quand le
+  // voisin est du côté confirmé comme faisant partie de LA MÊME forme
+  // (déjà révélé, même shapeId) — un voisin non révélé, d'une forme
+  // différente, ou hors grille, affiche donc TOUJOURS un contour. Aucune
+  // fuite d'info sur le contenu d'une case cachée: on ne dit jamais QUEL
+  // est son contenu, seulement que la forme connue s'arrête là (exactement
+  // ce qu'un contour est censé montrer au fur et à mesure qu'on révèle).
+  const sameRevealedShape = (row, col, shapeId) => {
+    if (row < 0 || row >= grid.size || col < 0 || col >= grid.size) return false;
     const c = grid.cells[row * grid.size + col];
-    return c.revealed && c.shapeId != null ? c.shapeId : undefined;
+    return c.revealed && c.shapeId === shapeId;
   };
 
   grid.cells.forEach((cell, index) => {
@@ -3364,15 +3369,10 @@ function renderMeditateSearchGrid(def, grid, justRevealedIndex = null) {
       el = makeMeditateWindow(def.tier, def.division, cell.originRow, cell.originCol);
       el.classList.add("meditate-search-cell", "meditate-search-cell--fragment");
       if (justRevealed) el.classList.add("meditate-search-cell--reveal-fragment");
-      // Comme la preview (voir ci-dessus): ne comparer qu'aux voisins
-      // droite/bas suffit à détourer TOUTES les paires de cases adjacentes
-      // de formes différentes une seule fois chacune (jamais aux voisins
-      // gauche/haut, sinon même paire comparée deux fois pour le même
-      // contour visuel).
-      const rightShape = revealedShapeAt(row, col + 1);
-      if (rightShape !== undefined && rightShape !== cell.shapeId) el.classList.add("meditate-search-cell--edge-right");
-      const bottomShape = revealedShapeAt(row + 1, col);
-      if (bottomShape !== undefined && bottomShape !== cell.shapeId) el.classList.add("meditate-search-cell--edge-bottom");
+      if (!sameRevealedShape(row, col + 1, cell.shapeId)) el.classList.add("meditate-search-cell--edge-right");
+      if (!sameRevealedShape(row, col - 1, cell.shapeId)) el.classList.add("meditate-search-cell--edge-left");
+      if (!sameRevealedShape(row + 1, col, cell.shapeId)) el.classList.add("meditate-search-cell--edge-bottom");
+      if (!sameRevealedShape(row - 1, col, cell.shapeId)) el.classList.add("meditate-search-cell--edge-top");
     } else {
       el = document.createElement("button");
       el.type = "button";
