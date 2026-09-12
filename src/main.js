@@ -728,6 +728,35 @@ function renderHintUI() {
   btnHint.classList.toggle("hint-btn--empty", hintStock <= 0);
 }
 
+// Retour utilisateur ("sur la grille 42 [...] les indices mettent beaucoup
+// de temps de calcul [...] préload la solution [...] plutot que la
+// calculer à chaque fois"): findSolution() résout TOUJOURS depuis l'état
+// INITIAL du niveau (voir solver.js: `new LightUpGrid(level)`), jamais
+// depuis les impulsions déjà posées par le joueur — son résultat est donc
+// 100% déterministe pour un même objet `level` (pas de Math.random dans le
+// solveur), et strictement identique qu'on le recalcule maintenant ou dans
+// 10 clics. Rien ne justifiait de relancer tout le DFS/backtracking (qui
+// peut prendre plusieurs secondes sur les niveaux les plus costauds, ex.
+// la grille 42) à CHAQUE pression du bouton Indice, ni de le calculer DEUX
+// fois de suite quand findNextHintCell() puis findWrongPlacedCell()
+// tombent toutes les deux dans le même clic (repli "grille pleine
+// d'erreurs" ci-dessous). Invalidé par simple égalité de référence avec
+// `currentLevel` — tout site qui change de niveau (loadLevel, Infini,
+// Communauté, Défi Quotidien) réassigne déjà `currentLevel` à un nouvel
+// objet, rien d'autre à synchroniser ici. Le résultat `null` (niveau non
+// résolu dans le budget de nœuds) est mis en cache lui aussi: le
+// recalculer donnerait exactement le même résultat, pour le même coût.
+let cachedSolutionLevel = null;
+let cachedSolution = null;
+
+function getCurrentLevelSolution() {
+  if (cachedSolutionLevel !== currentLevel) {
+    cachedSolutionLevel = currentLevel;
+    cachedSolution = currentLevel ? findSolution(currentLevel) : null;
+  }
+  return cachedSolution;
+}
+
 /** Cherche, dans UNE solution valide du niveau courant (unique en
  * pratique — voir verify.mjs/le générateur), la prochaine case-lumière que
  * le joueur n'a pas encore posée. L'ordre du tableau retourné par
@@ -750,7 +779,7 @@ function renderHintUI() {
  * prend le relais (voir btnHint.onclick). */
 function findNextHintCell() {
   if (!currentLevel || !grid) return null;
-  const solution = findSolution(currentLevel);
+  const solution = getCurrentLevelSolution();
   if (!solution) return null;
   const placed = new Set(grid.getPlacedLights().map(([r, c]) => `${r},${c}`));
   for (const [r, c] of solution) {
@@ -769,7 +798,7 @@ function findNextHintCell() {
  * entièrement correcte (rien à retirer). */
 function findWrongPlacedCell() {
   if (!currentLevel || !grid) return null;
-  const solution = findSolution(currentLevel);
+  const solution = getCurrentLevelSolution();
   if (!solution) return null;
   const solutionSet = new Set(solution.map(([r, c]) => `${r},${c}`));
   for (const [r, c] of grid.getPlacedLights()) {
