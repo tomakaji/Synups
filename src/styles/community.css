@@ -22,6 +22,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* Retour utilisateur: la pagination (dernier enfant, voir #community-pager
+     ci-dessous) se retrouvait collée au tout bas de l'écran une fois
+     scrollée en fin de liste -- même valeur que .options-content
+     (options.css) pour rester cohérent avec le reste de l'app. */
+  padding-bottom: 32px;
 }
 
 .community-toolbar {
@@ -339,16 +344,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 14px;
   margin-top: 10px;
 }
 
+/* Retour utilisateur: "un peu trop petit pour cliquer dessus facilement sur
+   un mobile" — porté de 30px à 44px, même gabarit tapable que .icon-btn
+   (voir base.css) partout ailleurs dans l'app plutôt qu'une taille inventée
+   pour l'occasion. */
 .pager-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   background: none;
   border: 1px solid #2a3040;
   border-radius: 999px;
@@ -358,8 +367,8 @@
 }
 
 .pager-btn .icon-svg {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
 }
 
 .pager-btn:hover:not(:disabled) {
