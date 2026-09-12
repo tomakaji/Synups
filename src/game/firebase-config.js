@@ -15,7 +15,12 @@
 // `db`/`firebaseReady` ci-dessous, jamais l'inverse (même principe que
 // ads.js: un seul endroit à retoucher si le projet Firebase est recréé).
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentSingleTabManager,
+} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 import {
   getAuth,
   signInAnonymously,
@@ -48,8 +53,30 @@ export const app = initializeApp(firebaseConfig);
  * publiques (ex. le fil communautaire) ne nécessitent PAS d'attendre
  * l'authentification anonyme ci-dessous : voir firestore.rules, `allow
  * read: if true` sur la collection `levels`. Seules les écritures en ont
- * besoin (voir firebaseReady). */
-export const db = getFirestore(app);
+ * besoin (voir firebaseReady).
+ *
+ * Round suivant (audit coûts serveur, retour utilisateur: "j'aimerais que
+ * le serveur tienne bien") — cache local persistant (IndexedDB) activé ici:
+ * une réouverture de l'app peut servir le fil Communauté depuis le disque
+ * PENDANT que la requête réseau (voir community-store.js: refreshCommunityCloud)
+ * part en tâche de fond, et surtout reste CONSULTABLE hors ligne (voir
+ * échange avec l'utilisateur plus bas) au lieu de repartir d'un fil vide à
+ * chaque lancement. `persistentSingleTabManager` plutôt que
+ * `persistentMultipleTabManager`: l'app tourne dans une seule WebView
+ * Capacitor à la fois (jamais plusieurs onglets d'un même appareil ouverts
+ * sur ce cache), donc pas besoin de coordination multi-onglets. `getFirestore`
+ * en repli si `initializeFirestore` échoue (IndexedDB indisponible :
+ * navigation privée, très vieux WebView...) — jamais un point de plantage,
+ * même principe "best-effort" que le reste de ce fichier. */
+export const db = (() => {
+  try {
+    return initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentSingleTabManager({}) }),
+    });
+  } catch {
+    return getFirestore(app);
+  }
+})();
 
 const auth = getAuth(app);
 

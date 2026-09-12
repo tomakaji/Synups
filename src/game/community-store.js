@@ -50,9 +50,10 @@ import {
   deleteDoc,
   updateDoc,
   increment,
-  onSnapshot,
   query,
   where,
+  orderBy,
+  limit,
   getDocs,
   writeBatch,
   serverTimestamp,
@@ -62,6 +63,28 @@ import { t } from "./i18n.js";
 
 const LEVELS_COLLECTION = "levels";
 const LIKES_COLLECTION = "likes";
+
+// Round "audit coûts serveur" (retour utilisateur: "j'aimerais que le
+// serveur tienne bien") — trois réglages qui remplacent l'ancienne écoute
+// onSnapshot() illimitée (voir refreshCommunityCloud ci-dessous):
+//   - LEVELS_FETCH_LIMIT: le fil communautaire est désormais une PHOTO
+//     bornée (getDocs, pas un flux temps réel) des N grilles les plus
+//     récentes plutôt que TOUTE la collection — un compromis assumé: les
+//     onglets de tri "plus aimées"/"plus jouées" (voir main.js:
+//     renderCommunityFeed) ne trient que DANS cette fenêtre de 300, jamais
+//     sur l'intégralité de la base. Largement suffisant vu le volume de
+//     grilles publiées actuellement, à revoir si la Communauté grossit
+//     beaucoup (passer à une vraie requête orderBy(likesCount) côté
+//     serveur par onglet, avec son propre coût en lectures).
+//   - REFRESH_MIN_INTERVAL_MS: un ré-affichage de l'écran Communauté (ex.
+//     retour depuis une partie) ne redéclenche PAS systématiquement une
+//     lecture réseau — seulement si la dernière date de plus de 15s, pour
+//     qu'un joueur qui navigue vite entre les écrans ne multiplie pas les
+//     lectures Firestore facturées pour rien.
+//   - LIKE_DEBOUNCE_MS: voir toggleLike plus bas.
+const LEVELS_FETCH_LIMIT = 300;
+const REFRESH_MIN_INTERVAL_MS = 15000;
+const LIKE_DEBOUNCE_MS = 800;
 
 /** Choix d'avatar pour le profil joueur (voir storage.js: loadProfile) — un
  * seul endroit pour cette liste plutôt que dupliquée entre main.js et
@@ -272,8 +295,8 @@ function likeDocId(levelId, uid) {
 /** Ajoute les champs calculés (likes/plays réellement affichés, likedByMe) à
  * une entrée brute Firestore — `likesCount`/`playsCount` sont maintenant de
  * vrais compteurs partagés (voir toggleLike/markPlayed), `myLikedIds` un Set
- * tenu à jour en temps réel par la collection `likes` filtrée sur VOTRE uid
- * (voir initCommunityCloud), jamais du localStorage. */
+ * tenu à jour par un fetch borné+paresseux de la collection `likes` filtrée
+ * sur VOTRE uid (voir refreshCommunityCloud), jamais du localStorage. */
 function decorate(entry, source) {
   return {
     ...entry,
@@ -284,25 +307,33 @@ function decorate(entry, source) {
   };
 }
 
-// ---------- Cache Firestore temps réel ----------
-// `cloudLevels` est la copie locale, toujours à jour, de la collection
-// Firestore `levels` — alimentée par onSnapshot (voir initCommunityCloud),
-// jamais lue directement depuis Firestore ailleurs dans ce fichier. Ça
-// permet à listLevels()/getLevel()/likedLevels() de rester SYNCHRONES (comme
-// avant la migration Firestore), sans changer un seul appelant côté
-// main.js/editor.js : ils continuent de lire un instantané en mémoire, qui
-// se trouve maintenant être tenu à jour par le réseau plutôt que par
-// localStorage.
+// ---------- Cache Firestore (fetch borné + paresseux) ----------
+// `cloudLevels` est la copie locale de la collection Firestore `levels`,
+// alimentée par un getDocs() ponctuel et borné (voir refreshCommunityCloud
+// ci-dessous) plutôt qu'un onSnapshot() temps réel — jamais lue directement
+// depuis Firestore ailleurs dans ce fichier. Ça permet à
+// listLevels()/getLevel()/likedLevels() de rester SYNCHRONES (comme avant la
+// migration Firestore), sans changer un seul appelant côté main.js/editor.js:
+// ils continuent de lire un instantané en mémoire, seulement rafraîchi de
+// temps en temps plutôt qu'en continu (voir en-tête de fichier: retour
+// utilisateur "j'aimerais que le serveur tienne bien" — un onSnapshot()
+// ouvert sans condition pour CHAQUE joueur, sur TOUTE la collection, aussi
+// longtemps que l'app reste ouverte, facture une lecture par document par
+// écriture d'un AUTRE joueur pendant ce temps: le coût grandit avec
+// (joueurs simultanés × écritures globales), sans plafond. Un fetch borné,
+// déclenché seulement à l'entrée sur l'écran Communauté et espacé par
+// REFRESH_MIN_INTERVAL_MS, retombe à un coût proportionnel aux VISITES.
 let cloudLevels = [];
-// Vos propres likes — tenu à jour en temps réel par une 2e écoute Firestore
-// (voir initCommunityCloud), démarrée seulement une fois `myUid` connu
-// puisque la requête filtre dessus (`where("uid","==",myUid)`). Un Set de
-// levelId, jamais persisté nulle part côté client: la collection `likes`
-// EST la source de vérité, ce Set n'en est qu'un cache mémoire pratique
-// pour que decorate()/toggleLike() restent synchrones.
+// Vos propres likes — rafraîchi par la même fonction (un 2e getDocs, filtré
+// sur votre uid), seulement une fois `myUid` connu. Un Set de levelId,
+// jamais persisté nulle part côté client: la collection `likes` EST la
+// source de vérité, ce Set n'en est qu'un cache mémoire pratique pour que
+// decorate()/toggleLike() restent synchrones.
 let myLikedIds = new Set();
 let myUid = null;
 let started = false;
+let lastFetchAt = 0;
+let inFlightFetch = null;
 const changeListeners = new Set();
 
 function notifyChange() {
@@ -317,68 +348,77 @@ function notifyChange() {
 }
 
 /** S'abonne aux mises à jour du fil communautaire (nouvelle grille publiée
- * par vous ou un autre joueur, uid anonyme résolu après coup...) — voir
- * main.js: ré-affiche l'écran Communauté/Mon profil s'il est actif quand un
- * changement arrive. Renvoie une fonction de désabonnement. */
+ * par vous ou un autre joueur, uid anonyme résolu après coup, retour d'un
+ * refreshCommunityCloud()...) — voir main.js: ré-affiche l'écran
+ * Communauté/Mon profil s'il est actif quand un changement arrive. Renvoie
+ * une fonction de désabonnement. */
 export function onLevelsChanged(callback) {
   changeListeners.add(callback);
   return () => changeListeners.delete(callback);
 }
 
-/** Démarre l'écoute temps réel Firestore + l'authentification anonyme — à
- * appeler UNE fois au chargement de l'app (voir main.js, même principe que
- * ads.js: initAds()). Idempotent. Ne bloque jamais le reste du chargement
- * (pas de await ici) : tant que la première réponse Firestore n'est pas
- * arrivée (ou en cas d'erreur réseau/règles), listLevels() se contente de
- * renvoyer la seed, exactement comme si le fil communautaire "vrais
- * joueurs" était vide — jamais de plantage. */
-export function initCommunityCloud() {
-  if (started) return;
+/** Rafraîchit le fil communautaire depuis Firestore — fetch PONCTUEL et
+ * BORNÉ (getDocs, pas onSnapshot), à appeler à chaque entrée sur l'écran
+ * Communauté/Mon profil (voir main.js: showView) plutôt qu'une seule fois au
+ * chargement de l'app. Deux protections anti-spam:
+ *   1. Paresseux: ne démarre plus automatiquement au boot (voir main.js,
+ *      ancien appel à initCommunityCloud() retiré) — un joueur qui ne visite
+ *      jamais la Communauté ne déclenche plus aucune lecture Firestore.
+ *   2. Throttle: un appel qui arrive moins de REFRESH_MIN_INTERVAL_MS après
+ *      le précédent est un no-op silencieux (sauf `force`), pour qu'un
+ *      aller-retour rapide entre écrans ne reparte pas en réseau à chaque
+ *      fois. Les appels concurrents pendant qu'un fetch est déjà en cours
+ *      partagent la même promesse plutôt que d'en déclencher un 2e.
+ * Ne bloque jamais l'appelant (best-effort, comme le reste du module): en
+ * cas d'échec réseau/règles, on garde le dernier cache connu plutôt que de
+ * le vider — mieux vaut un fil légèrement périmé qu'un fil qui disparaît
+ * d'un coup pendant un creux réseau. */
+export function refreshCommunityCloud({ force = false } = {}) {
+  if (!force && Date.now() - lastFetchAt < REFRESH_MIN_INTERVAL_MS) return inFlightFetch ?? Promise.resolve();
+  if (inFlightFetch) return inFlightFetch;
+
   started = true;
+  inFlightFetch = firebaseReady()
+    .then(async (uid) => {
+      myUid = uid;
+      notifyChange(); // un uid qui arrive après coup change qui est "local" pour vous
 
-  // Jamais désabonnée: ce module vit pour toute la durée de l'app (même
-  // pattern que l'écoute `levels` ci-dessous, elle aussi jamais coupée).
-  firebaseReady().then((uid) => {
-    myUid = uid;
-    notifyChange(); // un uid qui arrive après coup change qui est "local" pour vous
-    if (!uid) return; // hors ligne/échec d'auth: pas de requête filtrée possible, myLikedIds reste vide (honnête plutôt que faux)
-    onSnapshot(
-      query(collection(db, LIKES_COLLECTION), where("uid", "==", uid)),
-      (snapshot) => {
-        myLikedIds = new Set(snapshot.docs.map((d) => d.data().levelId));
-        notifyChange();
-      },
-      () => {
-        // Hors ligne/règles refusées: on garde le dernier état connu de
-        // myLikedIds plutôt que de le vider (même choix que cloudLevels
-        // ci-dessous).
+      const levelsQuery = query(collection(db, LEVELS_COLLECTION), orderBy("createdAt", "desc"), limit(LEVELS_FETCH_LIMIT));
+      const likesQuery = uid ? query(collection(db, LIKES_COLLECTION), where("uid", "==", uid)) : null;
+
+      const [levelsSnap, likesSnap] = await Promise.all([
+        getDocs(levelsQuery).catch(() => null),
+        likesQuery ? getDocs(likesQuery).catch(() => null) : Promise.resolve(null),
+      ]);
+
+      if (levelsSnap) {
+        cloudLevels = levelsSnap.docs.map((d) => {
+          const data = d.data();
+          return {
+            ...data,
+            id: d.id,
+            // `serverTimestamp()` arrive en Firestore Timestamp — reconverti en
+            // chaîne ISO ici pour que le reste du code (voir main.js: tri par
+            // date via `new Date(level.createdAt)`) n'ait jamais à savoir que
+            // la donnée vient de Firestore plutôt que de localStorage.
+            createdAt: data.createdAt?.toDate?.().toISOString() ?? data.createdAt ?? new Date().toISOString(),
+          };
+        });
       }
-    );
-  });
+      // hors ligne/échec d'auth: pas de requête filtrée possible, myLikedIds
+      // reste tel quel (honnête plutôt que vidé pour rien)
+      if (uid && likesSnap) {
+        myLikedIds = new Set(likesSnap.docs.map((d) => d.data().levelId));
+      }
 
-  onSnapshot(
-    collection(db, LEVELS_COLLECTION),
-    (snapshot) => {
-      cloudLevels = snapshot.docs.map((d) => {
-        const data = d.data();
-        return {
-          ...data,
-          id: d.id,
-          // `serverTimestamp()` arrive en Firestore Timestamp — reconverti en
-          // chaîne ISO ici pour que le reste du code (voir main.js: tri par
-          // date via `new Date(level.createdAt)`) n'ait jamais à savoir que
-          // la donnée vient de Firestore plutôt que de localStorage.
-          createdAt: data.createdAt?.toDate?.().toISOString() ?? data.createdAt ?? new Date().toISOString(),
-        };
-      });
+      lastFetchAt = Date.now();
       notifyChange();
-    },
-    () => {
-      // Hors ligne / règles refusées / etc.: on garde le dernier cache connu
-      // plutôt que de le vider — mieux vaut un fil légèrement périmé qu'un
-      // fil qui disparaît d'un coup pendant un creux réseau.
-    }
-  );
+    })
+    .finally(() => {
+      inFlightFetch = null;
+    });
+
+  return inFlightFetch;
 }
 
 /** Tout le fil communautaire — SEULEMENT Firestore (voir en-tête de fichier:
@@ -398,19 +438,34 @@ export function likedLevels() {
   return listLevels().filter((l) => l.likedByMe);
 }
 
+// Minuteurs de debounce en cours, un par grille (id -> timeoutId) — voir
+// toggleLike ci-dessous. Un Map plutôt qu'une seule variable: rien n'empêche
+// de liker une grille PUIS une autre coup sur coup, chacune doit avoir son
+// propre délai indépendant.
+const likeDebounceTimers = new Map();
+// État "avant la rafale" (id -> liked au moment du TOUT PREMIER tap non
+// encore envoyé), utilisé pour détecter un effet net nul sur toute une
+// rafale de taps (pas seulement le dernier tap) — voir toggleLike.
+const likeBurstAnchor = new Map();
+
 /** Bascule votre like sur une grille — SAUF sur une grille dont VOUS êtes
  * l'auteur (retour utilisateur: "on ne doit pas pouvoir liker sa propre
  * grille publiée dans communauté"), où c'est un no-op. Optimiste (même
  * philosophie que publishToCloud/unpublishLevel plus bas): `myLikedIds` et
- * le `likesCount` en cache sont mis à jour IMMÉDIATEMENT, avant même la
- * confirmation réseau, pour que le cœur réagisse au clic sans attendre —
- * l'écriture Firestore réelle part en arrière-plan, best-effort comme le
- * reste de ce module. Les deux écritures (doc `likes` + compteur sur
- * `levels`) sont TOUJOURS liées (l'une n'a jamais de sens sans l'autre) —
- * regroupées dans un seul writeBatch() pour ne faire qu'un aller-retour
- * réseau au lieu de deux (retour utilisateur: "ces deux requêtes seront
- * toujours liées"). Ne renvoie plus rien : aucun appelant (voir main.js)
- * n'utilisait la valeur de retour, chacun ré-affiche depuis
+ * le `likesCount` en cache sont mis à jour IMMÉDIATEMENT à CHAQUE tap, avant
+ * même la confirmation réseau, pour que le cœur réagisse sans attendre.
+ *
+ * L'écriture Firestore réelle, elle, est DEBOUNCÉE (retour utilisateur: "go
+ * faire [...] le débounce du like") — un joueur qui tape plusieurs fois de
+ * suite sur le même cœur (double-tap accidentel, hésitation like/unlike)
+ * n'envoie qu'UNE seule écriture réseau, LIKE_DEBOUNCE_MS après le DERNIER
+ * tap, reflétant l'état net final. Si la rafale de taps revient à l'état de
+ * départ (like puis unlike avant l'écriture), l'écriture est annulée
+ * purement et simplement: aucun round-trip réseau pour un effet net nul.
+ * Les deux écritures liées (doc `likes` + compteur sur `levels`) restent
+ * regroupées dans un seul writeBatch() (retour utilisateur: "ces deux
+ * requêtes seront toujours liées"). Ne renvoie rien: aucun appelant (voir
+ * main.js) n'utilisait la valeur de retour, chacun ré-affiche depuis
  * getLevel()/listLevels() juste après. */
 export function toggleLike(id) {
   const level = getLevel(id);
@@ -421,20 +476,43 @@ export function toggleLike(id) {
   cloudLevels = cloudLevels.map((l) => (l.id === id ? { ...l, likesCount: (l.likesCount ?? 0) + (wasLiked ? -1 : 1) } : l));
   notifyChange();
 
-  firebaseReady().then((uid) => {
-    if (!uid) return; // hors ligne: reste purement optimiste pour cette session
-    const ref = doc(db, LIKES_COLLECTION, likeDocId(id, uid));
-    const levelRef = doc(db, LEVELS_COLLECTION, id);
-    const batch = writeBatch(db);
-    if (wasLiked) {
-      batch.delete(ref);
-      batch.update(levelRef, { likesCount: increment(-1) });
-    } else {
-      batch.set(ref, { levelId: id, uid, createdAt: serverTimestamp() });
-      batch.update(levelRef, { likesCount: increment(1) });
-    }
-    batch.commit().catch(() => {});
-  });
+  // Annule tout envoi déjà programmé pour CETTE grille: seul le dernier tap
+  // de la rafale déclenchera une écriture, LIKE_DEBOUNCE_MS plus tard. Le
+  // tout premier tap d'une rafale (pas de timer en cours) fixe l'ancre:
+  // l'état d'avant rafale auquel comparer le résultat final.
+  const pending = likeDebounceTimers.get(id);
+  if (pending) clearTimeout(pending);
+  else likeBurstAnchor.set(id, wasLiked);
+
+  likeDebounceTimers.set(
+    id,
+    setTimeout(() => {
+      likeDebounceTimers.delete(id);
+      const likedBeforeBurst = likeBurstAnchor.get(id) ?? wasLiked;
+      likeBurstAnchor.delete(id);
+      // État net à envoyer: ce que myLikedIds contient MAINTENANT (après
+      // toute la rafale), comparé à ce qu'il contenait avant le TOUT PREMIER
+      // tap de la rafale (l'ancre) — une rafale like→unlike→like→unlike doit
+      // être détectée comme nette nulle même si elle compte plus de 2 taps.
+      const likedNow = myLikedIds.has(id);
+      if (likedNow === likedBeforeBurst) return; // rafale nette nulle: rien à écrire
+
+      firebaseReady().then((uid) => {
+        if (!uid) return; // hors ligne: reste purement optimiste pour cette session
+        const ref = doc(db, LIKES_COLLECTION, likeDocId(id, uid));
+        const levelRef = doc(db, LEVELS_COLLECTION, id);
+        const batch = writeBatch(db);
+        if (likedNow) {
+          batch.set(ref, { levelId: id, uid, createdAt: serverTimestamp() });
+          batch.update(levelRef, { likesCount: increment(1) });
+        } else {
+          batch.delete(ref);
+          batch.update(levelRef, { likesCount: increment(-1) });
+        }
+        batch.commit().catch(() => {});
+      });
+    }, LIKE_DEBOUNCE_MS)
+  );
 }
 
 /** Incrémente le compteur de parties RÉEL (partagé, visible par tous) de
