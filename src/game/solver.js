@@ -122,6 +122,28 @@
 // bench (7.4s → 1.2s), aucune régression de correction (suite complète de
 // 42 niveaux + 6 plateaux fixes, résultats identiques à la version
 // précédente).
+//
+// Trois déductions supplémentaires (retour utilisateur, situations de jeu
+// décrites à la main et vérifiées une à une contre le code) :
+//   - Filtre `_illuminated` (voir `freeUndecidedNeighbors`/
+//     `illuminationCandidates`) : une case déjà illuminée ne peut jamais
+//     recevoir de lumière (règle du jeu) — avant ce filtre, Stage 1/1.5/2 la
+//     comptaient encore parmi les cases "libres" d'un indice, sous-estimant
+//     parfois la portée réelle d'une déduction pourtant déjà certaine.
+//   - Stage 1 (Pyra) : un Pyra n'a pas de compte exact (1-3 lumières
+//     adjacentes valides, 4 = surcharge) — avant, Stage 1 ignorait
+//     complètement les Pyra ; ce nouveau passage force l'exclusion du reste
+//     dès 3 lumières adjacentes, et force l'unique case libre restante dès 0
+//     lumière adjacente et une seule case libre.
+//   - `filterMirrorFeasible` (Stage 1 CLUE/FORBIDDEN uniquement) : retire des
+//     candidats "libres" d'un indice ceux dont la pose serait de toute façon
+//     géométriquement impossible pour un neurone miroir (duplicata qui ne
+//     peut pas se poser) — pure optimisation, jamais nécessaire à la
+//     correction (un candidat infaisable forcé à tort échouerait de toute
+//     façon proprement à `forceLit`).
+// Mesuré (empilé sur le gain v6 ci-dessus) : "Cauchemar VI" 3785ms → 1520ms
+// (~2.5x supplémentaire), aucune régression sur la suite complète de 42
+// niveaux + 6 plateaux fixes (5 fonctions exportées).
 
 import { LightUpGrid, CellType } from "./grid.js";
 
@@ -139,6 +161,13 @@ function anyClueError(grid) {
     for (let c = 0; c < grid.cols; c++) {
       const cell = grid.cellAt(r, c);
       if (cell.type === CellType.CLUE && cell._state === "error") return true;
+      // Cas 2 (Pyra, voir Stage 1 Pyra plus bas): surcharge à 4 lumières
+      // adjacentes, voir grid.js `_computeClueStates` — même logique de
+      // coupe précoce d'une branche invalide que pour CLUE. Ne couvre PAS
+      // le cas "0 lumière et plus aucune case libre" (grid.js le marque
+      // encore "neutral", pas "error" — bug distinct, non corrigé ici),
+      // mais la contradiction Stage 1 Pyra le détecte de toute façon.
+      if (cell.type === CellType.PYRA && cell._state === "error") return true;
     }
   }
   return false;
@@ -169,7 +198,18 @@ function litNeighborCount(grid, r, c) {
   return n;
 }
 
-/** Voisins EMPTY d'une case (r,c) ni allumés, ni exclus (encore "libres"). */
+/**
+ * Voisins EMPTY d'une case (r,c) ni allumés, ni exclus (encore "libres"),
+ * ET physiquement capables de recevoir une lumière (cas 1/3 discutés avec
+ * l'utilisateur): une case déjà `_illuminated` ne peut JAMAIS recevoir de
+ * lumière (règle du jeu, voir grid.js `toggleLight`:
+ * `if (cell._illuminated) return false;`) — la compter comme "libre" ici
+ * fait sous-estimer la portée réelle d'une déduction Stage 1/1.5/2 (ex: un
+ * indice à 1 case libre restante EFFECTIVEMENT lightable, mais dont Stage 1
+ * pensait en avoir 2, ne se forçait pas). Toujours sûr d'exclure:
+ * `_illuminated` reflète l'état RÉEL du moment (comme `hasLight`), pas une
+ * hypothèse.
+ */
 function freeUndecidedNeighbors(grid, r, c, excluded) {
   const result = [];
   for (const [dr, dc] of DIRECTIONS) {
@@ -179,9 +219,50 @@ function freeUndecidedNeighbors(grid, r, c, excluded) {
     if (!cell || cell.type !== CellType.EMPTY) continue;
     if (grid.hasLight(nr, nc)) continue;
     if (excluded.has(idxOf(grid, nr, nc))) continue;
+    if (cell._illuminated) continue;
     result.push([nr, nc]);
   }
   return result;
+}
+
+/**
+ * Filtre `free` (voir `freeUndecidedNeighbors`) pour retirer les candidats
+ * sur la ligne/colonne d'un neurone miroir dont la pose serait de toute
+ * façon IMPOSSIBLE (le duplicata symétrique ne peut pas se poser — case
+ * cible hors-grille, déjà occupée par un obstacle fixe, ou
+ * `_computeMirrorDuplicates` refuse pour toute autre raison de règle du
+ * jeu). Lecture seule: `_computeMirrorDuplicates` ne modifie jamais
+ * `grid.lights`/`_mirrorDuplicateOf`, seulement un champ de diagnostic
+ * (`_lastMirrorFailure`) sans incidence sur la recherche.
+ *
+ * Cas 3 discuté avec l'utilisateur. Portée volontairement restreinte à
+ * Stage 1 (CLUE/FORBIDDEN) : coûte un balayage BFS par candidat
+ * mirrorReachable, appelé ici seulement (pas Stage 2 ni `pickBranchCell`)
+ * pour limiter le coût — même prudence que les investigations précédentes
+ * (filtre couleur ciblé) où un filtre coûteux par candidat s'est parfois
+ * révélé une perte nette une fois généralisé partout. Ne PAS appliquer ce
+ * filtre ne casse rien côté correction (un candidat infaisable, si jamais
+ * "forcé" à tort par Stage 1/2 sans le savoir, échoue proprement à
+ * `forceLit` — contradiction détectée quand même, juste un peu plus tard) —
+ * cette fonction est une optimisation, jamais un pré-requis de correction.
+ */
+function filterMirrorFeasible(grid, free, mirrorReachable) {
+  if (!mirrorReachable || mirrorReachable.size === 0 || free.length === 0) return free;
+  let filtered = null;
+  for (let i = 0; i < free.length; i++) {
+    const [fr, fc] = free[i];
+    if (!mirrorReachable.has(idxOf(grid, fr, fc))) {
+      if (filtered) filtered.push(free[i]);
+      continue;
+    }
+    const feasible = grid._computeMirrorDuplicates(fr, fc) !== null;
+    if (feasible) {
+      if (filtered) filtered.push(free[i]);
+    } else if (!filtered) {
+      filtered = free.slice(0, i);
+    }
+  }
+  return filtered || free;
 }
 
 /**
@@ -217,7 +298,12 @@ function illuminationCandidates(grid, r, c, excluded, mirrorReachable) {
       const idx = idxOf(grid, nr, nc);
       if (excluded.has(idx)) {
         if (mirrorReachable && mirrorReachable.has(idx)) risky = true;
-      } else {
+      } else if (!cell._illuminated) {
+        // Cas 1/3: une case déjà illuminée par ailleurs ne pourra JAMAIS
+        // recevoir de lumière (voir freeUndecidedNeighbors) — on continue
+        // le balayage dans cette direction (une case EMPTY, même
+        // illuminée, ne bloque pas la ligne de vue), mais on ne la compte
+        // pas comme un candidat viable.
         candidates.push([nr, nc]);
       }
       nr += dr;
@@ -818,7 +904,7 @@ function propagate(grid, excluded, mirrorReachable, stats) {
 
         const number = isForbidden ? 0 : cell.number;
         const needed = number - litNeighborCount(grid, r, c);
-        const free = freeUndecidedNeighbors(grid, r, c, excluded);
+        const free = filterMirrorFeasible(grid, freeUndecidedNeighbors(grid, r, c, excluded), mirrorReachable);
 
         if (needed < 0) {
           undo();
@@ -874,6 +960,58 @@ function propagate(grid, excluded, mirrorReachable, stats) {
       }
     }
     if (changed) continue; // relance stage 1 avant de tenter stage 2
+
+    // Stage 1 (Pyra) [cas 2 discuté avec l'utilisateur]: un Pyra n'a pas de
+    // nombre EXACT (contrairement à CLUE) mais une PLAGE valide de 1 à 3
+    // lumières adjacentes (voir grid.js CellType.PYRA / `_computeClueStates`)
+    // — surcharge (invalide) à 4. AVANT cette déduction, Stage 1 ignorait
+    // complètement les Pyra (boucle filtrée sur CLUE/FORBIDDEN uniquement) :
+    // un Pyra pouvait rester sans la moindre lumière adjacente jusqu'à la
+    // toute dernière feuille (`isWon()`) sans jamais influencer le
+    // branchement ni déclencher de contradiction plus tôt. Deux forçages
+    // sûrs, symétriques à ceux de Stage 1 CLUE:
+    //   - déjà 3 lumières adjacentes ⇒ toute case libre restante DOIT être
+    //     exclue (une 4e surchargerait) — direction "exclure", toujours
+    //     sûre (même raisonnement que `needed === 0` pour CLUE ci-dessus).
+    //   - 0 lumière adjacente ET une seule case libre restante ⇒ cette case
+    //     DOIT être allumée, sinon le Pyra ne s'active JAMAIS — condition de
+    //     victoire dure (voir grid.js `isWon()`). Si 0 lumière ET 0 case
+    //     libre restante ⇒ contradiction immédiate. Même prudence "voisin
+    //     exclu mais atteignable par un neurone miroir" que pour CLUE.
+    // Cas intermédiaires (0 lumière + 2-3 cases libres, ou 1-2 lumières
+    // avec cases libres restantes) laissés au branchement — une
+    // généralisation façon Stage 2 (paires Pyra/indice partageant des
+    // cases) reste possible mais hors scope pour l'instant.
+    for (let r = 0; r < grid.rows; r++) {
+      for (let c = 0; c < grid.cols; c++) {
+        const cell = grid.cellAt(r, c);
+        if (cell.type !== CellType.PYRA) continue;
+
+        const adjacentLights = litNeighborCount(grid, r, c);
+        const free = freeUndecidedNeighbors(grid, r, c, excluded);
+
+        if (adjacentLights >= 3 && free.length > 0) {
+          for (const [fr, fc] of free) forceExcluded(fr, fc);
+          changed = true;
+          continue;
+        }
+        if (adjacentLights === 0) {
+          if (hasRiskyExcludedNeighbor(grid, r, c, excluded, mirrorReachable)) continue;
+          if (free.length === 0) {
+            undo();
+            return { ok: false };
+          }
+          if (free.length === 1) {
+            if (!forceLit(free[0][0], free[0][1])) {
+              undo();
+              return { ok: false };
+            }
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) continue; // relance stage 1 avant de tenter stage 2 (et stage 1 pyra)
 
     // Stage 1.5: chaque case vide sans lumière doit finir illuminée (voir
     // grid.js isWon: `else if (!cell._illuminated) return false`) — si elle
