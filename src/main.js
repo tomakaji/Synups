@@ -92,6 +92,7 @@ import {
 } from "./sommation.js";
 import { FEATURES } from "./game/generator.js";
 import { requestLevel, ensureLevelBuffer, takeBufferedLevel, hasBufferedLevel } from "./game/infiniteClient.js";
+import { initAdminToggle, isAdminModeOn, onAdminModeChange, mountAdminButton } from "./admin.js";
 import {
   loadPoints,
   savePoints,
@@ -607,6 +608,7 @@ function loadLevel(index, { silent = false } = {}) {
   // chiffres (ex: '#13' ou '#06')" — remplace l'ancien
   // "${index+1}. ${currentLevel.name}" (nom du niveau visible).
   levelNameEl.textContent = `#${String(currentLevelIndex + 1).padStart(2, "0")}`;
+  updateLevelNavLock();
   startBoard();
   // Round 23: voir queueNewMechanicSchemas() plus bas — uniquement le mode
   // Histoire (seul mode qui appelle loadLevel(), voir plus haut).
@@ -1246,17 +1248,22 @@ btnPixelartToggle.onclick = () => {
   refreshMusicTheme();
 };
 
-// Débug: force le déverrouillage pour tester le thème sans finir le
-// mini-jeu Remember à chaque fois (retour utilisateur round 11). Toujours
-// dans le DOM (pas seulement quand verrouillé) par simplicité — cliquer une
-// fois débloqué n'a plus d'effet (debugUnlockPixelArt ne redescend jamais
-// le compteur), donc pas besoin de le masquer une fois inutile.
-const btnPixelartDebugUnlock = document.getElementById("btn-pixelart-debug-unlock");
-if (btnPixelartDebugUnlock) {
-  btnPixelartDebugUnlock.onclick = () => {
+// Mode Admin [dev uniquement] — voir admin.js pour la justification
+// complète de ce `if (import.meta.env.DEV)`: en build de production, cette
+// branche entière est du code mort (littéralement `if (false)`) éliminé du
+// bundle par esbuild, le bouton n'existe donc plus du tout, ni dans le DOM
+// ni dans le JS livré. Auparavant un bouton statique d'index.html
+// (#btn-pixelart-debug-unlock), toujours présent y compris en prod — ce
+// chantier le recrée dynamiquement ici à la place, visible seulement une
+// fois le mode admin activé via le toggle flottant (voir admin.js:
+// initAdminToggle). Cliquer une fois débloqué n'a plus d'effet
+// (debugUnlockPixelArt ne redescend jamais le compteur), donc pas besoin de
+// le retirer après usage.
+if (import.meta.env.DEV) {
+  mountAdminButton("#options-pixelart-section", "Débloquer (débug)", null, () => {
     debugUnlockPixelArt();
     renderPixelArtOption();
-  };
+  });
 }
 
 // ---------- Mode daltonien ----------
@@ -2029,8 +2036,31 @@ btnPrev.onclick = () => {
   if (!boardLocked) loadLevel(currentLevelIndex - 1);
 };
 btnNext.onclick = () => {
-  if (!boardLocked) loadLevel(currentLevelIndex + 1);
+  if (boardLocked) return;
+  // Chantier admin/normal (retour utilisateur): en mode normal, on ne doit
+  // JAMAIS pouvoir avancer sur un niveau pas encore débloqué — avant ce
+  // chantier, ce bouton ne vérifiait rien du tout et permettait de sauter
+  // n'importe quel niveau Histoire (exactement la feature "passer les
+  // niveaux" que l'utilisateur veut réserver au mode admin). Le mode admin
+  // (voir admin.js: isAdminModeOn, jamais vrai en prod) retrouve ce
+  // comportement d'avant tel quel — bypass total, aucune vérification.
+  if (!isAdminModeOn() && currentLevelIndex + 1 >= unlockedCount(storyProgress, levels.length)) return;
+  loadLevel(currentLevelIndex + 1);
 };
+
+/** Active/désactive la flèche Suivant selon le niveau ACTUELLEMENT chargé
+ * (voir currentLevelIndex, mis à jour par loadLevel juste avant chaque
+ * appel) — sans effet visible hors du mode "story" (bouton caché par
+ * setMode dans tous les autres modes, voir plus haut), mais recalculé
+ * systématiquement à chaque niveau pour rester correct dès qu'on repasse
+ * en Histoire. Réévalué aussi à chaque bascule du mode admin (voir
+ * onAdminModeChange plus bas) pour réactiver IMMÉDIATEMENT la flèche sans
+ * attendre un changement de niveau si l'admin vient de s'activer en plein
+ * milieu d'une partie bloquée. */
+function updateLevelNavLock() {
+  btnNext.disabled = !isAdminModeOn() && currentLevelIndex + 1 >= unlockedCount(storyProgress, levels.length);
+}
+onAdminModeChange(updateLevelNavLock);
 
 // Retour utilisateur: "dans la grille quotidienne, si je fais 'effacer',
 // j'ai les nouvelles mécaniques qui pop sur mon écran. Ca ne devrait pas !"
@@ -2068,9 +2098,16 @@ function renderLevelGrid() {
     const tile = document.createElement("button");
     const isUnlocked = i < unlocked;
     const isDone = storyProgress.has(i);
+    // Chantier admin/normal: même bypass que la flèche Suivant (voir
+    // btnNext plus haut) — en mode admin, la grille de sélection reste
+    // visuellement "verrouillée" (l'utilisateur voit toujours sa vraie
+    // progression) mais chaque case redevient cliquable, pour rester
+    // cohérent avec "passer les niveaux" plutôt que de forcer un détour
+    // par la flèche Suivant niveau par niveau.
+    const isPlayable = isUnlocked || isAdminModeOn();
     tile.className = "level-tile" + (isDone ? " level-tile--done" : "") + (isUnlocked ? "" : " level-tile--locked");
-    tile.disabled = !isUnlocked;
-    if (isUnlocked) {
+    tile.disabled = !isPlayable;
+    if (isPlayable) {
       tile.onclick = () => {
         pushView("play", { mode: "story", levelIndex: i });
       };
@@ -2142,7 +2179,6 @@ const profileLikedEmptyEl = document.getElementById("profile-liked-empty");
 const profileLikedPagerEl = document.getElementById("profile-liked-pager");
 const profileBadgePreviewEl = document.getElementById("profile-badge-preview");
 const profileSommationBadgesEl = document.getElementById("profile-sommation-badges");
-const btnProfileBadgesDebugUnlock = document.getElementById("btn-profile-badges-debug-unlock");
 const titleProfileBanner = document.getElementById("title-profile-banner");
 const titleProfileIdentityEl = document.getElementById("title-profile-identity");
 
@@ -2917,23 +2953,30 @@ profilePseudoInput.addEventListener("keydown", (e) => {
 // valable round 19 malgré la disparition du bouton Enregistrer).
 profilePseudoInput.addEventListener("input", refreshProfileBadgePreview);
 
-// Round 17 (retour utilisateur): bouton admin temporaire pour tester les
-// badges sans finir Remember — même fonction que le bouton équivalent
-// d'Options (voir plus haut btnPixelartDebugUnlock), donc même effet de
-// bord accepté (débloque aussi le thème PixelArt en même temps). Round
-// suivant (retour utilisateur: "ajoute les deux [bannières Étoiles] sur le
-// bouton admin"): débloque aussi Nébuleuse/Comète/Supernova (tiers 6-8). Round Meditate
+// Mode Admin [dev uniquement] — voir admin.js pour la justification du
+// `if (import.meta.env.DEV)` (élimination du bundle de prod). Round 17
+// (retour utilisateur): bouton admin temporaire pour tester les badges sans
+// finir Remember — même fonction que le bouton équivalent d'Options (voir
+// plus haut, section PixelArt), donc même effet de bord accepté (débloque
+// aussi le thème PixelArt en même temps). Round suivant (retour
+// utilisateur: "ajoute les deux [bannières Étoiles] sur le bouton admin"):
+// débloque aussi Nébuleuse/Comète/Supernova (tiers 6-8). Round Meditate
 // (retour utilisateur): l'ancien debugUnlockStarBadges (seuil d'Énergie,
 // dailyChallenge.js) est remplacé par debugUnlockMeditateBadges (voir
-// game/meditate.js) — ce bouton couvre ainsi toujours les 7 bannières d'un
-// seul clic, plutôt que de forcer à jouer Meditate juste pour tester
-// l'affichage.
-if (btnProfileBadgesDebugUnlock) {
-  btnProfileBadgesDebugUnlock.onclick = () => {
+// game/meditate.js). Chantier admin/normal (retour utilisateur: "il faut
+// ajouter la dernière bannière au déblocage admin"): la bannière "Fusion"
+// (fin de campagne, voir storage.js: markStoryMasteryUnlocked) n'était PAS
+// couverte par ce bouton — c'est le seul déblocage cosmétique qui suit un
+// mécanisme entièrement différent (progression Histoire, pas
+// Remember/Meditate) — ajoutée ici pour que ce bouton couvre enfin TOUTES
+// les bannières d'un seul clic.
+if (import.meta.env.DEV) {
+  mountAdminButton(".profile-badges-header", "Déverrouiller (admin)", null, () => {
     debugUnlockPixelArt();
     debugUnlockMeditateBadges();
+    markStoryMasteryUnlocked();
     renderCommunityProfile();
-  };
+  });
 }
 
 // ---------- Bascule Jouer / Infini / Éditeur ----------
@@ -3300,15 +3343,16 @@ const meditatePlayStateEl = document.getElementById("meditate-play-state");
 const meditatePreviewGridEl = document.getElementById("meditate-preview-grid");
 const meditatePreviewNameEl = document.getElementById("meditate-preview-name");
 const meditateSearchGridEl = document.getElementById("meditate-search-grid");
-const meditateDebugPointsBtn = document.getElementById("meditate-debug-points");
 
-// Outil de test (retour utilisateur): injecte 100 Éclairs sans avoir à
-// farmer le Défi Quotidien — même principe que som-debug-points (sommation.js).
-if (meditateDebugPointsBtn) {
-  meditateDebugPointsBtn.onclick = () => {
+// Mode Admin [dev uniquement] — voir admin.js pour la justification du
+// `if (import.meta.env.DEV)` (élimination du bundle de prod). Outil de
+// test (retour utilisateur): injecte 100 Éclairs sans avoir à farmer le
+// Défi Quotidien — même principe que le bouton "+500 étoiles" (sommation.js).
+if (import.meta.env.DEV) {
+  mountAdminButton("#view-meditate .screen-header", "+100 éclairs", "Débug: +100 Éclairs", () => {
     addStars(100);
     renderMeditateEnergy();
-  };
+  });
 }
 
 /** Recette de fond CSS de chaque bannière — reprise TELLE QUELLE de
@@ -4028,3 +4072,9 @@ setMode("story");
 // pouvoir s'ouvrir ici (voir showView/enterStoryDirect pour le vrai point
 // de déclenchement, au clic réel sur "Histoire").
 loadLevel(currentStoryIndex(storyProgress, levels.length), { silent: true });
+
+// Mode Admin [dev uniquement] — voir admin.js: n'a d'effet QUE si
+// `import.meta.env.DEV` (jamais en build de production). Appelé
+// inconditionnellement, comme tous les autres `init*()` de ce fichier —
+// c'est la garde interne de la fonction, pas ce point d'appel, qui décide.
+initAdminToggle();

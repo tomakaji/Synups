@@ -144,6 +144,21 @@
   color: var(--accent);
 }
 
+/* Chantier admin/normal (retour utilisateur): ces boutons de triche/test
+   sont désormais créés dynamiquement UNIQUEMENT en dev (voir admin.js:
+   mountAdminButton) — masqués par défaut, révélés seulement une fois le
+   mode admin activé via le toggle flottant (voir floating-controls.css:
+   #admin-toggle). N'existe même pas dans le DOM en build de production
+   (voir admin.js pour l'élimination de code mort), donc ces deux classes
+   n'ont d'effet visible qu'en dev. */
+.admin-only-btn {
+  display: none;
+}
+
+.admin-only-btn--visible {
+  display: inline-block;
+}
+
 /* rgba(255, 224, 138, x) = #ffe08a (le doré du gain ci-dessus) en rgb — même
    principe que .som-pulse-merge (sommation-fx.css): un anneau qui s'étend
    puis s'efface, largement plus visible qu'un simple changement de `color`

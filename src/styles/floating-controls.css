@@ -1,5 +1,42 @@
 /* ---------- Éléments flottants globaux (visibles au-dessus de tous les écrans) ---------- */
 
+/* Chantier admin/normal (retour utilisateur): SEUL point d'entrée du mode
+   admin (voir admin.js: initAdminToggle) — créé dynamiquement UNIQUEMENT en
+   dev (`import.meta.env.DEV`), donc cette règle n'a d'effet visible qu'en
+   dev également (absent du DOM en build de production). Coin bas-gauche
+   (voir .global-mute-btn ci-dessous pour le coin haut-droit déjà pris, et
+   .daily-challenge-fab pour le côté gauche déjà pris EN HAUT sur l'écran
+   titre) — couleur orange/rouge délibérément "alerte" pour ne jamais le
+   confondre avec un vrai bouton de jeu. */
+#admin-toggle {
+  position: fixed;
+  bottom: 14px;
+  left: 14px;
+  z-index: 100;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #ff9d5c;
+  background: var(--panel);
+  border: 1px dashed #ff9d5c;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: all 0.2s;
+}
+
+#admin-toggle:hover {
+  opacity: 1;
+}
+
+#admin-toggle.admin-toggle--on {
+  opacity: 1;
+  color: #1a1c22;
+  background: #ff9d5c;
+  border-style: solid;
+}
+
 .global-mute-btn {
   position: fixed;
   top: 14px;

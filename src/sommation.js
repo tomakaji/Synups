@@ -61,6 +61,7 @@ import { showRewardedAd } from "./game/ads.js";
 import { hapticLight, hapticWarning, hapticSuccess } from "./game/haptics.js";
 import { trackEvent } from "./game/analytics.js";
 import { t } from "./game/i18n.js";
+import { mountAdminButton } from "./admin.js";
 // Sons: un son NEUF, court et étouffé, dédié à la génération (spammable via
 // le double-tap sur un générateur déjà sélectionné — voir spawnFromSelected)
 // ; les autres actions
@@ -377,7 +378,7 @@ export function isPixelArtUnlocked() {
  * séparé — réutilise tel quel le chemin normal (isPixelArtUnlocked), donc
  * rien à dupliquer/désynchroniser ailleurs. Débloque en même temps les 5
  * bannières (effet de bord acceptable pour un bouton de test — voir
- * main.js: #btn-pixelart-debug-unlock, dans Options). */
+ * main.js: bouton admin Options, mode Admin [dev uniquement], voir admin.js). */
 export function debugUnlockPixelArt() {
   const meta = loadMeta();
   if (meta.badgesEarned < PIXELART_BADGE_TIER) {
@@ -712,7 +713,6 @@ const UNLOCK_COLORS = ["r", "g", "b", "w"];
 export function initSommation(pointsApi) {
   const gridEl = document.getElementById("sommation-grid");
   const pointsEl = document.getElementById("sommation-points");
-  const debugPointsBtn = document.getElementById("som-debug-points");
   const progressFillEl = document.getElementById("som-badge-progress-fill");
   const progressLabelEl = document.getElementById("som-badge-progress-label");
   const nextRewardTeaserEl = document.getElementById("som-next-reward-teaser");
@@ -1952,11 +1952,16 @@ export function initSommation(pointsApi) {
     });
   }
 
-  if (debugPointsBtn) {
-    debugPointsBtn.onclick = () => {
+  // Mode Admin [dev uniquement] — voir admin.js pour la justification du
+  // `if (import.meta.env.DEV)` (élimination du bundle de prod). Outil de
+  // test (retour utilisateur): injecte des étoiles dans le solde PARTAGÉ
+  // avec Infini (voir main.js: spendSharedPoints/addSharedPoints) — "pour
+  // pouvoir tester à l'infini".
+  if (import.meta.env.DEV) {
+    mountAdminButton("#view-sommation .screen-header", "+500 étoiles", "Débug: +500 étoiles", () => {
       pointsApi.addPoints(500);
       render();
-    };
+    });
   }
   document.querySelectorAll("[data-som-ad-modal-close]").forEach((el) => (el.onclick = closeAdModal));
   if (adWatchBtn) {

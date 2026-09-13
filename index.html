@@ -480,12 +480,11 @@
             <span data-i18n="options-pixelart-label" id="options-pixelart-label" class="options-label">Remember ?</span>
             <button data-i18n="btn-pixelart-toggle" id="btn-pixelart-toggle" class="options-btn" disabled>Verrouillé</button>
             <p data-i18n="options-pixelart-hint" id="options-pixelart-hint" class="options-hint">Débloqué à la 5e récompense de Remember.</p>
-            <!-- Débug: force le déverrouillage pour tester le thème sans finir
-                 le mini-jeu Remember à chaque fois (retour utilisateur round
-                 11) — voir sommation.js: debugUnlockPixelArt. Même esprit que
-                 #som-debug-points (+500 pts), texte discret plutôt qu'un
-                 bouton mis en avant. -->
-            <button data-i18n="btn-pixelart-debug-unlock" id="btn-pixelart-debug-unlock" class="som-debug-btn" type="button">Débloquer (débug)</button>
+            <!-- Chantier admin/normal: l'ancien bouton de débug statique
+                 (#btn-pixelart-debug-unlock) a été retiré d'ici — recréé
+                 dynamiquement UNIQUEMENT en dev (voir main.js: import.meta.env.DEV
+                 + admin.js: mountAdminButton) pour être physiquement absent du
+                 build de production, pas seulement caché. -->
           </div>
 
           <div class="options-section">
@@ -511,10 +510,10 @@
           </button>
           <h2 data-i18n="view-sommation.title" class="screen-title">Remember</h2>
           <span id="sommation-points" class="infinite-points">0</span>
-          <!-- Outil de test: injecte des étoiles dans le solde PARTAGÉ avec
-               Infini (voir main.js: spendSharedPoints/addSharedPoints) —
-               retour utilisateur: "pour pouvoir tester à l'infini". -->
-          <button data-i18n="som-debug-points" id="som-debug-points" class="som-debug-btn" type="button" title="Débug: +500 étoiles">+500 étoiles</button>
+          <!-- Chantier admin/normal: l'ancien bouton de débug statique
+               (#som-debug-points) a été retiré d'ici — recréé dynamiquement
+               UNIQUEMENT en dev (voir sommation.js: import.meta.env.DEV +
+               admin.js: mountAdminButton). -->
         </header>
 
         <!-- Retour utilisateur: "on va retirer les 'pages' affichées lorsqu'on
@@ -566,10 +565,10 @@
           </button>
           <h2 data-i18n="view-meditate.title" class="screen-title">Meditate</h2>
           <span id="meditate-energy" class="infinite-points meditate-energy-badge"></span>
-          <!-- Outil de test (retour utilisateur): injecte des Éclairs sans
-               avoir à farmer le Défi Quotidien — même principe que
-               #som-debug-points (+500 étoiles). -->
-          <button data-i18n="meditate-debug-points" id="meditate-debug-points" class="som-debug-btn" type="button" title="Débug: +100 Éclairs">+100 éclairs</button>
+          <!-- Chantier admin/normal: l'ancien bouton de débug statique
+               (#meditate-debug-points) a été retiré d'ici — recréé
+               dynamiquement UNIQUEMENT en dev (voir main.js:
+               import.meta.env.DEV + admin.js: mountAdminButton). -->
         </header>
 
         <div id="meditate-play-state" class="meditate-play-state">
@@ -709,13 +708,11 @@
         <div class="options-section">
           <div class="profile-badges-header">
             <span data-i18n="misc.bannieres" class="options-label">Bannières</span>
-            <!-- Round 17 (retour utilisateur): bouton admin temporaire pour
-                 tester l'affichage des bannières sans finir Remember —
-                 réutilise debugUnlockPixelArt (voir sommation.js), déjà
-                 câblé à un bouton équivalent dans Options (même esprit,
-                 même fonction, effet de bord "PixelArt aussi débloqué"
-                 accepté là-bas). -->
-            <button data-i18n="btn-profile-badges-debug-unlock" id="btn-profile-badges-debug-unlock" class="som-debug-btn" type="button">Déverrouiller (admin)</button>
+            <!-- Chantier admin/normal: l'ancien bouton de débug statique
+                 (#btn-profile-badges-debug-unlock) a été retiré d'ici —
+                 recréé dynamiquement UNIQUEMENT en dev (voir main.js:
+                 import.meta.env.DEV + admin.js: mountAdminButton), débloque
+                 désormais aussi la bannière Fusion (fin de campagne). -->
           </div>
           <div id="profile-sommation-badges" class="profile-badges-teasers"></div>
         </div>
