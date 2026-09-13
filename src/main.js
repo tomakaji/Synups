@@ -2141,9 +2141,7 @@ function renderLevelGrid() {
       (isCurrent ? " level-tile--current" : "");
     tile.disabled = !isPlayable;
     if (isPlayable) {
-      tile.onclick = () => {
-        pushView("play", { mode: "story", levelIndex: i });
-      };
+      tile.onclick = () => selectStoryLevel(i);
     }
     const num = document.createElement("span");
     num.className = "level-tile-num";
@@ -3283,6 +3281,26 @@ function showView(name, opts) {
 function pushView(name, opts) {
   viewStack.push(name);
   showView(name, opts);
+}
+
+/** Choisir un niveau depuis la grille de sélection (bug utilisateur: "je vais
+ * dans Jouer [...] je vais dans la sélection de niveaux et j'en choisis un,
+ * quand je ferai Retour ça va me remettre dans la sélection de niveaux [...]
+ * si je chaîne ce comportement [...] je vais devoir faire retours plusieurs
+ * fois pour arriver au menu principal"). "story-select" est TOUJOURS empilé
+ * par-dessus un "play" déjà présent (seul btnLevelGrid, visible uniquement
+ * en jeu, l'empile — voir plus bas) : un simple pushView("play", ...) ici
+ * empilait donc un DEUXIÈME "play" par-dessus, laissant la pile grossir sans
+ * fin à chaque aller-retour sélection -> niveau (Retour devait alors repasser
+ * par "story-select" avant de revenir au "play" précédent, puis seulement
+ * ensuite au menu). On dépile plutôt "story-select" et on réutilise le
+ * "play" qui était déjà en dessous — la pile ne grandit jamais, Retour
+ * depuis le niveau choisi revient exactement là où on était avant d'ouvrir
+ * la sélection (généralement le menu). */
+function selectStoryLevel(i) {
+  if (viewStack[viewStack.length - 1] === "story-select") viewStack.pop();
+  if (viewStack[viewStack.length - 1] !== "play") viewStack.push("play");
+  showView("play", { mode: "story", levelIndex: i });
 }
 
 /** Bouton Retour générique: dépile UN écran (jamais en dessous de "title",
