@@ -265,6 +265,41 @@ function boardHasColorTargets(grid) {
   return grid.cells.some((row) => row.some((cell) => !!cell.target));
 }
 
+/**
+ * PERF (round mobile, neurone miroir): calcule `mirrorReachable` (voir
+ * `computeMirrorReachable`) SEULEMENT si le plateau a au moins une cible de
+ * couleur — sinon renvoie un Set vide, ce qui désactive silencieusement
+ * TOUTES les précautions "risky"/abstention ajoutées par le fix de polarité
+ * (voir le commentaire en tête de fichier, "second risque symétrique") dans
+ * `propagate`/`pairDeductions`, qui redeviennent alors des no-op (mêmes
+ * gardes `mirrorReachable.size > 0` / `.has(...)` déjà en place partout).
+ *
+ * C'est sûr, pas juste rapide : le bug corrigé par ce fix concerne
+ * EXCLUSIVEMENT la couleur — un duplicata de neurone miroir hérite
+ * TOUJOURS la couleur de son origine et bloque un laser coloré qui le
+ * toucherait directement (voir grid.js `_mirrorLaserBlocked`/`_litColor`),
+ * ce qui peut faire dépendre le résultat de LAQUELLE des deux cases devient
+ * l'origine. Sans aucune cible de couleur sur le plateau (`!hasColorTargets`
+ * dans `refreshForLeafCheck`/`boardSignature`), `isWon()` ne lit jamais
+ * `_colorMatch` (voir grid.js, uniquement pour `cell.target` truthy) : la
+ * polarité origine/duplicata est donc rigoureusement invisible pour toute
+ * condition de victoire ou tout `_state` d'indice (qui ne regardent que
+ * `hasLight(r,c)`, jamais qui est "origine"). Les deux polarités produisent
+ * alors un plateau final identique en tout point observable — revenir au
+ * comportement "forcé" d'avant le fix y est donc sans risque, alors que
+ * c'est précisément ce chemin (Stage 1/1.5/2 qui força une case reachable
+ * sans être sûr de sa polarité) qui explore désormais DEUX branches par
+ * paire origine/duplicata symétrique quand une cible de couleur existe —
+ * mesuré comme la cause principale d'un ralentissement de génération
+ * niveau 3 (jusqu'à ~9x plus de nœuds explorés sur un plateau identique
+ * neurone-sans-couleur, seed de bench reproductible) alors qu'aucune de ces
+ * précautions n'était nécessaire pour ces plateaux-là.
+ */
+function computeMirrorReachableIfNeeded(grid, hasColorTargets) {
+  if (!hasColorTargets) return new Set();
+  return computeMirrorReachable(grid);
+}
+
 /** Rafraîchit l'état de `grid` juste avant `isWon()` à une feuille de
  * recherche — voir `boardHasColorTargets` pour le détail du raisonnement.
  * Centralisé ici (contrairement à `propagate`/`search`, volontairement
@@ -838,8 +873,8 @@ function decideBranchOrder(hintSet, idx, needed) {
 export function countSolutions(level, cap = 2, maxNodes = 2_000_000, options = {}) {
   const grid = new LightUpGrid(level);
   const excluded = new Set();
-  const mirrorReachable = computeMirrorReachable(grid);
   const hasColorTargets = boardHasColorTargets(grid);
+  const mirrorReachable = computeMirrorReachableIfNeeded(grid, hasColorTargets);
   let count = 0;
   let nodes = 0;
   // Voir boardSignature: dédoublonne les feuilles gagnantes qui ne
@@ -907,8 +942,8 @@ export function countSolutions(level, cap = 2, maxNodes = 2_000_000, options = {
 export function enumerateSolutions(level, cap = 5, maxNodes = 3_000_000, options = {}) {
   const grid = new LightUpGrid(level);
   const excluded = new Set();
-  const mirrorReachable = computeMirrorReachable(grid);
   const hasColorTargets = boardHasColorTargets(grid);
+  const mirrorReachable = computeMirrorReachableIfNeeded(grid, hasColorTargets);
   const found = [];
   let nodes = 0;
   // Voir boardSignature / countSolutions: même déduplication, pour ne pas
@@ -1026,8 +1061,8 @@ export function enumerateSolutions(level, cap = 5, maxNodes = 3_000_000, options
 export function findSolution(level, maxNodes = 2_000_000) {
   const grid = new LightUpGrid(level);
   const excluded = new Set();
-  const mirrorReachable = computeMirrorReachable(grid);
   const hasColorTargets = boardHasColorTargets(grid);
+  const mirrorReachable = computeMirrorReachableIfNeeded(grid, hasColorTargets);
   let nodes = 0;
   let solution = null;
 
@@ -1130,8 +1165,8 @@ export function findSolution(level, maxNodes = 2_000_000) {
 export function analyzeSolve(level, maxNodes = 2_000_000) {
   const grid = new LightUpGrid(level);
   const excluded = new Set();
-  const mirrorReachable = computeMirrorReachable(grid);
   const hasColorTargets = boardHasColorTargets(grid);
+  const mirrorReachable = computeMirrorReachableIfNeeded(grid, hasColorTargets);
   const stats = { stage2Used: false, stage2Count: 0, branchCount: 0, stage15Used: false };
   let nodes = 0;
   let solution = null;
@@ -1237,8 +1272,8 @@ export function analyzeSolve(level, maxNodes = 2_000_000) {
 export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = {}) {
   const grid = new LightUpGrid(level);
   const excluded = new Set();
-  const mirrorReachable = computeMirrorReachable(grid);
   const hasColorTargets = boardHasColorTargets(grid);
+  const mirrorReachable = computeMirrorReachableIfNeeded(grid, hasColorTargets);
   const stats = { stage2Used: false, stage2Count: 0, branchCount: 0, stage15Used: false };
   let frozen = false; // true dès qu'une 1re solution a été trouvée: stats figées
   let firstSolution = null;
