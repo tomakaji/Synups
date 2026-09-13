@@ -196,11 +196,49 @@
    augmenté (jamais horizontal, pour ne pas casser `flex:1`/largeur pleine
    selon le contexte) + police légèrement agrandie pour accompagner la
    hauteur plutôt que laisser un bouton haut avec un texte qui paraît petit
-   dedans. */
+   dedans.
+   Round suivant (retour utilisateur: "design plus attractif [...] ajouter
+   un icone-image dedans, qui soit coloré, 'pub'") — `display:flex` bascule
+   ces boutons en ligne icône+texte (`justify-content:center` recentre le
+   tout, remplaçant le `text-align:center` hérité qui n'a plus d'effet une
+   fois `flex`). L'icône elle-même est un ::before CSS pur (voir plus bas),
+   PAS un élément ajouté au markup: ces 5 boutons voient leur `textContent`
+   réécrit dynamiquement par main.js/sommation.js (état "Chargement…",
+   succès/échec, cooldown...) — un enfant réel dans le DOM aurait été
+   effacé à chaque réécriture. Un ::before/::after ne fait jamais partie de
+   `textContent` ni des enfants du nœud: totalement immunisé, aucune de ces
+   réécritures n'a besoin d'être adaptée. */
 .options-btn--watch-ad {
   padding-top: 20px;
   padding-bottom: 20px;
   font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Pastille "pub" ronde et colorée — même orange que le badge "Pub" du
+   bouton flottant Défi Quotidien (voir floating-controls.css:
+   .daily-challenge-fab-badge--pub, #ffb454) plutôt qu'une teinte inventée:
+   dans le reste du jeu, cet orange EST déjà le signal visuel "ça concerne
+   une pub". Triangle "play" en filigrane (data-URI SVG, #241a08 — même
+   brun sombre que .profile-avatar-price--star, déjà la paire de couleurs
+   "texte sombre sur pastille jaune/orange" du jeu) plutôt qu'un pictogramme
+   plus complexe: reconnaissable au premier coup d'œil comme "vidéo à
+   regarder", cohérent avec le texte du bouton. */
+.options-btn--watch-ad::before {
+  content: "";
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background-color: #ffb454;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23241a08' d='M8 5v14l11-7z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 13px 13px;
+  box-shadow: 0 0 0 3px rgba(255, 180, 84, 0.22);
 }
 
 /* Round 21 (migration Capacitor/AdMob): feedback texte sous le bouton

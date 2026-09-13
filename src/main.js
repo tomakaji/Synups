@@ -3949,7 +3949,14 @@ function renderDailyChallengeButton() {
     if (dailyChallengeFabCooldownEl) {
       const remaining = getReplayCooldownRemainingMs();
       dailyChallengeFabCooldownEl.classList.toggle("hidden", remaining === 0);
-      if (remaining > 0) dailyChallengeFabCooldownEl.textContent = formatDailyReplayCooldown(remaining);
+      // Retour utilisateur: "affiche juste le timer dans le format mm:ss,
+      // sinon ça prend trop de place" — le chip est minuscule (16px de
+      // haut, collé au badge "Pub" au-dessus, voir floating-controls.css),
+      // le format verbeux "1 h 12 min" de la popup (formatDailyReplayCooldown
+      // plus bas) y débordait. mm:ss (jamais d'heures: le cooldown plafonne
+      // à 1h = 60:00, voir dailyChallenge.js: REPLAY_COOLDOWN_MS) tient
+      // toujours sur la même largeur compacte.
+      if (remaining > 0) dailyChallengeFabCooldownEl.textContent = formatCooldownClock(remaining);
     }
     return;
   }
@@ -3965,10 +3972,12 @@ function renderDailyChallengeButton() {
 // (voir dailyChallengeFabCooldownEl ci-dessus) — sans ça, son compte à
 // rebours resterait figé à la valeur lue au dernier vrai événement
 // (victoire, retour au menu...) tant que le joueur ne quitte/revient pas
-// sur l'écran titre. 30s: même granularité que le popup de rejeu
-// (renderDailyReplayPopup plus bas), largement suffisant pour un compte à
-// rebours affiché à la minute près.
-setInterval(renderDailyChallengeButton, 30_000);
+// sur l'écran titre. 1s (et non 30s comme le popup de rejeu, voir
+// renderDailyReplayPopup plus bas): le chip affiche maintenant les secondes
+// (format mm:ss, retour utilisateur) donc doit véritablement défiler
+// seconde par seconde plutôt que sauter par paliers de 30 — coût
+// négligeable (quelques bascules de classe/texte sur 2-3 éléments).
+setInterval(renderDailyChallengeButton, 1_000);
 
 btnDailyChallenge.onclick = () => {
   if (isDailyChallengeCompleted()) {
@@ -4014,6 +4023,19 @@ function formatDailyReplayCooldown(ms) {
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
   return h > 0 ? `${h} h ${String(m).padStart(2, "0")} min` : `${m} min`;
+}
+
+/** "45:12" — format compact pour le chip du bouton flottant (voir
+ * renderDailyChallengeButton), trop petit pour le format verbeux ci-dessus.
+ * Jamais de composante heures: REPLAY_COOLDOWN_MS (dailyChallenge.js)
+ * plafonne à 1h, donc `m` ne dépasse jamais 60. Arrondi À LA SECONDE
+ * SUPÉRIEURE pour la même raison que formatDailyReplayCooldown: ne jamais
+ * afficher 00:00 tant qu'il reste du cooldown. */
+function formatCooldownClock(ms) {
+  const totalSeconds = Math.max(1, Math.ceil(ms / 1000));
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 /** (Ré)affiche le bouton de la popup selon le cooldown ACTUEL (voir
