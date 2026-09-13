@@ -1248,7 +1248,9 @@ onLevelsChanged(() => {
 preloadMusic();
 
 // ---------- Options: acheter le jeu (design seul) + réinitialiser ----------
-// "Débloquer la version complète": maquette volontairement sans action pour
+// "Désactiver les publicités" / "Soutenir le développeur" (retour
+// utilisateur: wording changé depuis "Débloquer la version complète" /
+// "retire les publicités") : maquette volontairement sans action pour
 // l'instant (voir demande utilisateur — le paiement réel n'est pas encore
 // développé), juste le bouton pour valider le design de la page.
 document.getElementById("btn-buy-game").onclick = () => {};
