@@ -188,6 +188,20 @@ const FAILURE_MUFFLE_GAIN = 0.4;
 const FAILURE_MUFFLE_CUTOFF_HZ = 420;
 const NORMAL_CUTOFF_HZ = 20000; // au-delà du spectre audible: filtre inactif en pratique
 
+// Retour utilisateur : "Lorsqu'on n'est plus en jeu (options, profil, etc.),
+// on pose un filtre sur la musique pour l'étouffer un peu, la passer en
+// arrière-plan. Et on retire le filtre lorsqu'on revient en jeu (grille
+// Jouer, quotidienne ou Arcade)." — même mécanisme que l'étouffement
+// d'échec ci-dessus (même `duckFilter` partagé, même `rampParam`), mais
+// délibérément beaucoup plus doux: ceci n'est pas une alarme, juste "la
+// musique continue derrière l'écran affiché" — pas de piste d'échec, pas
+// la même perte de présence marquée. Valeurs volontairement DISTINCTES de
+// FAILURE_MUFFLE_*/NORMAL_CUTOFF_HZ pour ne jamais se confondre avec l'état
+// d'erreur (voir enterFailure/exitFailure, qui restent prioritaires: voir
+// la garde `backgroundMuffled` dans exitFailure ci-dessous).
+const BACKGROUND_MUFFLE_GAIN = 0.6;
+const BACKGROUND_MUFFLE_CUTOFF_HZ = 1200;
+
 // --- Chaîne de sortie Web Audio native, posée directement sur le contexte
 // interne de Howler (Howler.ctx — un AudioContext SÉPARÉ de celui de
 // Tone.js utilisé par sound.js pour ses synthés SFX ; les deux librairies ne
@@ -274,7 +288,14 @@ function ensureOutputChain() {
   // FAILURE_MUFFLE_CUTOFF_HZ.
   duckFilter = ctx.createBiquadFilter();
   duckFilter.type = "lowpass";
-  duckFilter.frequency.value = NORMAL_CUTOFF_HZ;
+  // Reflète l'état DÉJÀ demandé si `enterBackgroundMuffle()` a tourné avant
+  // ce tout premier vrai geste utilisateur (voir startMusic, déclenché
+  // uniquement par le premier clic en jeu — un joueur qui commence par une
+  // grille Communauté, hors bucket "en jeu" pour ce muffle, ne doit pas
+  // entendre un aller-retour audible net->étouffé juste après avoir posé
+  // sa première lumière). `failureCount` est nécessairement à 0 ici: une
+  // erreur de jeu ne peut survenir qu'après ce tout premier clic.
+  duckFilter.frequency.value = backgroundMuffled ? BACKGROUND_MUFFLE_CUTOFF_HZ : NORMAL_CUTOFF_HZ;
   duckFilter.connect(Howler.masterGain);
 
   // Retour utilisateur: "je me demande si c'est pas dû aussi aux enceintes
@@ -371,6 +392,11 @@ export function setMusicVolume(level, fadeMs) {
 let howls = null; // { key -> Howl }
 let unlocked = new Set(); // sous-ensemble courant de MECHANIC_LAYERS démuté
 let failureCount = 0; // compteur (pas booléen): plusieurs synapses/surcharges possibles à la fois
+// Un seul booléen (pas un compteur comme failureCount): il n'existe qu'UNE
+// seule raison possible d'être "hors gameplay actif" à un instant donné
+// (l'écran affiché) — contrairement aux erreurs de jeu, qui peuvent se
+// chevaucher (voir enterFailure/exitFailure ci-dessous).
+let backgroundMuffled = false;
 let started = false;
 
 // Ambiance (boutique "Secrets", voir storage.js/main.js): un socle de
@@ -433,7 +459,10 @@ function ensureBuilt() {
     const howl = new Howl({
       src: [urls[key]],
       loop: true,
-      volume: key === "base" ? 1 : 0,
+      // Même raisonnement que le cutoff initial de duckFilter ci-dessus
+      // (voir ensureOutputChain): la base démarre directement au gain
+      // muffled si on est déjà hors gameplay actif au tout premier clic.
+      volume: key === "base" ? (backgroundMuffled ? BACKGROUND_MUFFLE_GAIN : 1) : 0,
       html5: false, // Web Audio (pas <audio> HTML5) — nécessaire pour le routage manuel ci-dessous
       preload: true,
     });
@@ -723,12 +752,54 @@ export function isFailureActive() {
 }
 
 /** Résolution d'UNE erreur — restaure l'état normal (base + couches
- * débloquées) seulement si c'était la DERNIÈRE erreur encore active. */
+ * débloquées) seulement si c'était la DERNIÈRE erreur encore active. Si le
+ * muffle d'arrière-plan (voir enterBackgroundMuffle/exitBackgroundMuffle
+ * plus bas) est encore actif à ce moment précis (cas limite: une erreur se
+ * résout pile au moment où l'écran change), on restaure VERS CET ÉTAT-LÀ
+ * plutôt que vers le neutre complet — sinon cette restauration, en ciblant
+ * bêtement NORMAL_CUTOFF_HZ, écraserait un muffle d'arrière-plan pourtant
+ * toujours demandé (les deux partagent le même duckFilter.frequency). */
 export function exitFailure() {
   if (failureCount === 0) return; // garde-fou défensif
   failureCount--;
   if (failureCount !== 0 || !howls) return;
   fadeLayer("echec", 0, FADE_MS);
+  if (backgroundMuffled) {
+    rampParam(duckFilter.frequency, BACKGROUND_MUFFLE_CUTOFF_HZ, FADE_MS / 1000);
+    fadeLayer("base", BACKGROUND_MUFFLE_GAIN, FADE_MS);
+    for (const key of unlocked) fadeLayer(key, BACKGROUND_MUFFLE_GAIN, FADE_MS);
+  } else {
+    rampParam(duckFilter.frequency, NORMAL_CUTOFF_HZ, FADE_MS / 1000);
+    fadeLayer("base", 1, FADE_MS);
+    for (const key of unlocked) fadeLayer(key, LAYER_ACTIVE_GAIN[key] ?? 1, FADE_MS);
+  }
+}
+
+/** Étouffe la musique en arrière-plan: retour utilisateur — "lorsqu'on
+ * n'est plus en jeu (options, profil, etc.), on pose un filtre sur la
+ * musique pour l'étouffer un peu, la passer en arrière-plan". Appelée
+ * depuis main.js (showView) pour tout écran hors gameplay actif. Sans
+ * effet si une erreur de jeu est en cours (voir enterFailure): son muffle,
+ * plus extrême, reste prioritaire — `backgroundMuffled` est quand même mis
+ * à jour pour qu'exitFailure sache vers quel état restaurer ensuite (voir
+ * ci-dessus). Idempotent (no-op si déjà actif). */
+export function enterBackgroundMuffle() {
+  if (backgroundMuffled) return;
+  backgroundMuffled = true;
+  if (failureCount > 0 || !howls) return;
+  rampParam(duckFilter.frequency, BACKGROUND_MUFFLE_CUTOFF_HZ, FADE_MS / 1000);
+  fadeLayer("base", BACKGROUND_MUFFLE_GAIN, FADE_MS);
+  for (const key of unlocked) fadeLayer(key, BACKGROUND_MUFFLE_GAIN, FADE_MS);
+}
+
+/** Retire le muffle d'arrière-plan: retour à une grille de jeu active
+ * (Jouer/Quotidien/Arcade). Sans effet si une erreur de jeu est en cours
+ * (voir enterFailure) — dans ce cas c'est exitFailure qui restaurera le bon
+ * état, plus tard, une fois l'erreur résolue. Idempotent. */
+export function exitBackgroundMuffle() {
+  if (!backgroundMuffled) return;
+  backgroundMuffled = false;
+  if (failureCount > 0 || !howls) return;
   rampParam(duckFilter.frequency, NORMAL_CUTOFF_HZ, FADE_MS / 1000);
   fadeLayer("base", 1, FADE_MS);
   for (const key of unlocked) fadeLayer(key, LAYER_ACTIVE_GAIN[key] ?? 1, FADE_MS);

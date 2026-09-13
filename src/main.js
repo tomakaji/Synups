@@ -66,6 +66,8 @@ import {
   exitFailure,
   setMusicVolume,
   refreshMusicTheme,
+  enterBackgroundMuffle,
+  exitBackgroundMuffle,
 } from "./game/music.js";
 import {
   createBoardRenderer,
@@ -3292,6 +3294,20 @@ function showView(name, opts) {
   // "story" par défaut — sinon "Retour" depuis les réglages Infini
   // ramenait au plateau Histoire au lieu du plateau Infini en cours.
   if (name === "play") setMode(opts?.mode ?? mode);
+  // Musique d'arrière-plan (retour utilisateur: "lorsqu'on n'est plus en
+  // jeu [...] on pose un filtre sur la musique pour l'étouffer un peu, la
+  // passer en arrière-plan [...] on retire le filtre lorsqu'on revient en
+  // jeu (grille Jouer ou grille quotidienne ou grille Arcade)") — seules
+  // les 3 grilles nommées comptent comme "en jeu": une grille Communauté,
+  // bien qu'affichée sur ce même écran "play", n'en fait PAS partie (pas
+  // citée par l'utilisateur), donc reste muffled comme Remember/Meditate/
+  // Options/Profil/etc. `mode` peut ne pas être encore à jour ici si
+  // `opts.mode` vient d'être appliqué juste au-dessus (setMode est
+  // synchrone), donc on relit `opts?.mode ?? mode` de la même façon.
+  const isActiveGameplay =
+    name === "play" && ["story", "daily", "infinite"].includes(opts?.mode ?? mode);
+  if (isActiveGameplay) exitBackgroundMuffle();
+  else enterBackgroundMuffle();
   if (opts?.levelIndex != null) loadLevel(opts.levelIndex);
   if (name === "story-select") renderLevelGrid();
   // refreshCommunityCloud() est throttlée en interne (voir community-store.js:
