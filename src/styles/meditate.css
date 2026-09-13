@@ -78,10 +78,18 @@
    (.meditate-preview-cell ci-dessous) suffisent à garder un carré parfait
    quelle que soit cette largeur, sans aucun calcul en JS.
    Retour utilisateur: "la preview des formes à trouver [...] un peu plus
-   petite (environ 25% plus petit)" — 280px -> 210px (280 * 0.75). */
+   petite (environ 25% plus petit)" — 280px -> 210px (280 * 0.75).
+   Retour utilisateur (round suivant): "Meditate prend trop de hauteur sur
+   téléphone [...] réduire la taille de la preview [...] d'environ 30%" —
+   210px -> 148px (210 * 0.7, arrondi) : sur téléphone, cette preview
+   carrée occupe une hauteur d'écran directement proportionnelle à sa
+   largeur (voir .meditate-preview-grid: aspect-ratio 1 via
+   .meditate-preview-cell ci-dessous), donc la rétrécir est ce qui rend le
+   plus de hauteur disponible pour le reste (grille de recherche, header)
+   sans toucher à leur propre code. */
 .meditate-preview-grid {
   display: grid;
-  width: min(210px, 100%);
+  width: min(148px, 100%);
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid #1c2130;

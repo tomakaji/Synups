@@ -818,14 +818,16 @@ function findNextHintCell() {
   return null; // grille déjà correcte, ou plus aucune case-solution posable
 }
 
-/** Cas de repli quand `findNextHintCell` ne peut rien proposer: repère une
- * impulsion posée par le joueur qui n'appartient PAS à la solution (une
- * erreur), pour la retirer plutôt que d'en poser une nouvelle — c'est
- * généralement CE type de lumière mal placée qui, en illuminant une case-
- * solution voisine, bloque la suite (voir findNextHintCell ci-dessus). La
- * retirer débloque la grille pour qu'un prochain indice puisse à nouveau
- * proposer une pose normale. Retourne `null` si la grille est déjà
- * entièrement correcte (rien à retirer). */
+/** Repère une impulsion posée par le joueur qui n'appartient PAS à la
+ * solution (une erreur), pour la retirer. Retour utilisateur: "je préfère
+ * qu'en priorité on retire une impulsion mal placée plutôt que de placer
+ * une bonne impulsion, c'est plus important d'avoir une grille propre" —
+ * consultée EN PREMIER par applyHint(), avant même findNextHintCell()
+ * ci-dessus. Ce type de lumière mal placée, en illuminant une case-
+ * solution voisine, bloque de toute façon souvent la suite (voir
+ * findNextHintCell) — la retirer débloque la grille pour qu'un prochain
+ * indice puisse ensuite proposer une pose normale. Retourne `null` si la
+ * grille est déjà entièrement correcte (rien à retirer). */
 function findWrongPlacedCell() {
   if (!currentLevel || !grid) return null;
   const solution = getCurrentLevelSolution();
@@ -888,34 +890,44 @@ function closeHintModal() {
  * erreur en repli) — extrait de btnHint.onclick pour pouvoir être différé
  * d'une frame (voir plus bas), sans dupliquer cette logique. */
 function applyHint() {
-  const next = findNextHintCell();
-  if (next) {
+  // Retour utilisateur: "je préfère qu'en priorité on retire une impulsion
+  // mal placée plutôt que de placer une bonne impulsion. C'est plus
+  // important d'avoir une grille propre." — inversion de l'ordre précédent
+  // (qui posait en priorité, et ne retirait qu'en repli si plus aucune
+  // case-solution n'était posable, voir plus bas): on regarde D'ABORD s'il
+  // existe une impulsion mal placée (findWrongPlacedCell) et on la retire
+  // si oui, avant même de chercher une case-solution à poser. Les deux
+  // fonctions sont de simples lectures de l'état courant (aucun effet de
+  // bord), donc les appeler dans cet ordre ne change que la PRIORITÉ, pas
+  // leur résultat individuel.
+  const wrong = findWrongPlacedCell();
+  if (wrong) {
     hintStock--;
     renderHintUI();
-    // Un indice POSE directement la lumière (retour utilisateur: "l'indice
-    // doit placer la lumière, pas juste indiquer la position") — on rejoue
-    // exactement le chemin d'un clic joueur (son, historique Annuler, anim.
-    // neurone miroir, détection de victoire), pour que le résultat soit
-    // strictement indiscernable d'un coup joué à la main, puis on ajoute le
-    // halo doré par-dessus pour signaler que c'était un indice.
-    handleCellClick(next[0], next[1]);
-    showHintAt(next[0], next[1]);
+    // Un indice POSE/RETIRE directement la lumière (retour utilisateur:
+    // "l'indice doit placer la lumière, pas juste indiquer la position") —
+    // on rejoue exactement le chemin d'un clic joueur (son, historique
+    // Annuler, anim. neurone miroir, détection de victoire), pour que le
+    // résultat soit strictement indiscernable d'un coup joué à la main,
+    // puis on ajoute le halo rouge par-dessus pour signaler que c'était un
+    // indice de RETRAIT.
+    handleCellClick(wrong[0], wrong[1]);
+    showHintAt(wrong[0], wrong[1], { remove: true });
     return;
   }
-  // Retour utilisateur: "les indices ne fonctionnent pas si on a rempli une
-  // grille avec des erreurs, puisqu'il ne peut pas proposer le prochain
-  // mouvement dans ce cas" — plus aucune case-solution n'est posable tout
-  // de suite (voir findNextHintCell), typiquement parce qu'une ou plusieurs
-  // impulsions mal placées illuminent les cases qu'il faudrait pouvoir
-  // poser. Repli: retirer une impulsion erronée plutôt que d'en poser une
-  // (mêmes garanties que ci-dessus: on rejoue un vrai clic joueur via
-  // handleCellClick, qui la retire puisqu'elle porte déjà une lumière).
-  const wrong = findWrongPlacedCell();
-  if (!wrong) return; // grille déjà entièrement correcte: rien à faire
+  // Repli: aucune impulsion erronée à retirer (grille propre jusqu'ici) —
+  // on peut proposer la pose d'une case-solution normalement. Reste utile
+  // même seul dans le cas historique ("les indices ne fonctionnent pas si
+  // on a rempli une grille avec des erreurs, puisqu'il ne peut pas
+  // proposer le prochain mouvement dans ce cas", voir findNextHintCell):
+  // avec la nouvelle priorité, ce cas ne peut de toute façon plus se
+  // produire, puisque toute erreur est retirée avant d'en arriver ici.
+  const next = findNextHintCell();
+  if (!next) return; // grille déjà entièrement correcte: rien à faire
   hintStock--;
   renderHintUI();
-  handleCellClick(wrong[0], wrong[1]);
-  showHintAt(wrong[0], wrong[1], { remove: true });
+  handleCellClick(next[0], next[1]);
+  showHintAt(next[0], next[1]);
 }
 
 btnHint.onclick = () => {
