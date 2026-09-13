@@ -2033,7 +2033,22 @@ btnInfiniteSettings.onclick = () => {
 const btnPrev = document.getElementById("btn-prev");
 const btnNext = document.getElementById("btn-next");
 btnPrev.onclick = () => {
-  if (!boardLocked) loadLevel(currentLevelIndex - 1);
+  if (boardLocked) return;
+  // Bug corrigé (retour utilisateur): `loadLevel` fait un modulo pour
+  // accepter un index hors bornes (voir sa définition — pratique pour
+  // `currentStoryIndex % levels.length` etc.), donc appeler
+  // loadLevel(-1) depuis le tout premier niveau (index 0) NE PLANTAIT PAS
+  // mais rebouclait silencieusement sur le DERNIER niveau (index
+  // levels.length-1) — en mode normal, ça permettait de "remonter" à un
+  // niveau non débloqué en cliquant Précédent depuis le niveau 1, sans
+  // jamais passer par Suivant ni par la grille (tous deux correctement
+  // verrouillés, voir btnNext/renderLevelGrid). Il n'existe pas de niveau
+  // "avant le premier" : ce bouton doit simplement s'arrêter à l'index 0,
+  // jamais boucler, peu importe le mode admin (contrairement à Suivant, ce
+  // n'est pas une histoire de déblocage — remonter avant le début n'a
+  // simplement aucun sens).
+  if (currentLevelIndex <= 0) return;
+  loadLevel(currentLevelIndex - 1);
 };
 btnNext.onclick = () => {
   if (boardLocked) return;
@@ -2048,16 +2063,18 @@ btnNext.onclick = () => {
   loadLevel(currentLevelIndex + 1);
 };
 
-/** Active/désactive la flèche Suivant selon le niveau ACTUELLEMENT chargé
- * (voir currentLevelIndex, mis à jour par loadLevel juste avant chaque
- * appel) — sans effet visible hors du mode "story" (bouton caché par
- * setMode dans tous les autres modes, voir plus haut), mais recalculé
- * systématiquement à chaque niveau pour rester correct dès qu'on repasse
- * en Histoire. Réévalué aussi à chaque bascule du mode admin (voir
- * onAdminModeChange plus bas) pour réactiver IMMÉDIATEMENT la flèche sans
- * attendre un changement de niveau si l'admin vient de s'activer en plein
- * milieu d'une partie bloquée. */
+/** Active/désactive les flèches Précédent/Suivant selon le niveau
+ * ACTUELLEMENT chargé (voir currentLevelIndex, mis à jour par loadLevel
+ * juste avant chaque appel) — sans effet visible hors du mode "story"
+ * (boutons cachés par setMode dans tous les autres modes, voir plus haut),
+ * mais recalculé systématiquement à chaque niveau pour rester correct dès
+ * qu'on repasse en Histoire. Réévalué aussi à chaque bascule du mode admin
+ * (voir onAdminModeChange plus bas) pour réactiver IMMÉDIATEMENT Suivant
+ * sans attendre un changement de niveau si l'admin vient de s'activer en
+ * plein milieu d'une partie bloquée — Précédent, lui, ne dépend jamais du
+ * mode admin (voir son onclick ci-dessus). */
 function updateLevelNavLock() {
+  btnPrev.disabled = currentLevelIndex <= 0;
   btnNext.disabled = !isAdminModeOn() && currentLevelIndex + 1 >= unlockedCount(storyProgress, levels.length);
 }
 onAdminModeChange(updateLevelNavLock);
