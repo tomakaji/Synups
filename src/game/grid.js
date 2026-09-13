@@ -608,6 +608,41 @@ export class LightUpGrid {
   }
 
   /**
+   * Vrai si (r,c) est actuellement "capturée" par une lumière déjà posée
+   * ailleurs — même géométrie que la diffusion d'illumination de
+   * `recompute()` (ligne droite à travers des cases EMPTY, arrêtée par
+   * tout obstacle), mais calculée à la demande à partir de `this.lights`
+   * directement plutôt que de lire `cell._illuminated`.
+   *
+   * Nécessaire ici (voir le nouveau cas Pyra dans `_computeClueStates`
+   * ci-dessous) car `_computeClueStates()` tourne comme PREMIÈRE étape de
+   * `recompute()` (voir son commentaire), AVANT que l'étape 3
+   * (illumination, qui recalcule `_illuminated`) n'ait rejoué la pose de
+   * lumière qui vient de déclencher CE `recompute()` — lire
+   * `cell._illuminated` à cet instant renverrait donc une valeur périmée
+   * d'un cran (celle d'AVANT ce coup), ratant précisément le cas où LA
+   * case qui vient d'être illuminée est celle qui bloque le Pyra. Un
+   * balayage direct sur `this.lights`/`hasLight()` n'a pas ce problème
+   * d'ordre : il reflète toujours l'état RÉEL et à jour des lumières
+   * posées, quel que soit le moment où on l'appelle pendant `recompute()`.
+   */
+  _isCurrentlyIlluminated(r, c) {
+    if (this.hasLight(r, c)) return true;
+    for (const [dr, dc] of DIRECTIONS) {
+      let nr = r + dr;
+      let nc = c + dc;
+      while (true) {
+        const cell = this.cellAt(nr, nc);
+        if (!cell || cell.type !== CellType.EMPTY) break;
+        if (this.hasLight(nr, nc)) return true;
+        nr += dr;
+        nc += dc;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Cherche, en scannant depuis (r,c) dans la direction (dr,dc), la
    * première lumière "à portée de laser" — utilisé par le Prisme (voir en
    * tête de fichier): transparent au VOID (comme un laser de charge
@@ -671,23 +706,35 @@ export class LightUpGrid {
           const adjacentLights = this._adjacentLightCount(r, c);
           cell._adjacentLights = adjacentLights;
           if (adjacentLights === 0) {
-            // Même logique que CLUE ci-dessous (`adjacentEmptyFree === 0`):
-            // si plus aucune case EMPTY sans lumière ne reste adjacente, ce
-            // Pyra ne pourra plus JAMAIS s'activer — état "error" (pas
-            // "neutral", qui laisserait croire à tort qu'il attend
-            // simplement sa lumière comme n'importe quel Pyra pas encore
-            // touché). Avant ce fix, un Pyra bloqué de la sorte restait
-            // visuellement indiscernable d'un Pyra normal en attente, alors
-            // qu'un CLUE dans la même situation impossible virait "error"
-            // immédiatement — un vrai manque de feedback pour le joueur.
-            let adjacentEmptyFree = 0;
+            // Si plus aucun voisin EMPTY ne peut RÉELLEMENT recevoir une
+            // lumière, ce Pyra ne pourra plus JAMAIS s'activer — état
+            // "error" (pas "neutral", qui laisserait croire à tort qu'il
+            // attend simplement sa lumière comme n'importe quel Pyra pas
+            // encore touché). Un voisin est disqualifié soit parce qu'il
+            // n'est pas EMPTY (obstacle), soit parce qu'il est déjà
+            // "capturé" par l'illumination d'une lumière posée ailleurs —
+            // voir `_isCurrentlyIlluminated` : une case illuminée ne peut
+            // JAMAIS recevoir de lumière (règle du jeu, voir `toggleLight`
+            // plus haut), même si elle est encore de type EMPTY et sans
+            // lumière à elle. Se limiter à `!hasLight` (comme CLUE, qui a le
+            // même angle mort) ratait ce second cas, largement le plus
+            // fréquent en jeu — un Pyra bloqué par illumination restait à
+            // tort "neutral" avant ce fix.
+            //
+            // (adjacentLights === 0 garantit ici qu'aucun voisin EMPTY n'a
+            // déjà de lumière, donc `_isCurrentlyIlluminated` ne peut être
+            // vrai ici que via le balayage en ligne, pas via `hasLight`
+            // direct sur le voisin lui-même.)
+            let adjacentFree = 0;
             for (const [dr, dc] of DIRECTIONS) {
-              const nCell = this.cellAt(r + dr, c + dc);
-              if (nCell && nCell.type === CellType.EMPTY && !this.hasLight(r + dr, c + dc)) {
-                adjacentEmptyFree++;
+              const nr = r + dr;
+              const nc = c + dc;
+              const nCell = this.cellAt(nr, nc);
+              if (nCell && nCell.type === CellType.EMPTY && !this._isCurrentlyIlluminated(nr, nc)) {
+                adjacentFree++;
               }
             }
-            cell._state = adjacentEmptyFree === 0 ? "error" : "neutral";
+            cell._state = adjacentFree === 0 ? "error" : "neutral";
             cell._activeColor = null;
           } else if (adjacentLights <= 3) {
             cell._state = "success";

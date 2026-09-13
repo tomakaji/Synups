@@ -1060,11 +1060,39 @@ export function createBoardRenderer(boardEl, options = {}) {
     // "actif" change, comme pour le thème.
     const active = String((cellData._prismAdjacentCount || 0) >= 1);
     if (rotor && icon.dataset.pixelTheme === pixel && icon.dataset.prismActive === active) {
+      // Retour utilisateur: quand la rotation RÉELLE change (pose/retrait
+      // de lumière qui fait franchir un cran de 90°, voir `deg` ci-dessus),
+      // l'animation de "poussée" continue (wobble d'anticipation, voir
+      // prismIcon: <animateTransform> values 0;75;0 en boucle indéfinie)
+      // doit repartir de zéro plutôt que de continuer sa boucle en cours —
+      // sinon elle peut se trouver n'importe où dans son cycle de 3s
+      // pile au moment où le disque vient de pivoter, un décalage qui
+      // brouille la lisibilité du geste. On ne touche ni au noeud
+      // `.prism-rotor` ni à son `transform` CSS (la transition 0.6s doit
+      // s'appliquer normalement, voir board.css) : on relance juste
+      // l'animation SMIL interne via `beginElement()` — `restart="always"`
+      // est la valeur par défaut de `<animateTransform>`, donc cet appel
+      // interrompt le cycle en cours et le relance depuis 0 sans dupliquer
+      // d'instance concurrente.
+      if (icon.dataset.prismDeg !== String(deg)) {
+        const wobble = rotor.querySelector("animateTransform");
+        if (wobble && typeof wobble.beginElement === "function") {
+          try {
+            wobble.beginElement();
+          } catch {
+            // Ignoré (ex: environnement sans support SMIL complet) — le
+            // wobble continue simplement son cycle en cours, dégradation
+            // sans conséquence fonctionnelle.
+          }
+        }
+      }
       rotor.style.transform = `rotate(${deg}deg)`;
+      icon.dataset.prismDeg = String(deg);
     } else {
       icon.innerHTML = prismIcon(cellData);
       icon.dataset.pixelTheme = pixel;
       icon.dataset.prismActive = active;
+      icon.dataset.prismDeg = String(deg);
     }
   }
 
