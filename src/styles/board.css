@@ -393,49 +393,67 @@
 /* Le sens d'animation doit toujours suivre "de la charge vers sa cible",
    jamais un sens d'écran fixe: selon que la cible est à droite/à gauche
    (ou en bas/en haut) du départ sur ce segment, on choisit la variante
-   normale ou inversée (voir game/render.js). */
-.laser-dot--h {
+   normale ou inversée (voir game/render.js).
+
+   Retour utilisateur: "le téléphone chauffe au bout d'un moment" — ces
+   points animaient auparavant `left`/`top` (0% -> 100%), des propriétés de
+   MISE EN PAGE: le navigateur devait recalculer le layout à CHAQUE image de
+   l'animation, pour CHAQUE point, tant qu'un laser restait connecté à
+   l'écran (fréquent — c'est l'état stable d'une case résolue). Remplacé par
+   une animation de `transform` (translateX/Y), traitée par le compositeur
+   GPU sans jamais toucher au layout — même trajectoire visuelle, coût
+   quasi nul. `--laser-travel` (posée par JS: voir render.js, renderLasers)
+   contient la longueur RÉELLE en pixels du segment: contrairement à
+   `left`/`top` en %, un `translateX/Y` en % se résout sur la taille PROPRE
+   de l'élément (ce point de 7px), pas sur celle de son parent — d'où le
+   besoin de cette valeur en px calculée par segment plutôt qu'un simple
+   `100%`. */
+.laser-dot--h,
+.laser-dot--h-reverse {
   top: 50%;
-  transform: translate(-50%, -50%);
+  left: 0;
+}
+
+.laser-dot--v,
+.laser-dot--v-reverse {
+  left: 50%;
+  top: 0;
+}
+
+.laser-dot--h {
   animation: laser-travel-h 2.4s linear infinite;
 }
 
 .laser-dot--h-reverse {
-  top: 50%;
-  transform: translate(-50%, -50%);
   animation: laser-travel-h-reverse 2.4s linear infinite;
 }
 
 .laser-dot--v {
-  left: 50%;
-  transform: translate(-50%, -50%);
   animation: laser-travel-v 2.4s linear infinite;
 }
 
 .laser-dot--v-reverse {
-  left: 50%;
-  transform: translate(-50%, -50%);
   animation: laser-travel-v-reverse 2.4s linear infinite;
 }
 
 @keyframes laser-travel-h {
-  0% { left: 0%; }
-  100% { left: 100%; }
+  0% { transform: translate(-50%, -50%) translateX(0); }
+  100% { transform: translate(-50%, -50%) translateX(var(--laser-travel, 0px)); }
 }
 
 @keyframes laser-travel-h-reverse {
-  0% { left: 100%; }
-  100% { left: 0%; }
+  0% { transform: translate(-50%, -50%) translateX(var(--laser-travel, 0px)); }
+  100% { transform: translate(-50%, -50%) translateX(0); }
 }
 
 @keyframes laser-travel-v {
-  0% { top: 0%; }
-  100% { top: 100%; }
+  0% { transform: translate(-50%, -50%) translateY(0); }
+  100% { transform: translate(-50%, -50%) translateY(var(--laser-travel, 0px)); }
 }
 
 @keyframes laser-travel-v-reverse {
-  0% { top: 100%; }
-  100% { top: 0%; }
+  0% { transform: translate(-50%, -50%) translateY(var(--laser-travel, 0px)); }
+  100% { transform: translate(-50%, -50%) translateY(0); }
 }
 
 /* Transition de fin de niveau (voir main.js: advanceAfterWin) — remplace

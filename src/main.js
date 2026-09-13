@@ -3355,6 +3355,12 @@ function showView(name, opts) {
     // session (via sa modale de récompense, qui redirige elle-même ici),
     // donc jamais figé sur un état périmé.
     renderModeMenuButtons();
+    // Voir startDailyChallengeFabTicker/stopDailyChallengeFabTicker plus
+    // bas: ce tic ne doit tourner que pendant que l'écran titre (seul
+    // endroit où #btn-daily-challenge est visible) est affiché.
+    startDailyChallengeFabTicker();
+  } else {
+    stopDailyChallengeFabTicker();
   }
   renderActiveScreen();
   // alignDailyChallengeFab() mesure le DOM réel (getBoundingClientRect) —
@@ -4003,9 +4009,29 @@ function renderDailyChallengeButton() {
 // sur l'écran titre. 1s (et non 30s comme le popup de rejeu, voir
 // renderDailyReplayPopup plus bas): le chip affiche maintenant les secondes
 // (format mm:ss, retour utilisateur) donc doit véritablement défiler
-// seconde par seconde plutôt que sauter par paliers de 30 — coût
-// négligeable (quelques bascules de classe/texte sur 2-3 éléments).
-setInterval(renderDailyChallengeButton, 1_000);
+// seconde par seconde plutôt que sauter par paliers de 30.
+//
+// Retour utilisateur: "le téléphone chauffe au bout d'un moment" — ce tic
+// tournait auparavant EN PERMANENCE dès le chargement du module (un
+// `setInterval` posé une fois pour toutes, jamais nettoyé), quel que soit
+// l'écran affiché — y compris en pleine partie, où ce bouton n'est même
+// pas visible (voir renderDailyChallengeButton: `#btn-daily-challenge`
+// n'existe QUE sur l'écran titre, voir index.html). Le travail individuel
+// est négligeable, mais un réveil CPU perpétuel et inutile s'additionne au
+// fil d'une longue session. Démarré/arrêté désormais depuis showView (voir
+// plus haut), UNIQUEMENT tant que l'écran titre est affiché.
+let dailyChallengeFabTickTimer = null;
+
+function startDailyChallengeFabTicker() {
+  if (dailyChallengeFabTickTimer) return; // déjà en cours: idempotent
+  dailyChallengeFabTickTimer = setInterval(renderDailyChallengeButton, 1_000);
+}
+
+function stopDailyChallengeFabTicker() {
+  if (!dailyChallengeFabTickTimer) return;
+  clearInterval(dailyChallengeFabTickTimer);
+  dailyChallengeFabTickTimer = null;
+}
 
 btnDailyChallenge.onclick = () => {
   if (isDailyChallengeCompleted()) {
@@ -4209,8 +4235,13 @@ renderTitleProfileBanner();
 renderModeMenuButtons();
 // Premier alignement (voir alignDailyChallengeFab ci-dessus): l'app démarre
 // TOUJOURS sur l'écran titre (viewStack initial, voir plus haut), donc
-// #view-title est déjà démasqué à ce stade sans passer par showView().
+// #view-title est déjà démasqué à ce stade sans passer par showView() — et
+// pour la MÊME raison, le tic du chip cooldown (voir
+// startDailyChallengeFabTicker, normalement démarré/arrêté depuis
+// showView selon l'écran) doit être lancé explicitement ici aussi, sous
+// peine de rester figé jusqu'à la première navigation.
 alignDailyChallengeFab();
+startDailyChallengeFabTicker();
 
 // Raccourci Ctrl+Z / Cmd+Z pour annuler, en jeu comme en Infini (pas en
 // éditeur: on laisse le Ctrl+Z natif du navigateur fonctionner dans les

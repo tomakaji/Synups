@@ -930,11 +930,22 @@ export function createBoardRenderer(boardEl, options = {}) {
           const dotDirClass = horizontal
             ? forwardH ? "laser-dot--h" : "laser-dot--h-reverse"
             : forwardV ? "laser-dot--v" : "laser-dot--v-reverse";
+          // Longueur RÉELLE du segment en pixels (même valeur que
+          // wrap.style.width/height ci-dessus) — consommée par
+          // board.css: @keyframes laser-travel-* via --laser-travel.
+          // Retour utilisateur: "le téléphone chauffe" — ce point animait
+          // auparavant `left`/`top` en %, une propriété de mise en page
+          // recalculée à chaque image ; l'animation cible maintenant
+          // `transform` (GPU), qui a besoin de cette longueur en PIXELS
+          // (un `translateX(100%)` se résout sur la taille PROPRE du point,
+          // pas sur celle de son parent, contrairement à `left: 100%`).
+          const segLen = horizontal ? Math.abs(p2.x - p1.x) : Math.abs(p2.y - p1.y);
           for (let i2 = 0; i2 < 2; i2++) {
             const dot = document.createElement("div");
             dot.className = `laser-dot ${dotDirClass}`;
             dot.style.borderColor = hex;
             dot.style.animationDelay = `${i2 * -1.2}s`;
+            dot.style.setProperty("--laser-travel", `${segLen}px`);
             wrap.appendChild(dot);
           }
         }
