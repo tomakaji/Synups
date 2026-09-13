@@ -2122,7 +2122,23 @@ function renderLevelGrid() {
     // cohérent avec "passer les niveaux" plutôt que de forcer un détour
     // par la flèche Suivant niveau par niveau.
     const isPlayable = isUnlocked || isAdminModeOn();
-    tile.className = "level-tile" + (isDone ? " level-tile--done" : "") + (isUnlocked ? "" : " level-tile--locked");
+    // Retour utilisateur: "je préfèrerais que ce soit le niveau sur lequel
+    // on est actuellement qui soit en vert, pour se repérer" — jusqu'ici
+    // rien ne distinguait le niveau ACTIF (currentLevelIndex, celui affiché
+    // si on retourne jouer) des autres cases débloquées: seul "terminé"
+    // (vert) avait une couleur dédiée, ce qui ne dit pas où on en est. On
+    // introduit donc .level-tile--current pour ça, et .level-tile--done
+    // bascule sur --accent (cyan) pour ne plus se confondre avec lui — voir
+    // level-select.css, où --current est déclaré après --done/--locked pour
+    // les surpasser visuellement dans le cas (rare, admin uniquement) où le
+    // niveau actif est aussi un niveau non débloqué qu'on aurait rejoint en
+    // sautant dessus.
+    const isCurrent = i === currentLevelIndex;
+    tile.className =
+      "level-tile" +
+      (isDone ? " level-tile--done" : "") +
+      (isUnlocked ? "" : " level-tile--locked") +
+      (isCurrent ? " level-tile--current" : "");
     tile.disabled = !isPlayable;
     if (isPlayable) {
       tile.onclick = () => {
