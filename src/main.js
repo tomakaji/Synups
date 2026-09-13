@@ -131,6 +131,7 @@ import {
   DEFAULT_AVATAR,
   refreshCommunityCloud,
   onLevelsChanged,
+  syncAuthorToPublishedLevels,
 } from "./game/community-store.js";
 import { t, applyI18n } from "./game/i18n.js";
 
@@ -168,6 +169,32 @@ if (bootSplashEl) {
     // invisible mais toujours présent, pas de z-index à gérer plus tard).
     setTimeout(() => bootSplashEl.remove(), BOOT_SPLASH_FADE_OUT_MS);
   }, BOOT_SPLASH_VISIBLE_MS);
+}
+
+// Notification transitoire générique (voir index.html: #toast, base.css:
+// .toast/@keyframes toast-in-out) — retour utilisateur: "rediriger vers
+// communauté avec une notif de reussite" après publication d'une grille
+// (voir editor.js: initEditor({ onPublished })). Un SEUL élément réutilisé
+// pour tout futur toast plutôt qu'un par déclencheur : `toastHideTimer`
+// annule un appel précédent encore affiché pour que deux toasts en rafale
+// ne se marchent jamais dessus (le second remplace/relance proprement le
+// premier plutôt que de laisser le timer du premier fermer le second en
+// avance). Basculer `.hidden` (display:none <-> block) suffit à rejouer
+// l'animation CSS à chaque appel (contrairement à `.screen--enter`, une
+// animation ne tourne JAMAIS pendant `display:none` — la ré-afficher la
+// relance forcément depuis le début, pas besoin d'un reflow forcé en plus).
+const toastEl = document.getElementById("toast");
+let toastHideTimer = null;
+const TOAST_VISIBLE_MS = 2600; // doit rester synchronisé avec la durée de @keyframes toast-in-out (base.css)
+
+function showToast(message) {
+  if (!toastEl) return;
+  clearTimeout(toastHideTimer);
+  toastEl.textContent = message;
+  toastEl.classList.remove("hidden");
+  toastHideTimer = setTimeout(() => {
+    toastEl.classList.add("hidden");
+  }, TOAST_VISIBLE_MS);
 }
 
 // Round 24 (retour utilisateur: "retour haptique sur les boutons de
@@ -1247,7 +1274,7 @@ document.querySelectorAll("[data-reset-modal-close]").forEach((el) => {
 // à zéro avatar+badge actif du profil (des "bonus débloqués" au même titre
 // que PixelArt) SANS toucher au pseudo — updateProfile fusionne, jamais
 // saveProfile qui écraserait tout l'objet.
-document.getElementById("btn-reset-confirm").onclick = () => {
+document.getElementById("btn-reset-confirm").onclick = async () => {
   eraseAllProgress();
   resetSommationProgress();
   // Round suivant (retour utilisateur, "Reset complet" plutôt que migrer
@@ -1260,6 +1287,10 @@ document.getElementById("btn-reset-confirm").onclick = () => {
   // débloqué" au même titre qu'avatar/activeBadge ci-dessous — les points
   // eux-mêmes sont déjà remis à zéro par eraseAllProgress().
   updateProfile({ avatar: DEFAULT_AVATAR, activeBadge: null, ownedAvatars: [] });
+  // Avatar/badge remis à zéro ci-dessus: propage aussi ce reset aux grilles
+  // déjà publiées (voir syncMyAuthorEverywhere) — `await` nécessaire ICI
+  // (voir son commentaire) car window.location.reload() suit immédiatement.
+  await syncMyAuthorEverywhere();
   window.location.reload();
 };
 
@@ -1393,6 +1424,40 @@ function renderPlayGamesSection() {
     : "Connecte-toi pour sauvegarder ta progression dans le cloud.";
 }
 
+/** Retour utilisateur: "si un joueur change son pseudo, il faudra le
+ * changer aussi dans l'affichage du pseudo du créateur d'une grille [...]
+ * (ou avatar ou badge)" — BUG CORRIGÉ: community-store.js expose depuis
+ * longtemps `syncAuthorToPublishedLevels(author)` pour ça (voir son
+ * commentaire), documentée comme appelée "chaque fois que pseudo/avatar/
+ * badge change" par une fonction `updateProfileAndSyncAuthor` — qui
+ * n'existait en réalité NULLE PART dans ce fichier: aucun des 5 points où
+ * `updateProfile()` touche pseudo/avatar/badge (adoption pseudo Google Play,
+ * sélection/achat d'avatar, bascule de badge, validation du pseudo) ne
+ * l'appelait. Ce petit wrapper centralise l'appel (toujours après
+ * `updateProfile`, jamais avant: relit le profil pour être sûr d'envoyer
+ * l'état FINAL) — un seul endroit à appeler aux 5 sites plutôt que de
+ * reconstruire cette forme `{pseudo, avatar, badge}` à chaque fois (même
+ * shape que editor.js au moment de la publication). Best-effort comme
+ * syncAuthorToPublishedLevels lui-même: ne bloque jamais l'UI, aucun retour
+ * à gérer par l'appelant. */
+function syncMyAuthorEverywhere() {
+  const profile = loadProfile();
+  const pseudo = profile?.pseudo?.trim();
+  if (!pseudo) return Promise.resolve(); // pas encore de pseudo choisi: aucune grille n'a pu être publiée sous ce profil
+  // Retourne la Promise (async côté community-store.js) plutôt que de
+  // l'ignorer: le site d'appel "Réinitialiser le profil" ci-dessous fait un
+  // window.location.reload() juste après — sans `await` sur cette Promise
+  // à CET endroit précis, le rechargement de page annulerait la requête
+  // réseau en plein vol avant qu'elle ait pu partir. Les 4 autres sites
+  // d'appel restent volontairement "fire and forget" (aucun reload derrière
+  // eux, pas besoin d'attendre).
+  return syncAuthorToPublishedLevels({
+    pseudo,
+    avatar: profile.avatar ?? DEFAULT_AVATAR,
+    badge: profile.activeBadge ?? null,
+  });
+}
+
 /** Retour utilisateur: "par défaut, on récupère le pseudo fourni par Google
  * Play via le profil joueur" — appelée juste après une connexion réussie
  * (au démarrage via refreshStatus si une session était déjà active, ou après
@@ -1409,6 +1474,7 @@ async function maybeAdoptPlayGamesPseudo() {
   const displayName = await getPlayGamesDisplayName();
   if (!displayName) return;
   updateProfile({ pseudo: displayName });
+  syncMyAuthorEverywhere();
   // Rafraîchit tout affichage déjà visible du pseudo — la bannière de titre
   // (toujours montée) et, si le joueur est déjà sur "Mon profil", le champ
   // texte + la prévisu (sinon renderCommunityProfile les reconstruira à la
@@ -2746,6 +2812,7 @@ function refreshProfileAvatarPicker() {
       btn.addEventListener("click", () => {
         selectedProfileAvatar = avatar.id;
         updateProfile({ avatar: avatar.id });
+        syncMyAuthorEverywhere();
         refreshProfileAvatarPicker();
         refreshProfileBadgePreview();
       });
@@ -2769,6 +2836,7 @@ function refreshProfileAvatarPicker() {
         const owned = loadProfile()?.ownedAvatars ?? [];
         selectedProfileAvatar = avatar.id;
         updateProfile({ ownedAvatars: [...owned, avatar.id], avatar: avatar.id });
+        syncMyAuthorEverywhere();
         refreshProfileAvatarPicker();
         refreshProfileBadgePreview();
         showCosmeticUnlockModal({
@@ -2914,6 +2982,7 @@ function refreshProfileBadges() {
       tile.addEventListener("click", () => {
         selectedActiveBadge = selectedActiveBadge === badge.tier ? null : badge.tier;
         updateProfile({ activeBadge: selectedActiveBadge });
+        syncMyAuthorEverywhere();
         refreshProfileBadges();
         refreshProfileBadgePreview();
       });
@@ -3036,6 +3105,7 @@ function commitPseudo() {
     return;
   }
   updateProfile({ pseudo });
+  syncMyAuthorEverywhere();
   profilePseudoLabelEl.textContent = pseudo;
   exitPseudoEditMode();
   refreshProfileBadgePreview();
@@ -3182,7 +3252,20 @@ function setMode(next) {
   playView.classList.remove("hidden");
 }
 
-const editorApi = initEditor({ levels });
+// Retour utilisateur: "lorsqu'on publie une grille, ca serait bien de
+// rediriger vers 'communauté' avec une notif de reussite" — editor.js
+// appelle ce callback juste après la publication réussie (voir
+// publishConfirmBtn dans editor.js): `pushView` empile "community" sur la
+// pile de nav (Retour ramène à l'éditeur, pas au menu titre — cohérent avec
+// le reste de la navigation, voir pushView plus haut) et `showToast`
+// affiche la confirmation par-dessus l'écran qui vient de s'afficher.
+const editorApi = initEditor({
+  levels,
+  onPublished: () => {
+    pushView("community");
+    showToast(t("editor-publish-toast.success"));
+  },
+});
 // Tier auquel Remember débloque le thème PixelArt EN MÊME TEMPS que son
 // dernier badge (voir sommation.js: PIXELART_BADGE_TIER/BADGE_DEFS.length,
 // gardées volontairement égales là-bas) — dupliqué ici uniquement pour le

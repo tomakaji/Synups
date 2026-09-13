@@ -60,6 +60,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 import { db, firebaseReady } from "./firebase-config.js";
 import { t } from "./i18n.js";
+import { loadCommunityPublishLog, saveCommunityPublishLog } from "./storage.js";
 
 const LEVELS_COLLECTION = "levels";
 const LIKES_COLLECTION = "likes";
@@ -85,6 +86,43 @@ const LIKES_COLLECTION = "likes";
 const LEVELS_FETCH_LIMIT = 300;
 const REFRESH_MIN_INTERVAL_MS = 15000;
 const LIKE_DEBOUNCE_MS = 800;
+
+// Retour utilisateur: "j'ai peur que les gens publient des grilles nulles
+// en masse [...] qu'on limite le nombre de grilles par joueur par jour (à
+// 10)" — limite PAR APPAREIL (l'appli n'a pas de vrais comptes, juste un
+// identifiant Firebase anonyme par installation, voir firebase-config.js:
+// firebaseReady): un joueur qui réinstallerait l'app ou viderait ses
+// données contournerait cette limite, mais elle suffit à décourager le
+// spam "en rafale" par un joueur normal — le vrai scénario visé ici (voir
+// échange avec l'utilisateur: la protection contre un abus délibéré reste
+// la suppression manuelle des grilles via la console Firebase, pas cette
+// limite).
+const DAILY_PUBLISH_LIMIT = 10;
+
+/** "AAAA-MM-JJ" en heure LOCALE de l'appareil — même convention que
+ * dailyChallenge.js: todayKey(), dupliquée ici plutôt que partagée entre
+ * deux modules par ailleurs indépendants pour une fonction de 3 lignes. */
+function todayKey() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function publishesUsedToday() {
+  const log = loadCommunityPublishLog();
+  return log && log.date === todayKey() ? log.count : 0;
+}
+
+/** Combien de publications restent possibles aujourd'hui sur CET appareil
+ * — à consulter par l'appelant (voir editor.js) AVANT même de proposer de
+ * publier, pour avertir/bloquer sans tenter d'écriture inutile. */
+export function getPublishesRemainingToday() {
+  return Math.max(0, DAILY_PUBLISH_LIMIT - publishesUsedToday());
+}
+
+function recordPublishAttempt() {
+  saveCommunityPublishLog({ date: todayKey(), count: publishesUsedToday() + 1 });
+}
 
 /** Choix d'avatar pour le profil joueur (voir storage.js: loadProfile) — un
  * seul endroit pour cette liste plutôt que dupliquée entre main.js et
@@ -691,6 +729,12 @@ function publishToCloud(base) {
  * migration Firestore round 20). L'appelant doit avoir déjà validé la
  * grille via `validatePlayableLevel`. */
 export function publishLevel({ title, rows, cols, cells, author, difficulty }) {
+  // Garde-fou défensif (voir getPublishesRemainingToday): editor.js vérifie
+  // déjà CETTE MÊME limite avant d'arriver ici pour afficher un message
+  // clair — ce contrôle ici protège seulement contre un futur appelant qui
+  // oublierait de vérifier en amont, jamais le chemin normal.
+  if (getPublishesRemainingToday() <= 0) return null;
+  recordPublishAttempt();
   return publishToCloud({
     title,
     author,

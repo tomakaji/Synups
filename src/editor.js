@@ -25,6 +25,7 @@ import {
   isDuplicatePublication,
   DEFAULT_AVATAR,
   getAvatarSvg,
+  getPublishesRemainingToday,
 } from "./game/community-store.js";
 import { loadProfile } from "./game/storage.js";
 import { trackEvent } from "./game/analytics.js";
@@ -140,7 +141,7 @@ function codeToLevel(text) {
   return { name, rows, cols, cells: cellRows };
 }
 
-export function initEditor({ levels }) {
+export function initEditor({ levels, onPublished }) {
   const boardEl = document.getElementById("editor-board");
   // Conteneur dont dépend le layout plein écran mobile (voir style.css:
   // #editor-view.editor--testing) — bascule entre "panneau d'onglets +
@@ -760,6 +761,18 @@ export function initEditor({ levels }) {
       publishStatusEl.textContent = "Configure d'abord ton pseudo dans Mon profil avant de publier.";
       return;
     }
+    // Retour utilisateur: "j'ai peur que les gens publient des grilles
+    // nulles en masse [...] qu'on limite le nombre de grilles par joueur
+    // par jour (à 10)" — vérifié ICI (avant même de valider le titre/la
+    // grille) pour donner le message le plus utile possible: pas la peine
+    // de faire remplir le reste du formulaire à quelqu'un qui a déjà
+    // épuisé son quota du jour. publishLevel() revérifie quand même cette
+    // même limite en interne par sécurité (voir son commentaire), mais
+    // SANS ce message dédié.
+    if (getPublishesRemainingToday() <= 0) {
+      publishStatusEl.textContent = "Tu as atteint la limite de 10 publications aujourd'hui. Réessaie demain.";
+      return;
+    }
     const title = publishTitleInput.value.trim();
     if (!title) {
       markPublishTitleError();
@@ -775,7 +788,7 @@ export function initEditor({ levels }) {
       publishStatusEl.textContent = `Publication impossible : ${check.error}`;
       return;
     }
-    publishLevel({
+    const published = publishLevel({
       title,
       rows: levelObj.rows,
       cols: levelObj.cols,
@@ -783,8 +796,23 @@ export function initEditor({ levels }) {
       author: { pseudo, avatar: profile.avatar ?? DEFAULT_AVATAR, badge: profile.activeBadge ?? null },
       difficulty: check.difficulty,
     });
+    // `publishLevel` renvoie `null` si la limite quotidienne a quand même
+    // été atteinte entre-temps (voir son garde-fou défensif) — ne devrait
+    // arriver qu'en cas de rafale/double-clic, la vérification ci-dessus
+    // couvrant déjà le cas normal. Pas de redirection/notif de succès dans
+    // ce cas, juste un message.
+    if (!published) {
+      publishStatusEl.textContent = "Tu as atteint la limite de 10 publications aujourd'hui. Réessaie demain.";
+      return;
+    }
     trackEvent("community_level_published", { difficulty: check.difficulty ?? null });
     closePublishModal();
+    // Retour utilisateur: "rediriger vers communauté avec une notif de
+    // reussite" — main.js décide de CE QUE ça veut dire concrètement
+    // (navigation + toast, voir son commentaire sur initEditor), ce module
+    // ne fait qu'annoncer l'événement, jamais connaître pushView/showToast
+    // directement (editor.js reste indépendant de la navigation globale).
+    onPublished?.();
   });
 
   levelListSel.addEventListener("change", () => {

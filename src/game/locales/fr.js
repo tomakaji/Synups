@@ -119,6 +119,7 @@ export const fr = {
   "editor-publish-modal.title": "Publier dans la Communauté",
   "editor-publish-modal.btn": "Annuler",
   "btn-editor-publish-confirm": "Publier",
+  "editor-publish-toast.success": "Grille publiée avec succès !",
   "community-rate-modal.title": "Tu as aimé cette grille ?",
   "btn-community-rate-skip": "Passer",
   "btn-community-rate-like": "❤ J'aime",

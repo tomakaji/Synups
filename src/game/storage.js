@@ -40,6 +40,13 @@ const KEYS = {
   // niveaux) ni les tiers Meditate — voir isStoryMasteryUnlocked/
   // markStoryMasteryUnlocked ci-dessous.
   storyMastery: "lightup-story-mastery",
+  // Limite de publications Communauté par jour (retour utilisateur: "j'ai
+  // peur que les gens publient des grilles nulles en masse [...] qu'on
+  // limite le nombre de grilles par joueur par jour") — voir
+  // community-store.js pour la logique (seuil, remise à zéro quotidienne),
+  // ce module ne porte que la persistance brute {date, count}, même
+  // convention que `dailyChallenge` ci-dessus.
+  communityPublishLog: "lightup-community-publish-log",
 };
 
 function readJson(key, fallback) {
@@ -146,6 +153,16 @@ export function loadDailyReplayAdAt() {
 
 export function saveDailyReplayAdAt(timestamp) {
   writeJson(KEYS.dailyReplayAdAt, timestamp);
+}
+
+// ---------- Journal de publications Communauté (limite quotidienne) ----------
+
+export function loadCommunityPublishLog() {
+  return readJson(KEYS.communityPublishLog, null);
+}
+
+export function saveCommunityPublishLog(log) {
+  writeJson(KEYS.communityPublishLog, log);
 }
 
 // ---------- Meditate (grille de révélation, bannières Comète/Supernova) ----------

@@ -1344,6 +1344,15 @@
       </div>
     </div>
 
+    <!-- Notification transitoire (retour utilisateur: "rediriger vers
+         communauté avec une notif de reussite" après publication d'une
+         grille) — voir main.js: showToast(). Élément UNIQUE et réutilisable
+         (pas un par déclencheur) : toujours en dehors de #app, comme
+         #boot-splash ci-dessus, pour ne jamais dépendre du système
+         d'affichage des écrans (renderActiveScreen) ni disparaître au
+         changement d'écran qu'elle est censée annoncer. -->
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

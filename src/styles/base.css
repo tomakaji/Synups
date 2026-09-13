@@ -165,6 +165,54 @@ body {
   }
 }
 
+/* ---------- Notification transitoire (voir index.html: #toast, main.js:
+   showToast) ----------
+   Retour utilisateur: "rediriger vers communauté avec une notif de
+   reussite" après publication d'une grille — élément UNIQUE et réutilisable
+   (voir son commentaire dans index.html), affiché en bas d'écran par-dessus
+   tout le reste (z-index élevé, même famille que .boot-splash ci-dessus,
+   mais pas AUSSI haut: ne doit jamais passer par-dessus une vraie modale
+   qui s'ouvrirait entre-temps). `display:none` (via .hidden) entre deux
+   usages plutôt que juste opacity:0 — permet à showToast() de rejouer
+   l'animation d'entrée à chaque appel, même en rafale, via le même
+   mécanisme de reflow forcé que .screen--enter (voir main.js). */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(28px + var(--ad-banner-height, 0px));
+  transform: translateX(-50%) translateY(0);
+  z-index: 500;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 14px 20px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid rgba(103, 232, 160, 0.4);
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.55);
+  color: var(--text);
+  font-size: 0.92rem;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  animation: toast-in-out 2.6s ease-in-out both;
+}
+
+.toast.hidden {
+  display: none;
+}
+
+@keyframes toast-in-out {
+  0% { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  10%, 85% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 .topbar {
   width: 100%;
   display: flex;
