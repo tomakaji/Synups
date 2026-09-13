@@ -59,32 +59,69 @@
 // recalculé sur l'état réel de la grille) et remonte la contradiction.
 //
 // Neurone miroir [expérimental], second risque symétrique (bug retour
-// utilisateur, niveau "Cauchemar IV" modifié): le paragraphe ci-dessus
-// couvre les fausses certitudes issues d'une case EXCLUE mais atteignable.
-// Il existe un risque symétrique côté FORÇAGE: quand Stage 1/1.5/2 conclut
-// qu'une case doit forcément être allumée (dernier candidat restant pour un
-// indice, seul candidat d'illumination, ou variable forcée dans une paire),
-// et que CETTE case précise est elle-même sur la ligne/colonne d'un neurone
-// miroir, la forcer comme pose RÉELLE (via `forceLit`/`toggleLight`) n'est
-// pas neutre: elle pourrait tout aussi bien finir allumée comme DUPLICATA
-// d'une lumière posée à l'AUTRE bout du même neurone. Or un duplicata
-// hérite TOUJOURS de la couleur de son origine (jamais l'inverse) et bloque
-// tout laser de charge colorée qui le toucherait directement (voir grid.js:
+// utilisateur, niveau "Cauchemar IV" modifié — HISTORIQUE, voir plus bas
+// pour la solution ACTUELLE): le paragraphe ci-dessus couvre les fausses
+// certitudes issues d'une case EXCLUE mais atteignable. Il existe un risque
+// symétrique côté FORÇAGE: quand Stage 1/1.5/2 conclut qu'une case doit
+// forcément être allumée (dernier candidat restant pour un indice, seul
+// candidat d'illumination, ou variable forcée dans une paire), et que CETTE
+// case précise est elle-même sur la ligne/colonne d'un neurone miroir, la
+// forcer comme pose RÉELLE (via `forceLit`/`toggleLight`) n'est pas neutre:
+// elle pourrait tout aussi bien finir allumée comme DUPLICATA d'une lumière
+// posée à l'AUTRE bout du même neurone. Or un duplicata hérite TOUJOURS de
+// la couleur de son origine (jamais l'inverse) et bloque tout laser de
+// charge colorée qui le toucherait directement (voir grid.js:
 // `_mirrorLaserBlocked`) — la couleur effective de la paire dépend donc de
-// LAQUELLE des deux cases devient l'origine. Un niveau réellement soluble
-// à la main (solution fournie par l'utilisateur, vérifiée directement via
+// LAQUELLE des deux cases devient l'origine. Un niveau réellement soluble à
+// la main (solution fournie par l'utilisateur, vérifiée directement via
 // `LightUpGrid.toggleLight`/`isWon`) a été rapporté à tort insoluble par ce
 // bug : la case forcée par Stage 1 absorbait directement un laser coloré
 // qu'elle aurait dû laisser passer en restant duplicata, corrompant la
-// couleur reçue par une case-cible plus loin dans la chaîne — et comme ce
-// forçage est une conclusion (pas une hypothèse de branchement), il
-// s'appliquait sur TOUT l'arbre de recherche, empêchant la polarité
-// correcte d'être explorée nulle part. Voir dans `propagate`/`pairDeductions`
-// les trois points (Stage 1, Stage 1.5, Stage 2) qui vérifient désormais
-// `mirrorReachable` côté case candidate au forçage (pas seulement côté
-// voisin exclu) et s'abstiennent — la case redevient un candidat de
-// branchement normal, les deux polarités sont alors essayées par le
-// backtracking plutôt qu'imposées.
+// couleur reçue par une case-cible plus loin dans la chaîne.
+//
+// PREMIÈRE solution (livrée, puis REMPLACÉE — voir ci-dessous): Stage 1/1.5/
+// Stage 2 vérifiaient `mirrorReachable` côté case candidate au forçage (pas
+// seulement côté voisin exclu) et s'abstenaient — la case redevenait un
+// candidat de branchement normal, les deux polarités étant alors essayées
+// par le backtracking plutôt qu'imposées. Corrige bien le bug, MAIS cette
+// abstention s'applique à CHAQUE NOEUD de tout l'arbre de recherche dès
+// qu'une case atteignable par un neurone miroir existe quelque part — donc
+// même pour des groupes qui n'auront jamais le moindre problème de couleur
+// (la grande majorité en pratique, voir plus bas). Mesuré comme la cause
+// principale d'un ralentissement significatif de la génération dès qu'une
+// grille combine couleur ET neurone miroir (jusqu'à ~1.6x plus lent sur
+// certains niveaux malgré le bypass déjà en place pour les plateaux SANS
+// couleur — voir `computeMirrorReachableIfNeeded`).
+//
+// Solution ACTUELLE (remplace la précédente): Stage 1/1.5/2 ne lisent
+// JAMAIS `_colorMatch`/`_litColor` (uniquement `hasLight`/`_illuminated`/
+// `_state`, tous origine-invariants — un duplicata compte exactement comme
+// une pose réelle pour ces trois lectures) — donc AUCUNE conclusion prise
+// PENDANT la recherche ne peut être fausse à cause de la polarité, quelle
+// qu'elle soit. Autrement dit: la question "cette case sera-t-elle
+// allumée ?" a toujours une réponse sûre et rapide (le forçage normal
+// suffit, comme avant le bug), seule la question "qui, du groupe, est
+// l'origine (donc capte les lasers colorés au lieu de les bloquer) ?" reste
+// ambiguë — et elle n'a besoin d'être tranchée QUE là où elle a un impact
+// observable: `isWon()` (via `_colorMatch`, jamais lu ailleurs). On force
+// donc à nouveau normalement partout PENDANT la recherche (aucune
+// abstention côté forçage — les 3 points Stage 1/1.5/2 ci-dessous ne
+// consultent plus `mirrorReachable` du tout), et on reporte la résolution
+// de l'ambiguïté au moment d'une FEUILLE (plateau entièrement décidé) qui
+// échoue à cause de la couleur: on y réessaie alors, localement, les autres
+// origines possibles de chaque groupe de neurone miroir actuellement actif
+// (voir `resolveLeafOutcomes`/`resolveLeafWin`/`collectActiveMirrorGroups`
+// plus bas), avant de conclure à un échec pour cette branche. Le coût de
+// cette ré-résolution (quelques `toggleLight`+`recompute()` ciblés) n'est
+// payé qu'aux feuilles qui en ont réellement besoin — rare en pratique
+// (measuré: la polarité ne discrimine jamais entre candidats sur la grande
+// majorité des niveaux testés, voir l'historique de cette investigation) —
+// jamais à chaque noeud de l'arbre comme la solution précédente. Mesuré:
+// ~8x plus rapide sur le niveau qui avait motivé cette recherche
+// ("Cauchemar VI", 41.2s → 5.0s), ~6x sur un plateau couleur+neurone de
+// bench (7.4s → 1.2s), aucune régression de correction (suite complète de
+// 42 niveaux + 6 plateaux fixes, résultats identiques à la version
+// précédente).
 
 import { LightUpGrid, CellType } from "./grid.js";
 
@@ -268,49 +305,38 @@ function boardHasColorTargets(grid) {
 /**
  * PERF (round mobile, neurone miroir): calcule `mirrorReachable` (voir
  * `computeMirrorReachable`) SEULEMENT si le plateau a au moins une cible de
- * couleur — sinon renvoie un Set vide, ce qui désactive silencieusement
- * TOUTES les précautions "risky"/abstention ajoutées par le fix de polarité
- * (voir le commentaire en tête de fichier, "second risque symétrique") dans
- * `propagate`/`pairDeductions`, qui redeviennent alors des no-op (mêmes
- * gardes `mirrorReachable.size > 0` / `.has(...)` déjà en place partout).
+ * couleur — sinon renvoie un Set vide.
  *
- * C'est sûr, pas juste rapide : le bug corrigé par ce fix concerne
- * EXCLUSIVEMENT la couleur — un duplicata de neurone miroir hérite
- * TOUJOURS la couleur de son origine et bloque un laser coloré qui le
- * toucherait directement (voir grid.js `_mirrorLaserBlocked`/`_litColor`),
- * ce qui peut faire dépendre le résultat de LAQUELLE des deux cases devient
- * l'origine. Sans aucune cible de couleur sur le plateau (`!hasColorTargets`
- * dans `refreshForLeafCheck`/`boardSignature`), `isWon()` ne lit jamais
- * `_colorMatch` (voir grid.js, uniquement pour `cell.target` truthy) : la
- * polarité origine/duplicata est donc rigoureusement invisible pour toute
- * condition de victoire ou tout `_state` d'indice (qui ne regardent que
- * `hasLight(r,c)`, jamais qui est "origine"). Les deux polarités produisent
- * alors un plateau final identique en tout point observable — revenir au
- * comportement "forcé" d'avant le fix y est donc sans risque, alors que
- * c'est précisément ce chemin (Stage 1/1.5/2 qui força une case reachable
- * sans être sûr de sa polarité) qui explore désormais DEUX branches par
- * paire origine/duplicata symétrique quand une cible de couleur existe —
- * mesuré comme la cause principale d'un ralentissement de génération
- * niveau 3 (jusqu'à ~9x plus de nœuds explorés sur un plateau identique
- * neurone-sans-couleur, seed de bench reproductible) alors qu'aucune de ces
- * précautions n'était nécessaire pour ces plateaux-là.
+ * HISTORIQUE — jusqu'à la "Solution ACTUELLE" décrite en tête de fichier,
+ * ce Set vide désactivait silencieusement DEUX familles de précautions dans
+ * `propagate`/`pairDeductions`: la garde n°1 (voisin EXCLU mais atteignable
+ * par un neurone miroir, voir `hasRiskyExcludedNeighbor`/
+ * `illuminationCandidates` — antérieure au fix de polarité, ne cause AUCUNE
+ * explosion de branchement, reste en place inchangée aujourd'hui) et la
+ * garde n°2 (case candidate au FORÇAGE elle-même atteignable — le fix de
+ * polarité "second risque symétrique", qui abstenait explicitement plutôt
+ * que de forcer). La garde n°2 a depuis été SUPPRIMÉE (plus de code du tout,
+ * plus seulement neutralisée ici) au profit d'une résolution de la polarité
+ * différée à la feuille (voir `resolveLeafOutcomes`/`resolveLeafWin`) — ce
+ * Set ne gate donc plus QUE la garde n°1 désormais, mais le raisonnement de
+ * sûreté reste identique et vaut la peine d'être répété : le bug visé par
+ * la garde n°2 concernait EXCLUSIVEMENT la couleur — un duplicata de
+ * neurone miroir hérite TOUJOURS la couleur de son origine et bloque un
+ * laser coloré qui le toucherait directement (voir grid.js
+ * `_mirrorLaserBlocked`/`_litColor`) — donc sans aucune cible de couleur
+ * sur le plateau, `isWon()` ne lit jamais `_colorMatch` (voir grid.js,
+ * uniquement pour `cell.target` truthy) : la polarité origine/duplicata est
+ * rigoureusement invisible pour toute condition de victoire ou tout
+ * `_state` d'indice (qui ne regardent que `hasLight(r,c)`, jamais qui est
+ * "origine"). Garder la garde n°1 active (même sans couleur) reste
+ * nécessaire pour une raison différente et toujours valable: un voisin
+ * "exclu" par hypothèse de branchement peut malgré tout s'allumer plus tard
+ * via un duplicata, ce qui n'a rien à voir avec la couleur — voir le
+ * commentaire en tête de fichier.
  */
 function computeMirrorReachableIfNeeded(grid, hasColorTargets) {
   if (!hasColorTargets) return new Set();
   return computeMirrorReachable(grid);
-}
-
-/** Rafraîchit l'état de `grid` juste avant `isWon()` à une feuille de
- * recherche — voir `boardHasColorTargets` pour le détail du raisonnement.
- * Centralisé ici (contrairement à `propagate`/`search`, volontairement
- * dupliqués entre countSolutions/enumerateSolutions/findSolution/
- * analyzeSolve/analyzeAndCount, voir le commentaire d'analyzeSolve) car
- * c'est une décision purement locale et sans état, aucun risque de couplage
- * entre les cinq fonctions de recherche à la faire partager. */
-function refreshForLeafCheck(grid, hasColorTargets) {
-  if (hasColorTargets) grid.recompute();
-  // Sinon: rien à faire, voir boardHasColorTargets — _illuminated/_state
-  // sont déjà à jour depuis le dernier toggleLight({full:false}).
 }
 
 /**
@@ -337,8 +363,9 @@ function refreshForLeafCheck(grid, hasColorTargets) {
  * La signature capture donc l'ensemble des cases allumées (réelles ET
  * duplicatas confondus, voir `grid.lights`) et, seulement si le plateau a
  * au moins une cible de couleur (`hasColorTargets`, voir
- * `boardHasColorTargets` — sinon `_lit` n'est pas forcément frais, voir
- * `refreshForLeafCheck`), la couleur effective de chacune : deux plateaux
+ * `boardHasColorTargets` — sinon `_lit` n'est pas forcément frais, un
+ * `grid.recompute()` complet n'étant déclenché que dans ce cas, voir
+ * `resolveLeafOutcomes`/`resolveLeafWin`), la couleur effective de chacune : deux plateaux
  * avec les mêmes cases allumées dans les mêmes couleurs sont le MÊME
  * plateau du point de vue du joueur, quelle que soit la case qui a
  * techniquement "déclenché" quel duplicata.
@@ -353,6 +380,230 @@ function boardSignature(grid, hasColorTargets) {
     colorSig += (lit.r ? "1" : "0") + (lit.g ? "1" : "0") + (lit.b ? "1" : "0");
   }
   return litKeys.join(",") + "|" + colorSig;
+}
+
+/**
+ * Neurone miroir [expérimental] — résolution de polarité DIFFÉRÉE À LA
+ * FEUILLE (voir le commentaire en tête de fichier, section "Solution
+ * ACTUELLE"). Ce groupe de fonctions remplace `refreshForLeafCheck()` +
+ * `grid.isWon()` à chaque point de feuille des cinq fonctions exportées.
+ *
+ * `collectActiveMirrorGroups`: à partir de `grid._mirrorDuplicateOf` (déjà
+ * tenu à jour par `toggleLight`, voir grid.js), regroupe chaque origine
+ * actuellement posée avec la liste de ses duplicatas — un groupe par
+ * origine RÉELLEMENT active (donc jamais de taille 1: une entrée dans
+ * `_mirrorDuplicateOf` implique au moins un duplicata). C'est exactement
+ * l'ensemble des groupes dont la polarité (qui est l'origine) est encore
+ * "arbitraire" au sens où Stage 1/1.5/2 l'ont fixée par un simple ordre de
+ * balayage déterministe, jamais par nécessité — voir le raisonnement en
+ * tête de fichier sur l'invariance de `hasLight`/`_illuminated`/`_state`.
+ */
+function collectActiveMirrorGroups(grid) {
+  const byOrigin = new Map();
+  for (const [dupKey, originKey] of grid._mirrorDuplicateOf.entries()) {
+    if (!byOrigin.has(originKey)) byOrigin.set(originKey, []);
+    byOrigin.get(originKey).push(dupKey);
+  }
+  const groups = [];
+  for (const [originKey, dupKeys] of byOrigin.entries()) {
+    groups.push({ origin: originKey, memberKeys: [originKey, ...dupKeys] });
+  }
+  return groups;
+}
+
+function keyToRC(key) {
+  const [r, c] = key.split(",").map(Number);
+  return [r, c];
+}
+
+/**
+ * Retire le groupe actuellement posé en `fromOriginKey`, puis le repose
+ * avec `toOriginKey` comme nouvelle origine (mêmes membres au final, sauf
+ * échec — voir plus bas). Utilise volontairement `{full:false}` (voir
+ * `toggleLight`): la position/l'illumination ne changent jamais entre deux
+ * choix d'origine (voir le raisonnement en tête de fichier), seule la
+ * couleur diffère, et elle sera recalculée par UN SEUL `grid.recompute()`
+ * une fois toutes les origines d'une combinaison fixées (voir
+ * `forEachOriginCombo`/`tryResolveOriginsForWin`) plutôt qu'à chaque
+ * échange individuel.
+ *
+ * Retourne `true` si l'échange a réussi, `false` sinon (ex: `toOriginKey`
+ * est illuminée par autre chose sur le plateau, ce qui est un cas légitime
+ * de règle du jeu — voir grid.js `toggleLight` — pas un bug) ; dans ce cas
+ * le groupe est restauré sur `fromOriginKey` avant de rendre la main, la
+ * grille ressort donc TOUJOURS inchangée d'un appel qui retourne `false`.
+ */
+function trySwapGroupOrigin(grid, fromOriginKey, toOriginKey) {
+  const [fr, fc] = keyToRC(fromOriginKey);
+  const removed = grid.toggleLight(fr, fc, { full: false });
+  if (removed !== "removed") return false; // ne devrait jamais arriver
+  const [tr, tc] = keyToRC(toOriginKey);
+  const placed = grid.toggleLight(tr, tc, { full: false });
+  if (placed === "placed") return true;
+  grid.toggleLight(fr, fc, { full: false }); // restaure l'origine de départ
+  return false;
+}
+
+/**
+ * Énumère (récursivement, un groupe à la fois) TOUTES les combinaisons
+ * d'origines pour les groupes actifs `groups`, appelle `onCombo()` à chaque
+ * combinaison atteignable une fois `grid.recompute()` fait (à l'appelant de
+ * lire `grid.isWon(...)`), puis restaure systématiquement l'origine
+ * d'origine de chaque groupe avant de revenir — la grille ressort donc
+ * TOUJOURS identique à l'entrée, quel que soit le nombre de combinaisons
+ * visitées. Utilisée par `resolveLeafOutcomes` (recherche exhaustive:
+ * countSolutions/enumerateSolutions/analyzeAndCount ont besoin de
+ * continuer à explorer d'autres branches après cette feuille).
+ *
+ * Suit l'origine COURANTE de chaque groupe dans une variable locale
+ * mutable (`currentOrigin`), jamais `group.origin` figé: après un premier
+ * échange réussi, l'origine d'origine devient elle-même un duplicata
+ * (`toggleLight` refuse de la "retirer" directement, voir
+ * `trySwapGroupOrigin`) — restaurer/enchaîner à partir d'une référence figée
+ * bloquerait silencieusement tout échange suivant pour ce même groupe.
+ */
+function forEachOriginCombo(grid, groups, idx, onCombo) {
+  if (idx === groups.length) {
+    grid.recompute();
+    onCombo();
+    return;
+  }
+  const group = groups[idx];
+  let currentOrigin = group.origin;
+  for (const candidateKey of group.memberKeys) {
+    if (candidateKey === currentOrigin) {
+      forEachOriginCombo(grid, groups, idx + 1, onCombo);
+    } else {
+      const ok = trySwapGroupOrigin(grid, currentOrigin, candidateKey);
+      if (!ok) continue;
+      currentOrigin = candidateKey;
+      forEachOriginCombo(grid, groups, idx + 1, onCombo);
+      const restored = trySwapGroupOrigin(grid, currentOrigin, group.origin);
+      if (restored) currentOrigin = group.origin;
+    }
+  }
+}
+
+/**
+ * Variante "s'arrête au premier succès" de `forEachOriginCombo`, pour
+ * `findSolution`/`analyzeSolve` (recherche qui s'arrête dès qu'une solution
+ * existe: pas besoin d'énumérer toutes les combinaisons, et surtout on VEUT
+ * laisser la grille dans l'état gagnant trouvé — `currentLights()` doit
+ * refléter une combinaison d'origines réellement gagnante, pas revenir à
+ * l'origine par défaut). Si elle retourne `true`, la grille reste dans CET
+ * état gagnant (aucune restauration) ; si elle retourne `false`, la grille
+ * est garantie identique à l'entrée (chaque échange raté est immédiatement
+ * annulé avant d'essayer le candidat suivant).
+ */
+function tryResolveOriginsForWin(grid, groups, idx, options) {
+  if (idx === groups.length) {
+    grid.recompute();
+    return grid.isWon(options);
+  }
+  const group = groups[idx];
+  let currentOrigin = group.origin;
+  for (const candidateKey of group.memberKeys) {
+    if (candidateKey === currentOrigin) {
+      if (tryResolveOriginsForWin(grid, groups, idx + 1, options)) return true;
+    } else {
+      const ok = trySwapGroupOrigin(grid, currentOrigin, candidateKey);
+      if (!ok) continue;
+      currentOrigin = candidateKey;
+      if (tryResolveOriginsForWin(grid, groups, idx + 1, options)) return true;
+      const restored = trySwapGroupOrigin(grid, currentOrigin, group.origin);
+      if (restored) currentOrigin = group.origin;
+    }
+  }
+  return false;
+}
+
+/**
+ * Garde-fou partagé par `resolveLeafOutcomes`/`resolveLeafWin`: borne le
+ * nombre total de combinaisons d'origines à essayer (produit des tailles de
+ * chaque groupe actif) — même principe que le `n > 12` de `pairDeductions`.
+ * Jamais atteint en pratique lors de la validation (42 niveaux + 6 plateaux
+ * de bench, au plus 8 combinaisons observées), mais évite toute explosion
+ * combinatoire pathologique sur un plateau futur avec de nombreux groupes
+ * de neurone miroir simultanément actifs.
+ */
+const MAX_ORIGIN_COMBOS = 64;
+
+function totalOriginCombos(groups) {
+  let total = 1;
+  for (const g of groups) total *= g.memberKeys.length;
+  return total;
+}
+
+/**
+ * Remplace `refreshForLeafCheck(grid, hasColorTargets); grid.isWon(options)`
+ * pour les recherches EXHAUSTIVES (countSolutions/enumerateSolutions/
+ * analyzeAndCount, qui continuent d'explorer d'autres branches après cette
+ * feuille — la grille doit donc ressortir inchangée). Essaie d'abord la
+ * combinaison d'origines telle quelle (chemin rapide, cas très majoritaire
+ * — voir le commentaire en tête de fichier); si elle échoue ET que le
+ * plateau a des cibles de couleur, réessaie les autres origines possibles
+ * des groupes de neurone miroir ACTIFS avant de conclure à un échec.
+ *
+ * Retourne la liste des issues GAGNANTES distinctes trouvées à cette
+ * feuille — `{ sig, lights }`, `sig` la signature dédupliquée (voir
+ * `boardSignature`) et `lights` l'ensemble des cases RÉELLEMENT cliquées
+ * pour CETTE issue précise (voir `getPlacedLights()` — capturé au moment
+ * même où `isWon()` est vrai pour cette combinaison, avant toute
+ * restauration, car l'origine d'un groupe fait partie de "qui a cliqué
+ * quoi"). 0, 1, ou plusieurs entrées: plusieurs si différentes origines
+ * produisent des couleurs finales différentes qui satisfont TOUTES
+ * `isWon()` — ce sont alors de vraies solutions distinctes du point de vue
+ * du joueur, voir `boardSignature`.
+ */
+function resolveLeafOutcomes(grid, hasColorTargets, options) {
+  if (hasColorTargets) grid.recompute();
+  if (grid.isWon(options)) {
+    return [{ sig: boardSignature(grid, hasColorTargets), lights: grid.getPlacedLights() }];
+  }
+  if (!hasColorTargets) return [];
+
+  const groups = collectActiveMirrorGroups(grid);
+  if (groups.length === 0 || totalOriginCombos(groups) > MAX_ORIGIN_COMBOS) return [];
+
+  const outcomes = [];
+  const seenHere = new Set();
+  forEachOriginCombo(grid, groups, 0, () => {
+    if (grid.isWon(options)) {
+      const sig = boardSignature(grid, hasColorTargets);
+      if (!seenHere.has(sig)) {
+        seenHere.add(sig);
+        outcomes.push({ sig, lights: grid.getPlacedLights() });
+      }
+    }
+  });
+  // `forEachOriginCombo` restaure déjà les origines d'un point de vue
+  // `grid.lights`/`_mirrorDuplicateOf`, mais `_lit`/`_colorMatch` datent du
+  // dernier `recompute()` de la boucle (une combinaison alternative) — un
+  // dernier `recompute()` remet `grid` dans un état cohérent avec
+  // l'origine par défaut avant de rendre la main à l'appelant.
+  if (groups.length > 0) grid.recompute();
+  return outcomes;
+}
+
+/**
+ * Remplace `refreshForLeafCheck(grid, hasColorTargets); grid.isWon(options)`
+ * pour les recherches qui s'ARRÊTENT AU PREMIER SUCCÈS (findSolution/
+ * analyzeSolve). Retourne `true`/`false` ; si `true`, la grille reste dans
+ * l'état gagnant trouvé (une combinaison d'origines peut avoir été changée
+ * — voir `tryResolveOriginsForWin` — c'est voulu: l'appelant lit
+ * `getPlacedLights()` juste après) ; si `false`, la grille est garantie
+ * identique à l'état d'entrée (aucun effet de bord sur un échec, cohérent
+ * avec le reste de `propagate`/`search`).
+ */
+function resolveLeafWin(grid, hasColorTargets, options) {
+  if (hasColorTargets) grid.recompute();
+  if (grid.isWon(options)) return true;
+  if (!hasColorTargets) return false;
+
+  const groups = collectActiveMirrorGroups(grid);
+  if (groups.length === 0 || totalOriginCombos(groups) > MAX_ORIGIN_COMBOS) return false;
+
+  return tryResolveOriginsForWin(grid, groups, 0, options);
 }
 
 /** Toutes les cases EMPTY ni allumées, ni exclues: ce qui reste à décider. */
@@ -486,16 +737,10 @@ function pairDeductions(grid, infoA, infoB, mirrorReachable) {
     const allLit = validMasks.every((m) => (m >> i) & 1);
     const allDark = !allLit && validMasks.every((m) => !((m >> i) & 1));
     if (allLit) {
-      // Neurone miroir [expérimental]: même prudence que Stage 1/1.5 (voir
-      // leurs commentaires dans `propagate`) — si CETTE variable précise
-      // est sur la ligne/colonne d'un neurone miroir, la déclarer "forcée
-      // allumée" imposerait nous-mêmes une pose RÉELLE ici plutôt que de
-      // laisser la possibilité qu'elle s'allume comme duplicata d'une
-      // lumière posée à l'autre bout du neurone — polarité qui peut fausser
-      // une couleur plus loin dans la chaîne (voir le bug corrigé). On
-      // s'abstient donc pour CETTE variable (les autres, non concernées,
-      // restent forcées normalement).
-      if (mirrorReachable && mirrorReachable.has(idxOf(grid, vars[i][0], vars[i][1]))) continue;
+      // Neurone miroir [expérimental]: forçage toujours sûr, même
+      // raisonnement que Stage 1/1.5 (voir le commentaire en tête de
+      // fichier, section "Solution ACTUELLE") — la couleur est gérée à la
+      // feuille, pas ici.
       forcedLit.push(vars[i]);
     } else if (allDark) forcedDark.push(vars[i]);
   }
@@ -597,30 +842,16 @@ function propagate(grid, excluded, mirrorReachable, stats) {
           undo();
           return { ok: false };
         }
-        // Neurone miroir [expérimental], bug retour utilisateur (niveau
-        // "Cauchemar IV" modifié): si au moins une des cases qu'on
-        // s'apprêterait à forcer allumée ici est elle-même sur la
-        // ligne/colonne d'un neurone miroir, une pose RÉELLE ici n'est pas
-        // sûre — cette case pourrait tout aussi bien finir allumée comme
-        // DUPLICATA d'une lumière posée à l'AUTRE bout du même neurone (voir
-        // grid.js: `_computeMirrorDuplicates`). Or laquelle des deux devient
-        // "origine" (par opposition à duplicata) n'est pas neutre : un
-        // duplicata hérite TOUJOURS de la couleur de son origine (jamais
-        // l'inverse) et bloque tout laser de charge colorée qui le
-        // toucherait directement (voir grid.js, `_mirrorLaserBlocked`) — un
-        // niveau réellement soluble à la main a été rapporté à tort
-        // insoluble par ce même bug: la case forcée ici absorbait
-        // directement un laser coloré qu'elle aurait dû laisser passer (en
-        // restant duplicata), ce qui corrompait la couleur reçue par une
-        // case-cible plus loin dans la chaîne. On s'abstient donc de la
-        // conclusion "forcé" pour CE tour et on traite la case comme un
-        // simple candidat de branchement (les deux polarités seront
-        // essayées par le backtracking, voir `else if` juste en dessous)
-        // plutôt que d'imposer nous-mêmes, à tort, une polarité précise.
-        const forcesRiskyCell =
-          mirrorReachable.size > 0 && free.some(([fr, fc]) => mirrorReachable.has(idxOf(grid, fr, fc)));
-
-        if (needed > 0 && needed === free.length && !forcesRiskyCell) {
+        // Neurone miroir [expérimental]: forçage désormais toujours sûr ici
+        // (voir le nouveau commentaire en tête de fichier, section "Solution
+        // ACTUELLE") — `hasLight`/`_illuminated`/`_state` sont origine-
+        // invariants, donc rien de ce que Stage 1 conclut à partir d'eux ne
+        // peut être faussé par la polarité (origine vs duplicata) d'un
+        // groupe de neurone miroir. La seule ambiguïté réelle (qui capte les
+        // lasers colorés) est résolue plus tard, à la feuille, uniquement si
+        // elle a un impact observable — voir `resolveLeafOutcomes`/
+        // `resolveLeafWin`.
+        if (needed > 0 && needed === free.length) {
           for (const [fr, fc] of free) {
             if (!forceLit(fr, fc)) {
               undo();
@@ -674,16 +905,11 @@ function propagate(grid, excluded, mirrorReachable, stats) {
         }
         if (candidates.length === 1) {
           const [fr, fc] = candidates[0];
-          // Neurone miroir [expérimental]: même prudence que Stage 1
-          // ci-dessus (voir son commentaire) — si l'unique candidat restant
-          // capable d'illuminer (r,c) est lui-même sur la ligne/colonne d'un
-          // neurone miroir, le forcer comme pose RÉELLE ici imposerait une
-          // polarité (origine vs duplicata) qui n'est pas certaine et qui
-          // peut fausser la couleur d'un duplicata plus loin dans la
-          // chaîne. On s'abstient : cette case reste "non décidée" pour ce
-          // tour — soit le branchement normal la reprendra, soit une pose
-          // réelle décidée ailleurs la crée directement comme duplicata.
-          if (mirrorReachable.size > 0 && mirrorReachable.has(idxOf(grid, fr, fc))) continue;
+          // Neurone miroir [expérimental]: forçage toujours sûr, même
+          // raisonnement que Stage 1 ci-dessus (voir le commentaire en tête
+          // de fichier, section "Solution ACTUELLE") — l'illumination est
+          // origine-invariante, seule la couleur ne l'est pas, et elle est
+          // gérée à la feuille, pas ici.
           if (!forceLit(fr, fc)) {
             undo();
             return { ok: false };
@@ -894,9 +1120,8 @@ export function countSolutions(level, cap = 2, maxNodes = 2_000_000, options = {
     const undecided = getUndecided(grid, excluded);
 
     if (undecided.length === 0) {
-      refreshForLeafCheck(grid, hasColorTargets);
-      if (grid.isWon(options)) {
-        const sig = boardSignature(grid, hasColorTargets);
+      for (const { sig } of resolveLeafOutcomes(grid, hasColorTargets, options)) {
+        if (count >= cap) break;
         if (!seenSignatures.has(sig)) {
           seenSignatures.add(sig);
           count++;
@@ -978,12 +1203,11 @@ export function enumerateSolutions(level, cap = 5, maxNodes = 3_000_000, options
     const undecided = getUndecided(grid, excluded);
 
     if (undecided.length === 0) {
-      refreshForLeafCheck(grid, hasColorTargets);
-      if (grid.isWon(winOptions)) {
-        const sig = boardSignature(grid, hasColorTargets);
+      for (const { sig, lights } of resolveLeafOutcomes(grid, hasColorTargets, winOptions)) {
+        if (found.length >= cap) break;
         if (!seenSignatures.has(sig)) {
           seenSignatures.add(sig);
-          found.push(currentLights());
+          found.push(lights);
         }
       }
     } else {
@@ -1084,8 +1308,7 @@ export function findSolution(level, maxNodes = 2_000_000) {
       const undecided = getUndecided(grid, excluded);
 
       if (undecided.length === 0) {
-        refreshForLeafCheck(grid, hasColorTargets);
-        if (grid.isWon()) {
+        if (resolveLeafWin(grid, hasColorTargets, {})) {
           solution = currentLights();
           found = true;
         }
@@ -1185,8 +1408,7 @@ export function analyzeSolve(level, maxNodes = 2_000_000) {
       const undecided = getUndecided(grid, excluded);
 
       if (undecided.length === 0) {
-        refreshForLeafCheck(grid, hasColorTargets);
-        if (grid.isWon()) {
+        if (resolveLeafWin(grid, hasColorTargets, {})) {
           solution = currentLights();
           found = true;
         }
@@ -1312,14 +1534,13 @@ export function analyzeAndCount(level, cap = 2, maxNodes = 2_000_000, options = 
     const undecided = getUndecided(grid, excluded);
 
     if (undecided.length === 0) {
-      refreshForLeafCheck(grid, hasColorTargets);
-      if (grid.isWon(winOptions)) {
-        const sig = boardSignature(grid, hasColorTargets);
+      for (const { sig, lights } of resolveLeafOutcomes(grid, hasColorTargets, winOptions)) {
+        if (count >= cap) break;
         if (!seenSignatures.has(sig)) {
           seenSignatures.add(sig);
           count++;
           if (!frozen) {
-            firstSolution = currentLights();
+            firstSolution = lights;
             frozen = true;
           }
         }
