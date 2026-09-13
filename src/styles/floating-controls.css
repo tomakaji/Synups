@@ -196,6 +196,42 @@
   display: none;
 }
 
+/* Retour utilisateur: "lorsqu'on active un timer d'une heure, j'aimerais
+   que ce timer soit visible sous le chip 'pub' dans un deuxième chip
+   rougeâtre collé au premier" — même gabarit pilule que
+   .daily-challenge-fab-badge juste au-dessus (top:-4px, hauteur 16px),
+   empilé juste en dessous SANS espace (top:12px = -4px + 16px) pour lire
+   comme un seul bloc à deux étages plutôt que deux pastilles séparées.
+   Teinté --error (rouge) plutôt que jaune/orange: contrairement au badge
+   "Pub" (rappel permanent tant que le défi est fait), celui-ci ne montre
+   QUE le compte à rebours du cooldown ACTUEL (voir main.js:
+   renderDailyChallengeButton) — disparaît dès qu'il est écoulé, laissant
+   seul le badge "Pub" au-dessus. `white-space:nowrap` + largeur non fixée
+   (juste un min-width comme le badge au-dessus): le texte ("53 min",
+   "1h12"...) pousse la pilule en largeur au lieu de tronquer. */
+.daily-challenge-fab-cooldown {
+  position: absolute;
+  top: 12px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--error);
+  color: #2a0b0b;
+  font-size: 0.52rem;
+  font-weight: 700;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 2px var(--panel);
+}
+
+.daily-challenge-fab-cooldown.hidden {
+  display: none;
+}
+
 /* Retour utilisateur: "le bouton Défi quotidien lorsqu'il a déjà été fait
    doit avoir un petit badge 'pub' pour prévenir qu'il faudra visionner une
    pub" — même pastille que ci-dessus (position/forme), juste reteintée et

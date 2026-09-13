@@ -23,6 +23,23 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
+    <!-- Retour utilisateur: "l'écran de démarrage de l'app affiche juste le
+         logo, ça serait bien d'afficher le Titre avec, dans le même design
+         que sur le menu, mais en plus gros et bien centré [...] qu'il
+         apparaisse en fondu" — le splash NATIF (Android/iOS, généré à partir
+         du même motif SVG, voir commentaire <head> plus haut) reste une
+         simple image statique, incapable d'animer quoi que ce soit. Ce
+         calque prend le relais dès que la WebView peint sa première frame
+         (même fond que <body>, donc aucune coupure visuelle avec le splash
+         natif dessous) : logo + titre apparaissent en fondu puis le calque
+         se retire pour révéler le menu — voir main.js pour le minutage,
+         base.css: #boot-splash pour le fondu. Toujours en dehors de #app
+         (jamais un `.screen` parmi d'autres): un simple calque temporaire,
+         retiré du DOM une fois joué, jamais reintégré à la navigation. -->
+    <div id="boot-splash" class="boot-splash" aria-hidden="true">
+      <img class="boot-splash-mark" src="/icon-192.png" alt="" />
+      <h1 class="boot-splash-title">Synups</h1>
+    </div>
     <div id="app">
       <!-- Bouton mute global: PAS un écran, visible en permanence au-dessus de
            tous les autres (voir style.css: position fixed) — coupe/rétablit
@@ -93,6 +110,13 @@
           </svg>
           <span data-i18n="btn-daily-challenge.label" class="daily-challenge-fab-label">Défi quotidien</span>
           <span id="daily-challenge-fab-badge" class="daily-challenge-fab-badge hidden"></span>
+          <!-- Retour utilisateur: "lorsqu'on active un timer d'une heure,
+               j'aimerais que ce timer soit visible sous le chip 'pub' dans
+               un deuxième chip rougeâtre collé au premier" — voir main.js:
+               renderDailyChallengeButton (contenu/visibilité) et
+               floating-controls.css: .daily-challenge-fab-cooldown (position
+               collée sous #daily-challenge-fab-badge). -->
+          <span id="daily-challenge-fab-cooldown" class="daily-challenge-fab-cooldown hidden"></span>
         </button>
 
         <!-- Retour utilisateur: "un rappel du logo au dessus du titre" —
@@ -1043,7 +1067,7 @@
                n'y a rien à signaler. -->
           <p id="hint-ad-status" class="hint-ad-status hidden"></p>
           <div class="modal-actions">
-            <button data-i18n="btn-hint-watch-ad" id="btn-hint-watch-ad" class="options-btn options-btn--accent">Regarder la pub (+5 indices)</button>
+            <button data-i18n="btn-hint-watch-ad" id="btn-hint-watch-ad" class="options-btn options-btn--accent options-btn--watch-ad">Regarder la pub (+5 indices)</button>
           </div>
         </div>
       </div>
@@ -1170,7 +1194,7 @@
                tentée). -->
           <p id="som-ad-status" class="som-ad-status hidden"></p>
           <div class="modal-actions">
-            <button data-i18n="btn-som-ad-watch" id="btn-som-ad-watch" class="options-btn options-btn--accent">Regarder la pub (+200)</button>
+            <button data-i18n="btn-som-ad-watch" id="btn-som-ad-watch" class="options-btn options-btn--accent options-btn--watch-ad">Regarder la pub (+200)</button>
           </div>
         </div>
       </div>
@@ -1198,7 +1222,7 @@
           <p id="som-genoffer-status" class="som-ad-status hidden"></p>
           <div class="modal-actions">
             <button data-i18n="btn-som-genoffer-reject" id="btn-som-genoffer-reject" class="options-btn">Refuser</button>
-            <button data-i18n="btn-som-genoffer-accept" id="btn-som-genoffer-accept" class="options-btn options-btn--accent">Regarder la pub</button>
+            <button data-i18n="btn-som-genoffer-accept" id="btn-som-genoffer-accept" class="options-btn options-btn--accent options-btn--watch-ad">Regarder la pub</button>
           </div>
         </div>
       </div>
@@ -1208,10 +1232,14 @@
            nouveau [...] en échange d'une rewardAd [...] on affichera donc un
            compteur d'une heure [...] sur la petite pop up du menu") —
            ouverte en tapant le bouton flottant une fois le défi du jour déjà
-           terminé (voir main.js: openDailyReplayPopup). Deux contenus
-           mutuellement exclusifs (voir main.js: renderDailyReplayPopup):
-           le bandeau ci-dessous si le cooldown d'1h est écoulé, sinon un
-           simple compte à rebours. -->
+           terminé (voir main.js: openDailyReplayPopup).
+           Retour utilisateur: "plutôt que de mettre une ligne descriptive
+           pour le timer, il suffit de mettre le timer dans le bouton et de
+           verrouiller le bouton tant que le timer n'est pas terminé" — plus
+           de bandeau/compte-à-rebours mutuellement exclusifs comme avant:
+           le texte d'intro reste TOUJOURS affiché, seul le bouton change
+           (libellé + disabled) selon le cooldown, voir main.js:
+           renderDailyReplayPopup. -->
       <div id="daily-replay-popup" class="modal hidden">
         <div class="modal-backdrop" data-daily-replay-popup-close></div>
         <div class="modal-card">
@@ -1219,11 +1247,10 @@
             <svg viewBox="0 0 24 24" class="icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
           <h3 data-i18n="daily-replay-popup.title" class="modal-title">Défi quotidien terminé</h3>
-          <div id="daily-replay-banner" class="daily-replay-banner hidden">
+          <div id="daily-replay-banner" class="daily-replay-banner">
             <p data-i18n="daily-replay-banner.text" class="modal-text">Regarde une pub pour refaire une grille aujourd'hui.</p>
-            <button data-i18n="daily-replay-banner.button" id="btn-daily-replay-offer" type="button" class="options-btn options-btn--accent">Regarder une pub</button>
+            <button data-i18n="daily-replay-banner.button" id="btn-daily-replay-offer" type="button" class="options-btn options-btn--accent options-btn--watch-ad">Regarder une pub</button>
           </div>
-          <p id="daily-replay-cooldown" class="modal-text hidden"></p>
         </div>
       </div>
 
@@ -1242,7 +1269,7 @@
           <p data-i18n="daily-replay-confirm-modal.text" class="modal-text">Il faut regarder une pub en entier pour refaire un niveau de grille quotidienne.</p>
           <p id="daily-replay-ad-status" class="som-ad-status hidden"></p>
           <div class="modal-actions">
-            <button data-i18n="btn-daily-replay-watch" id="btn-daily-replay-watch" type="button" class="options-btn options-btn--accent">Regarder la pub</button>
+            <button data-i18n="btn-daily-replay-watch" id="btn-daily-replay-watch" type="button" class="options-btn options-btn--accent options-btn--watch-ad">Regarder la pub</button>
           </div>
         </div>
       </div>

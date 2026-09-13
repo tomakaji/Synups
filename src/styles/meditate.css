@@ -3,6 +3,21 @@
    game/meditate.js pour la logique, main.js: renderMeditateView pour le
    rendu, index.html: #view-meditate pour la structure. */
 
+/* Retour utilisateur: "dans Meditate, le bandeau publicitaire passe par
+   dessus le jeu, il faut donc prevoir une marge" — #view-meditate est un
+   `.screen` tout ce qu'il y a de plus normal (défilement de page classique,
+   contrairement à #view-play/#view-sommation qui bornent leur propre
+   hauteur), donc rien ne réservait jusqu'ici l'espace du bandeau natif
+   (position fixe AU-DESSUS de la WebView, voir base.css: --ad-banner-height)
+   sous son contenu — en bas de page, la grille de recherche/le dernier
+   élément visible se retrouvait sous le bandeau. Même variable que
+   #view-play/#view-sommation, appliquée ici en padding-bottom plutôt qu'en
+   hauteur bornée: Meditate n'a pas besoin de tenir dans un viewport fixe,
+   juste de laisser assez de place tout en bas une fois scrollé. */
+#view-meditate {
+  padding-bottom: var(--ad-banner-height, 0px);
+}
+
 /* Retour utilisateur: "la grille de jeu doit [...] prendre la largeur du
    téléphone" — pas de padding HORIZONTAL ici (contrairement à avant): c'est
    ce qui permet à .meditate-search-wrap ci-dessous de s'étirer sur toute la

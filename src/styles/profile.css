@@ -194,8 +194,18 @@
   color: #241a08;
 }
 
+/* BUG CORRIGÉ (retour utilisateur: "les messages d'erreur 'Pas assez
+   d'étoiles' s'affichent en superposition à la liste des avatars, ça manque
+   de marge") — cette marge négative annulait quasiment tout l'espacement
+   déjà fourni par le `gap: 10px` de .profile-avatar-section (voir plus
+   haut), qui separe normalement le picker de ce message. Combiné au
+   débordement de 5px des pastilles de prix sous chaque bouton (voir
+   .profile-avatar-price: bottom:-5px), il ne restait quasiment plus rien:
+   le texte d'erreur touchait, voire chevauchait, la dernière rangée
+   d'avatars. Simple retrait de cette marge négative: le gap du flex parent
+   suffit, aucune raison de le combattre ici. */
 .profile-avatar-purchase-status {
-  margin: -8px 0 0;
+  margin: 0;
   font-size: 0.78rem;
   color: var(--text-dim);
   text-align: center;

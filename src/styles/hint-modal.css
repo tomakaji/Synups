@@ -40,6 +40,18 @@
   50% { transform: scale(1.15); }
 }
 
+/* Retour utilisateur: "quand on utilise un indice, si ça charge encore il
+   faut qu'il passe en état loading/disable pour éviter le spam" — voir
+   main.js: btnHint.onclick (verrou avant le calcul potentiellement long de
+   la solution). Opacité réduite + curseur "attente" suffisent, pas besoin
+   d'un spinner dédié: la désactivation elle-même (native, voir main.js)
+   est ce qui empêche réellement le spam, ceci n'en est que le signal
+   visuel. */
+.hint-btn--loading {
+  opacity: 0.5;
+  cursor: wait;
+}
+
 /* Halo "sonar doré" posé temporairement sur la case indiquée par un indice
    (voir main.js: showHintAt) — même motif que le halo sonar d'une case-
    lumière (.cell-sonar-halo) mais parti du bord de la case plutôt que d'un
@@ -172,6 +184,23 @@
   text-align: center;
   align-items: center;
   padding: 12px 14px;
+}
+
+/* Retour utilisateur: "le bouton pour regarder une pub dans les modales [...]
+   doit être plus gros en hauteur pour inciter le joueur à cliquer" — sur
+   TOUS les boutons "Regarder une/la pub" (indice, Remember, génOffer, Défi
+   Quotidien x2), qu'ils vivent ou non dans un .modal-actions (voir
+   index.html: #btn-daily-replay-offer, seul de la liste hors .modal-actions,
+   directement dans .daily-replay-banner) — classe non scopée pour couvrir
+   les deux cas plutôt que dupliquer la règle. Padding vertical seul
+   augmenté (jamais horizontal, pour ne pas casser `flex:1`/largeur pleine
+   selon le contexte) + police légèrement agrandie pour accompagner la
+   hauteur plutôt que laisser un bouton haut avec un texte qui paraît petit
+   dedans. */
+.options-btn--watch-ad {
+  padding-top: 20px;
+  padding-bottom: 20px;
+  font-size: 0.95rem;
 }
 
 /* Round 21 (migration Capacitor/AdMob): feedback texte sous le bouton

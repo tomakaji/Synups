@@ -142,6 +142,32 @@ import { t, applyI18n } from "./game/i18n.js";
 // tout texte statique — voir game/i18n.js pour le détail du mécanisme.
 applyI18n();
 
+// ---------- Écran de démarrage (calque de fondu) ----------
+// Retour utilisateur: "l'écran de démarrage de l'app affiche juste le logo,
+// ça serait bien d'afficher le Titre avec, dans le même design que sur le
+// menu, mais en plus gros et bien centré [...] qu'il apparaisse en fondu" —
+// le splash NATIF (Android/iOS, voir index.html <head>) reste une simple
+// image statique, aucun plugin @capacitor/splash-screen n'est utilisé ici
+// pour l'animer. #boot-splash (voir index.html, même fond que <body>: pas de
+// coupure visuelle avec le splash natif dessous) prend le relais dès que la
+// WebView peint sa première frame — logo puis titre apparaissent en fondu
+// (voir base.css: .boot-splash-mark/.boot-splash-title), restent un court
+// instant, puis le calque entier se retire pour révéler le menu. Durée FIXE
+// (jamais accrochée à un événement réseau/chargement): rien à attendre ici,
+// juste le temps que l'animation soit perçue.
+const bootSplashEl = document.getElementById("boot-splash");
+if (bootSplashEl) {
+  const BOOT_SPLASH_VISIBLE_MS = 1500;
+  const BOOT_SPLASH_FADE_OUT_MS = 500; // voir base.css: .boot-splash transition
+  setTimeout(() => {
+    bootSplashEl.classList.add("boot-splash--hidden");
+    // Retiré du DOM (pas juste caché) une fois le fondu de sortie terminé:
+    // plus jamais besoin d'y penser ensuite (pas de calque résiduel
+    // invisible mais toujours présent, pas de z-index à gérer plus tard).
+    setTimeout(() => bootSplashEl.remove(), BOOT_SPLASH_FADE_OUT_MS);
+  }, BOOT_SPLASH_VISIBLE_MS);
+}
+
 // Round 24 (retour utilisateur: "retour haptique sur les boutons de
 // navigation en général") — UN SEUL listener délégué plutôt que d'ajouter
 // hapticLight() à chaque handler de bouton un par un (des dizaines, répartis
@@ -856,12 +882,10 @@ function closeHintModal() {
   hintModal.classList.add("hidden");
 }
 
-btnHint.onclick = () => {
-  if (boardLocked || infiniteGenerationPending) return;
-  if (hintStock <= 0) {
-    openHintModal();
-    return;
-  }
+/** Cœur du clic Indice (pose la prochaine case-solution, ou retire une
+ * erreur en repli) — extrait de btnHint.onclick pour pouvoir être différé
+ * d'une frame (voir plus bas), sans dupliquer cette logique. */
+function applyHint() {
   const next = findNextHintCell();
   if (next) {
     hintStock--;
@@ -890,6 +914,41 @@ btnHint.onclick = () => {
   renderHintUI();
   handleCellClick(wrong[0], wrong[1]);
   showHintAt(wrong[0], wrong[1], { remove: true });
+}
+
+btnHint.onclick = () => {
+  if (boardLocked || infiniteGenerationPending || btnHint.disabled) return;
+  if (hintStock <= 0) {
+    openHintModal();
+    return;
+  }
+  // Retour utilisateur: "si ça charge encore il faut qu'il passe en état
+  // loading/disable pour éviter le spam" — sur le TOUT PREMIER indice
+  // demandé pour un niveau, getCurrentLevelSolution()/findSolution()
+  // (appelée par applyHint ci-dessus) peut bloquer le thread principal
+  // plusieurs secondes sur les niveaux les plus costauds (voir son
+  // commentaire, ex. la grille 42) avant d'être mise en cache. Sans ce
+  // verrou, chaque clic supplémentaire fait PENDANT ce blocage reste en
+  // file d'attente côté navigateur et se déclenche d'un coup dès que le
+  // calcul se termine, chacun consommant un indice au passage — un vrai
+  // spam involontaire plutôt qu'un vrai geste du joueur.
+  // Désactivé AVANT tout calcul, dans un setTimeout(0): le navigateur a
+  // ainsi l'occasion de peindre l'état "chargement" (voir hint-modal.css:
+  // .hint-btn--loading) ET d'enregistrer `disabled` avant que le blocage ne
+  // démarre — un bouton désactivé ne déclenche plus du tout son onclick,
+  // donc les clics faits pendant le calcul sont ignorés au lieu de
+  // s'empiler. Sur le chemin RAPIDE (solution déjà en cache), ce délai
+  // ajoute ~0 à quelques ms, imperceptible.
+  btnHint.disabled = true;
+  btnHint.classList.add("hint-btn--loading");
+  setTimeout(() => {
+    try {
+      applyHint();
+    } finally {
+      btnHint.disabled = false;
+      btnHint.classList.remove("hint-btn--loading");
+    }
+  }, 0);
 };
 
 document.querySelectorAll("[data-hint-modal-close]").forEach((el) => (el.onclick = closeHintModal));
@@ -3816,6 +3875,7 @@ function onMeditateCellClick(index) {
 // ---------- Défi Quotidien (bouton flottant du menu titre) ----------
 const btnDailyChallenge = document.getElementById("btn-daily-challenge");
 const dailyChallengeFabBadgeEl = document.getElementById("daily-challenge-fab-badge");
+const dailyChallengeFabCooldownEl = document.getElementById("daily-challenge-fab-cooldown");
 const gameLogoEl = document.querySelector(".game-logo");
 
 /** Aligne verticalement le bouton flottant sur le logo du menu titre (retour
@@ -3878,12 +3938,37 @@ function renderDailyChallengeButton() {
     dailyChallengeFabBadgeEl.classList.add("daily-challenge-fab-badge--pub");
     dailyChallengeFabBadgeEl.textContent = t("daily-challenge-fab-badge--pub.label");
     btnDailyChallenge.title = "Défi Quotidien — déjà fait aujourd'hui, appuyer pour rejouer contre une pub";
+    // Retour utilisateur: "lorsqu'on active un timer d'une heure, j'aimerais
+    // que ce timer soit visible sous le chip 'pub' dans un deuxième chip
+    // rougeâtre collé au premier" — contrairement au badge "Pub" ci-dessus
+    // (permanent tant que le défi est fait), celui-ci reflète le cooldown
+    // ACTUEL (voir dailyChallenge.js: getReplayCooldownRemainingMs) et
+    // disparaît dès qu'il est écoulé — voir aussi le setInterval juste après
+    // cette fonction, qui la rappelle périodiquement pour que ce compte à
+    // rebours ne reste jamais figé pendant qu'on regarde le menu.
+    if (dailyChallengeFabCooldownEl) {
+      const remaining = getReplayCooldownRemainingMs();
+      dailyChallengeFabCooldownEl.classList.toggle("hidden", remaining === 0);
+      if (remaining > 0) dailyChallengeFabCooldownEl.textContent = formatDailyReplayCooldown(remaining);
+    }
     return;
   }
   dailyChallengeFabBadgeEl.classList.remove("hidden", "daily-challenge-fab-badge--pub");
   dailyChallengeFabBadgeEl.textContent = "!";
   btnDailyChallenge.title = "Défi Quotidien — grille du jour, +1 Énergie";
+  // Pas "fait" aujourd'hui: aucun cooldown de rejeu ne peut être actif, voir
+  // commentaire ci-dessus.
+  dailyChallengeFabCooldownEl?.classList.add("hidden");
 }
+
+// Rafraîchit périodiquement le bouton flottant pendant qu'il reste affiché
+// (voir dailyChallengeFabCooldownEl ci-dessus) — sans ça, son compte à
+// rebours resterait figé à la valeur lue au dernier vrai événement
+// (victoire, retour au menu...) tant que le joueur ne quitte/revient pas
+// sur l'écran titre. 30s: même granularité que le popup de rejeu
+// (renderDailyReplayPopup plus bas), largement suffisant pour un compte à
+// rebours affiché à la minute près.
+setInterval(renderDailyChallengeButton, 30_000);
 
 btnDailyChallenge.onclick = () => {
   if (isDailyChallengeCompleted()) {
@@ -3905,17 +3990,16 @@ btnDailyChallenge.onclick = () => {
 // "on va permettre de jouer le défi quotidien à nouveau (nouvelle
 // génération de grille) en échange d'une rewardAd [...] il faudra attendre
 // minimum une heure avant de pouvoir refaire cette action [...] on affichera
-// donc un compteur d'une heure [...] sur la petite pop up du menu. Pour la
-// première proposition de rejouer contre une pub (donc avant le compteur),
-// on affichera juste un bandeau pour prévenir qu'il faut regarder une pub,
-// et si on clique sur le bouton, on a une modale qui prévient qu'il faut
-// regarder la pub." — deux niveaux distincts, voir index.html:
-// #daily-replay-popup (bandeau OU compte à rebours) puis
+// donc un compteur d'une heure [...] sur la petite pop up du menu."
+// Round suivant (retour utilisateur): "plutôt que de mettre une ligne
+// descriptive pour le timer, il suffit de mettre le timer dans le bouton et
+// de verrouiller le bouton tant que le timer n'est pas terminé" — le texte
+// d'intro (#daily-replay-banner) reste désormais TOUJOURS affiché, seul le
+// bouton en dessous change de libellé/état selon le cooldown (voir
+// renderDailyReplayPopup) — voir index.html: #daily-replay-popup, puis
 // #daily-replay-confirm-modal (confirmation + vraie rewarded ad, même
 // mécanisme que som-ad-modal/som-genoffer-modal).
 const dailyReplayPopupEl = document.getElementById("daily-replay-popup");
-const dailyReplayBannerEl = document.getElementById("daily-replay-banner");
-const dailyReplayCooldownEl = document.getElementById("daily-replay-cooldown");
 const btnDailyReplayOffer = document.getElementById("btn-daily-replay-offer");
 const dailyReplayConfirmModalEl = document.getElementById("daily-replay-confirm-modal");
 const btnDailyReplayWatch = document.getElementById("btn-daily-replay-watch");
@@ -3932,18 +4016,19 @@ function formatDailyReplayCooldown(ms) {
   return h > 0 ? `${h} h ${String(m).padStart(2, "0")} min` : `${m} min`;
 }
 
-/** (Ré)affiche le contenu de la popup selon le cooldown ACTUEL (voir
+/** (Ré)affiche le bouton de la popup selon le cooldown ACTUEL (voir
  * dailyChallenge.js: getReplayCooldownRemainingMs) — jamais un état figé au
  * moment de l'ouverture, voir openDailyReplayPopup qui rafraîchit ceci
- * périodiquement tant que la popup reste affichée. */
+ * périodiquement tant que la popup reste affichée. Verrouillé (disabled) +
+ * libellé = le compte à rebours tant que le cooldown n'est pas écoulé,
+ * sinon redevient le bouton normal "Regarder une pub". */
 function renderDailyReplayPopup() {
   const remaining = getReplayCooldownRemainingMs();
   const canReplay = remaining === 0;
-  dailyReplayBannerEl.classList.toggle("hidden", !canReplay);
-  dailyReplayCooldownEl.classList.toggle("hidden", canReplay);
-  if (!canReplay) {
-    dailyReplayCooldownEl.textContent = `Reviens dans ${formatDailyReplayCooldown(remaining)} pour rejouer contre une pub.`;
-  }
+  btnDailyReplayOffer.disabled = !canReplay;
+  btnDailyReplayOffer.textContent = canReplay
+    ? t("daily-replay-banner.button")
+    : `Disponible dans ${formatDailyReplayCooldown(remaining)}`;
 }
 
 function openDailyReplayPopup() {

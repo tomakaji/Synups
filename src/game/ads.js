@@ -42,6 +42,18 @@ import {
 // mise en veille (même fichier) ne suffit pas seul ici — raison de pause
 // dédiée ("ad"), voir showRewardedAd/showInterstitialAd plus bas.
 import { pauseMusic, resumeMusic } from "./music.js";
+// Chantier admin/normal (retour utilisateur: "ajoute moi des acces admin
+// pour bypass les pubs sur navigateur (car on ne peut pas les visionner)")
+// — AdMob (voir en-tête de fichier) ne fonctionne QUE dans la coquille
+// native: en navigateur, showRewardedAd() ci-dessous renvoyait jusqu'ici
+// systématiquement `{ earned: false }`, rendant impossible de tester en
+// dev tout ce qui EXIGE une rewarded ad (indice, Remember, Défi Quotidien,
+// génOffer...). isAdminModeOn() ne peut jamais valoir `true` en build de
+// PRODUCTION (aucun toggle pour l'activer hors dev, voir admin.js) — ce
+// bypass reste donc entièrement inerte hors dev, exactement comme les
+// autres usages non enveloppés de isAdminModeOn() dans le code (ex:
+// main.js: btnNext/renderLevelGrid).
+import { isAdminModeOn } from "../admin.js";
 
 // Round 21 (retour utilisateur: "pub-récompense pour recharger les indices" +
 // "publicités courtes (pas des reward ads) tous les 5 niveaux du mode
@@ -274,7 +286,13 @@ export function initAds() {
  * de suite avec `{ earned: false, reason: "unavailable" }` — à
  * sommation.js de décider quoi afficher dans ce cas (voir openAdModal). */
 export async function showRewardedAd() {
-  if (!Capacitor.isNativePlatform() || !rewardedReady) {
+  if (!Capacitor.isNativePlatform()) {
+    // Voir l'import isAdminModeOn ci-dessus: seul cas où le navigateur peut
+    // renvoyer une récompense, jamais sinon.
+    if (isAdminModeOn()) return { earned: true, reason: "admin-bypass" };
+    return { earned: false, reason: "unavailable" };
+  }
+  if (!rewardedReady) {
     return { earned: false, reason: "unavailable" };
   }
 

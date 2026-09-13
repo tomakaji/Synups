@@ -75,6 +75,96 @@ body {
   padding: 24px 16px 48px;
 }
 
+/* ---------- Écran de démarrage (calque de fondu, voir index.html: #boot-splash) ----------
+   Retour utilisateur: "l'écran de démarrage de l'app affiche juste le logo,
+   ça serait bien d'afficher le Titre avec, dans le même design que sur le
+   menu, mais en plus gros et bien centré [...] qu'il apparaisse en fondu" —
+   même fond que <body> (radial-gradient ci-dessus): AUCUNE coupure visuelle
+   avec le splash natif statique qu'il recouvre/prolonge. `position:fixed` +
+   z-index très haut: doit rester au-dessus de tout, y compris les modales.
+   Le fondu de SORTIE (voir .boot-splash--hidden) est piloté ici en CSS,
+   celui d'ENTRÉE (logo puis titre) par les deux animations ci-dessous — le
+   minutage des trois (durée d'affichage, retrait du DOM) est en JS (voir
+   main.js, juste après applyI18n()). */
+.boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: radial-gradient(circle at 50% 0%, #171c2a 0%, var(--bg) 60%);
+  transition: opacity 0.5s ease;
+}
+
+.boot-splash.boot-splash--hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Même image que .game-logo-mark (menu titre, voir title.css) mais bien
+   plus grande — c'est LE plein écran dédié à ce logo, rien d'autre ne se
+   partage l'attention ici. Apparaît en fondu la toute première (voir
+   `animation-delay` volontairement à 0), le titre juste après (délai
+   ci-dessous) pour un enchaînement logo -> titre plutôt qu'un double fondu
+   simultané. */
+.boot-splash-mark {
+  width: 128px;
+  height: 128px;
+  border-radius: 32px;
+  box-shadow: 0 0 44px -4px rgba(110, 231, 255, 0.4);
+  opacity: 0;
+  animation: boot-splash-fade-in 0.6s ease-out both;
+}
+
+/* Même design que .game-logo (menu titre, voir title.css: dégradé RVB
+   balayé en boucle) mais "en plus gros" (retour utilisateur) — clamp()
+   plutôt qu'un rem fixe pour rester lisible sans déborder sur un écran
+   étroit (contrairement au menu, ce titre n'a ici aucun autre contenu pour
+   le contraindre horizontalement). Le fondu d'apparition (boot-splash-fade-in)
+   et le balayage en boucle (game-logo-shimmer, réutilisé tel quel) tournent
+   en parallèle sans se gêner: le premier ne touche qu'à `opacity`/`transform`,
+   le second qu'à `background-position`. */
+.boot-splash-title {
+  margin: 0;
+  letter-spacing: 0.3em;
+  font-weight: 300;
+  font-size: clamp(2.2rem, 9vw, 3.4rem);
+  text-transform: uppercase;
+  background: linear-gradient(90deg, #ff5d6c, #59e39d, #5da9ff, #ff5d6c);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  opacity: 0;
+  animation:
+    boot-splash-fade-in 0.6s ease-out 0.25s both,
+    game-logo-shimmer 7s linear infinite 0.25s;
+}
+
+@keyframes boot-splash-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-splash-mark,
+  .boot-splash-title {
+    animation: none;
+    opacity: 1;
+    background-position: 0% 50%;
+  }
+}
+
 .topbar {
   width: 100%;
   display: flex;
