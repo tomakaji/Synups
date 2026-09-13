@@ -671,7 +671,23 @@ export class LightUpGrid {
           const adjacentLights = this._adjacentLightCount(r, c);
           cell._adjacentLights = adjacentLights;
           if (adjacentLights === 0) {
-            cell._state = "neutral";
+            // Même logique que CLUE ci-dessous (`adjacentEmptyFree === 0`):
+            // si plus aucune case EMPTY sans lumière ne reste adjacente, ce
+            // Pyra ne pourra plus JAMAIS s'activer — état "error" (pas
+            // "neutral", qui laisserait croire à tort qu'il attend
+            // simplement sa lumière comme n'importe quel Pyra pas encore
+            // touché). Avant ce fix, un Pyra bloqué de la sorte restait
+            // visuellement indiscernable d'un Pyra normal en attente, alors
+            // qu'un CLUE dans la même situation impossible virait "error"
+            // immédiatement — un vrai manque de feedback pour le joueur.
+            let adjacentEmptyFree = 0;
+            for (const [dr, dc] of DIRECTIONS) {
+              const nCell = this.cellAt(r + dr, c + dc);
+              if (nCell && nCell.type === CellType.EMPTY && !this.hasLight(r + dr, c + dc)) {
+                adjacentEmptyFree++;
+              }
+            }
+            cell._state = adjacentEmptyFree === 0 ? "error" : "neutral";
             cell._activeColor = null;
           } else if (adjacentLights <= 3) {
             cell._state = "success";
