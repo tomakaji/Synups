@@ -199,8 +199,8 @@ const NORMAL_CUTOFF_HZ = 20000; // au-delà du spectre audible: filtre inactif e
 // FAILURE_MUFFLE_*/NORMAL_CUTOFF_HZ pour ne jamais se confondre avec l'état
 // d'erreur (voir enterFailure/exitFailure, qui restent prioritaires: voir
 // la garde `backgroundMuffled` dans exitFailure ci-dessous).
-const BACKGROUND_MUFFLE_GAIN = 0.6;
-const BACKGROUND_MUFFLE_CUTOFF_HZ = 1200;
+const BACKGROUND_MUFFLE_GAIN = 0.45;
+const BACKGROUND_MUFFLE_CUTOFF_HZ = 700;
 
 // --- Chaîne de sortie Web Audio native, posée directement sur le contexte
 // interne de Howler (Howler.ctx — un AudioContext SÉPARÉ de celui de
