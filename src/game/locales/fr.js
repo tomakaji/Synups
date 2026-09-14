@@ -41,6 +41,8 @@ export const fr = {
   "btn-pixelart-toggle": "Verrouillé",
   "options-pixelart-hint": "Débloqué à la 5e récompense de Remember.",
   "misc.le_jeu": "Le jeu",
+  "misc.confidentialite": "Confidentialité",
+  "btn-privacy-policy": "Politique de confidentialité",
   "misc.donnees": "Données",
   "btn-reset-save": "Réinitialiser le jeu",
   "misc.efface_la_progression_hi": "Efface la progression du mode Jouer, les étoiles/l'Énergie et les réglages. Impossible à annuler.",

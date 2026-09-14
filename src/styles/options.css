@@ -37,3 +37,12 @@
   color: var(--text-dim);
 }
 
+
+/* Retour utilisateur: lien vers la politique de confidentialité (Firebase
+   Hosting) — même gabarit visuel que .options-btn (voir index.html:
+   #btn-privacy-policy), mais c'est un <a>, pas un <button> : on retire le
+   souligné/couleur de lien par défaut du navigateur pour qu'il reste
+   indiscernable des autres boutons de la page. */
+#btn-privacy-policy {
+  text-decoration: none;
+}

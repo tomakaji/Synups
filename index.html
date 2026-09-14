@@ -518,6 +518,28 @@
             </button>
           </div>
 
+          <!-- Retour utilisateur: "politique de confidentialité pas
+               vraiment publiée [...] on peut l'héberger sur Firebase
+               Hosting" — public/privacy-policy.html est désormais aussi
+               servi tel quel par Firebase Hosting (voir firebase.json à la
+               racine du projet, même projet Firebase que Firestore/AdMob),
+               et ce lien y pointe. target="_blank" sur un lien qui sort du
+               domaine de l'app : Capacitor intercepte nativement ce type de
+               navigation et ouvre le navigateur système, aucun plugin
+               supplémentaire nécessaire. -->
+          <div class="options-section">
+            <span data-i18n="misc.confidentialite" class="options-label">Confidentialité</span>
+            <a
+              data-i18n="btn-privacy-policy"
+              id="btn-privacy-policy"
+              class="options-btn"
+              href="https://synups-3b038.web.app/"
+              target="_blank"
+              rel="noopener"
+              >Politique de confidentialité</a
+            >
+          </div>
+
           <div class="options-section">
             <span data-i18n="misc.donnees" class="options-label">Données</span>
             <button data-i18n="btn-reset-save" id="btn-reset-save" class="options-btn options-btn--danger">Réinitialiser le jeu</button>
