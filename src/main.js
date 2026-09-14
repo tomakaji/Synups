@@ -115,6 +115,7 @@ import {
   resetMeditateProgress,
   isStoryMasteryUnlocked,
   markStoryMasteryUnlocked,
+  sanitizePlayerText,
 } from "./game/storage.js";
 import {
   listLevels,
@@ -1492,7 +1493,11 @@ async function maybeAdoptPlayGamesPseudo() {
   if (!isPlayGamesSignedIn()) return;
   const profile = loadProfile();
   if (profile?.pseudo?.trim()) return;
-  const displayName = await getPlayGamesDisplayName();
+  // Sanitisé comme tout pseudo saisi à la main (voir sanitizeInputInPlace/
+  // storage.js: sanitizePlayerText) — le nom Google Play Games peut contenir
+  // des chiffres/symboles qu'on ne veut pas voir ressortir publiquement dans
+  // la Communauté, même quand il n'est pas tapé par le joueur lui-même.
+  const displayName = sanitizePlayerText(await getPlayGamesDisplayName());
   if (!displayName) return;
   updateProfile({ pseudo: displayName });
   syncMyAuthorEverywhere();
@@ -3098,6 +3103,25 @@ function renderProfileLikedPage() {
   if (pager) profileLikedPagerEl.appendChild(pager);
 }
 
+/** Filtre EN PLACE un <input> texte selon sanitizePlayerText (storage.js) —
+ * retour utilisateur (round publication): pseudo ET titre de grille (voir
+ * editor.js) sont les deux seuls champs libres visibles par d'autres
+ * joueurs, donc les deux passent par ce même filtre. Préserve la position
+ * du curseur (compte les caractères retirés AVANT le curseur pour la
+ * décaler d'autant) plutôt qu'un simple `input.value = sanitizé` qui
+ * renverrait toujours le curseur en fin de champ — gênant dès qu'on corrige
+ * un caractère au milieu d'un pseudo déjà long. */
+function sanitizeInputInPlace(input) {
+  const { value, selectionStart } = input;
+  const sanitized = sanitizePlayerText(value);
+  if (sanitized === value) return;
+  const before = value.slice(0, selectionStart ?? value.length);
+  const removed = before.length - sanitizePlayerText(before).length;
+  input.value = sanitized;
+  const pos = Math.max(0, (selectionStart ?? sanitized.length) - removed);
+  input.setSelectionRange(pos, pos);
+}
+
 // ---------- Pseudo: texte cliquable (lecture) <-> input + bouton check
 // (édition) — retour utilisateur round 19: "pas de bouton enregistrer,
 // cliquer sur un choix suffit [...] un simple texte cliquable [...] un
@@ -3143,10 +3167,15 @@ btnProfilePseudoConfirm.addEventListener("click", commitPseudo);
 profilePseudoInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") commitPseudo();
 });
-// Prévisualisation en direct dès que le pseudo est tapé, avant même la
-// validation par le bouton check (retour utilisateur round 18, toujours
-// valable round 19 malgré la disparition du bouton Enregistrer).
-profilePseudoInput.addEventListener("input", refreshProfileBadgePreview);
+// Retour utilisateur (round publication): "n'autoriser que les caractères
+// alphabétiques + accents + espace" sur le pseudo — voir storage.js:
+// sanitizePlayerText pour le pourquoi (empêche URL/email/téléphone glissés
+// dans un champ public). Filtré EN DIRECT (pas seulement à la validation)
+// pour que le joueur voie tout de suite le caractère refusé disparaître.
+profilePseudoInput.addEventListener("input", () => {
+  sanitizeInputInPlace(profilePseudoInput);
+  refreshProfileBadgePreview();
+});
 
 // Mode Admin [dev uniquement] — voir admin.js pour la justification du
 // `if (import.meta.env.DEV)` (élimination du bundle de prod). Round 17

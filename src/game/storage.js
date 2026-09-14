@@ -392,3 +392,28 @@ export function updateProfile(partial) {
   saveProfile(next);
   return next;
 }
+
+// Retour utilisateur (round publication): "un adulte mal intentionné
+// pourrait très bien mettre une URL ou un email/téléphone en pseudo ou en
+// titre de grille [...] on ne va autoriser que les caractères
+// alphabétiques + accents + espace et interdire les signes spéciaux" — vise
+// deux champs saisis librement puis affichés PUBLIQUEMENT à d'autres
+// joueurs (pseudo, voir main.js: commitPseudo ; titre de grille, voir
+// editor.js: nameInput/publishTitleInput), le seul texte libre visible par
+// des inconnus dans toute l'app (le reste du contenu généré par les
+// joueurs, ex. les grilles elles-mêmes, n'est que des cases de jeu, pas du
+// texte). En interdisant TOUT caractère qui n'est pas une lettre (accents
+// inclus, `\p{L}` couvre é/à/ç/etc. dans n'importe quelle langue) ou un
+// espace, on élimine mécaniquement chiffres, @, ., /, :, - et donc toute
+// URL/email/numéro de téléphone qui pourrait s'y glisser — pas la peine
+// d'essayer de détecter spécifiquement des motifs d'URL/email au cas par
+// cas (toujours contournables), l'interdiction est plus large et plus sûre.
+// Appliquée en direct pendant la saisie (voir les `addEventListener("input"...)`
+// correspondants) plutôt qu'au moment de valider : le joueur voit tout de
+// suite le caractère refusé disparaître, jamais de message d'erreur après
+// coup sur un champ qu'il pensait déjà rempli correctement.
+const ALLOWED_PLAYER_TEXT_RE = /[^\p{L}\s]/gu;
+
+export function sanitizePlayerText(value) {
+  return String(value ?? "").replace(ALLOWED_PLAYER_TEXT_RE, "");
+}

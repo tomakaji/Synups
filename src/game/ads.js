@@ -7,16 +7,31 @@
 //
 // Round 20 (retour utilisateur: "j'ai un compte firebase et un compte
 // AdMob"): un vrai compte AdMob a été créé (app + ad unit rewarded, pour les
-// deux plates-formes) — voir REAL_APP_ID/REAL_REWARDED_AD_UNIT_ID plus bas,
-// gardés de côté pour plus tard. Retour utilisateur juste après: "l'app
-// n'est pas terminée [...] on remet les ID de test", donc ce sont bien les
-// IDs de TEST publics de Google qui sont actifs ci-dessous tant que l'app
-// est en développement — pour ne jamais afficher de vraies pubs (ni générer
-// de faux revenus) avant que le jeu soit prêt à publier. APP_ID n'est pas
-// consommé par ce fichier (le SDK natif le lit directement depuis
-// android/app/src/main/AndroidManifest.xml et ios/App/App/Info.plist — 2
-// AUTRES endroits à garder en synchro avec celui-ci, jamais l'un sans
-// l'autre), gardé ici uniquement comme rappel/source de vérité.
+// deux plates-formes) — voir REAL_APP_ID/REAL_REWARDED_AD_UNIT_ID plus bas.
+// Retour utilisateur juste après: "l'app n'est pas terminée [...] on remet
+// les ID de test", donc les IDs de TEST sont restés actifs un moment. APP_ID
+// n'est pas consommé par ce fichier (le SDK natif le lit directement depuis
+// android/app/src/main/AndroidManifest.xml), gardé ici uniquement comme
+// rappel/source de vérité — à garder en synchro avec ce fichier, jamais
+// l'un sans l'autre.
+//
+// Round publication (retour utilisateur: "est-ce que j'ai légalement le
+// droit d'utiliser les vrais ID en dev ?") — RÉPONSE: pas d'interdiction
+// légale, mais les règles AdMob (invalid traffic policy) interdisent de
+// générer soi-même des impressions/clics sur ses PROPRES annonces réelles,
+// sous peine de suspension du compte AdMob entier. La méthode officielle
+// pour tester en toute sécurité avec de VRAIS ad units, sans ce risque :
+// déclarer son propre appareil comme "testing device" (voir
+// AdMob.initialize() plus bas, TESTING_DEVICE_IDS) — Google sait alors que
+// CET appareil ne doit recevoir que des pubs de test (aucun revenu, aucun
+// risque de trafic invalide), alors que tous les autres joueurs reçoivent
+// de vraies pubs normalement. Voir
+// https://developers.google.com/admob/android/test-ads#enable_test_devices.
+// Ad unit RÉEL disponible pour le rewarded uniquement pour l'instant (voir
+// REAL_REWARDED_AD_UNIT_ID) — désormais ACTIF. Interstitiel/bandeau restent
+// sur les IDs de TEST publics Google : aucun ad unit réel n'a encore été
+// créé pour ces deux formats dans la console AdMob (à faire avant de les
+// basculer à leur tour, même principe que le rewarded ci-dessous).
 //
 // Ce module ne fait RIEN (no-op silencieux) tant qu'on n'est pas dans une
 // coquille Capacitor native (voir Capacitor.isNativePlatform()) — le jeu
@@ -66,22 +81,19 @@ import { isAdminModeOn } from "../admin.js";
 //     prepareInterstitial/showInterstitialAd plus bas), format différent du
 //     rewarded, avec son propre ad unit AdMob.
 
-// IDs de TEST publics Google — les mêmes pour tous les développeurs,
-// n'affichent jamais de vraie pub ni ne génèrent de revenu. ACTIFS tant que
-// l'app est en dev (voir en-tête de fichier).
+// Publication Android uniquement pour l'instant (retour utilisateur: "on
+// oublie tout ce qui est iOS") — seul android/app/src/main/AndroidManifest.xml
+// a été reporté sur le vrai App ID ci-dessous ; ios/App/App/Info.plist est
+// resté sur l'ID de test, laissé tel quel puisque iOS n'est pas dans le
+// scope de publication actuel.
 const APP_ID = {
-  android: "ca-app-pub-3940256099942544~3347511713",
+  android: "ca-app-pub-4606745726023654~5350590056",
   ios: "ca-app-pub-3940256099942544~1458002511",
 };
 
-// IDs RÉELS créés dans la console AdMob (compte de l'utilisateur) — mis de
-// côté pour le jour où l'app sera prête à publier. Pour les réactiver: dans
-// ce fichier, remplacer APP_ID par REAL_APP_ID et REWARDED_AD_UNIT_ID par
-// REAL_REWARDED_AD_UNIT_ID (ou inversement pour repasser en test), ET
-// reporter REAL_APP_ID dans android/app/src/main/AndroidManifest.xml
-// (meta-data com.google.android.gms.ads.APPLICATION_ID) et
-// ios/App/App/Info.plist (GADApplicationIdentifier) — puis retirer
-// isTesting/initializeForTesting plus bas (voir prepareRewarded/initAds).
+// Alias conservé pour lisibilité (voir usages ci-dessous) — mêmes valeurs
+// que APP_ID.android, gardées côte à côte pour qu'on retrouve facilement
+// "quel est le vrai ID" si jamais on doit revenir en arrière temporairement.
 const REAL_APP_ID = {
   android: "ca-app-pub-4606745726023654~5350590056",
   ios: "ca-app-pub-4606745726023654~8047186954",
@@ -91,14 +103,13 @@ const REAL_REWARDED_AD_UNIT_ID = {
   ios: "ca-app-pub-4606745726023654/5421023615",
 };
 
-// Rewarded (vidéo récompensée) — seul format branché pour l'instant (voir
-// sommation.js: "regarder une pub pour regagner des points", le seul retour
-// utilisateur explicite sur les pubs à ce jour). Bannière/interstitiel: pas
-// demandés, pas ajoutés — inutile d'alourdir ce module avec des formats non
-// utilisés par l'app. IDs de TEST publics Google — voir REAL_REWARDED_AD_UNIT_ID
-// ci-dessus pour les vrais (bloc AdMob "Remember - pub récompensée", 200 points).
+// Rewarded (vidéo récompensée) — seul format avec un ad unit RÉEL créé côté
+// AdMob pour l'instant (bloc "Remember - pub récompensée", 200 points),
+// désormais ACTIF (voir en-tête de fichier: TESTING_DEVICE_IDS protège
+// l'appareil du développeur pendant les tests, sans empêcher les vraies
+// pubs/le vrai revenu pour les autres joueurs).
 const REWARDED_AD_UNIT_ID = {
-  android: "ca-app-pub-3940256099942544/5224354917",
+  android: "ca-app-pub-4606745726023654/4798207082",
   ios: "ca-app-pub-3940256099942544/1712485313",
 };
 
@@ -129,6 +140,20 @@ const BANNER_AD_UNIT_ID = {
   android: "ca-app-pub-3940256099942544/6300978111",
   ios: "ca-app-pub-3940256099942544/2934735716",
 };
+
+// Appareil(s) du développeur à déclarer comme "testing device" AdMob (voir
+// en-tête de fichier) — laisser VIDE tant que tu n'as pas encore récupéré
+// l'ID. Pour l'obtenir : lance l'app une fois sur ton téléphone (build
+// natif, pas le navigateur), puis regarde le logcat Android au moment où
+// une pub réelle essaie de se charger — Google affiche une ligne du genre
+// "Use new RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList(
+// "33BE2250B43518CCDA7DE426D04EE231"))" avec l'ID EXACT de ton appareil.
+// Ajoute-le ici avant de rejouer sur ce même téléphone pour ne jamais
+// risquer de trafic invalide sur tes propres vraies pubs (voir en-tête de
+// fichier). Aucun risque à laisser vide en attendant : sans ID déclaré,
+// AdMob.initialize() ci-dessous n'a simplement personne à mettre en mode
+// test.
+const TESTING_DEVICE_IDS = [];
 
 let initPromise = null;
 let rewardedReady = false;
@@ -186,7 +211,12 @@ function prepareRewarded() {
   if (!Capacitor.isNativePlatform()) return Promise.resolve();
   if (preparingRewarded) return preparingRewarded;
   rewardedReady = false;
-  preparingRewarded = AdMob.prepareRewardVideoAd({ adId: rewardedAdUnitId(), isTesting: true })
+  // Pas de `isTesting: true` ici (contrairement à interstitiel/bandeau plus
+  // bas) : cet ad unit est désormais le VRAI (voir REWARDED_AD_UNIT_ID) —
+  // `isTesting: true` forcerait une pub de test pour TOUT le monde, ce qui
+  // annulerait le passage en réel. La protection du développeur passe par
+  // TESTING_DEVICE_IDS (voir initAds ci-dessus), pas par ce flag.
+  preparingRewarded = AdMob.prepareRewardVideoAd({ adId: rewardedAdUnitId() })
     .then(() => {
       rewardedReady = true;
     })
@@ -261,10 +291,13 @@ export function initAds() {
       AdMob.requestTrackingAuthorization().catch(() => {})
     )
     .then(() =>
-      // initializeForTesting: true — app en dev (voir en-tête de fichier),
-      // évite qu'un device de test reçoive de vraies pubs par erreur avant
-      // publication. À retirer en même temps que le passage aux vrais IDs.
-      AdMob.initialize({ initializeForTesting: true })
+      // initializeForTesting + testingDevices (voir en-tête de fichier et
+      // TESTING_DEVICE_IDS ci-dessus) : SEULS les appareils listés dans
+      // TESTING_DEVICE_IDS reçoivent des pubs de test — tous les autres
+      // joueurs reçoivent de vraies pubs (vrai revenu) normalement. C'est
+      // la méthode recommandée par Google pour tester avec de vrais ad
+      // units sans jamais générer de trafic invalide sur son propre compte.
+      AdMob.initialize({ initializeForTesting: true, testingDevices: TESTING_DEVICE_IDS })
     )
     .then(() => Promise.all([prepareRewarded(), prepareInterstitial()]))
     .catch(() => {

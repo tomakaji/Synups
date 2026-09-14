@@ -27,12 +27,30 @@ import {
   getAvatarSvg,
   getPublishesRemainingToday,
 } from "./game/community-store.js";
-import { loadProfile } from "./game/storage.js";
+import { loadProfile, sanitizePlayerText } from "./game/storage.js";
 import { trackEvent } from "./game/analytics.js";
 
 const STORAGE_KEY = "lightup_custom_levels";
 const MAX_SIZE = 16;
 const MIN_SIZE = 1;
+
+/** Filtre EN PLACE un <input> texte selon sanitizePlayerText (storage.js) —
+ * même helper que main.js (voir son commentaire pour le détail) puisque
+ * l'éditeur est un module séparé : dupliqué à l'identique plutôt que
+ * partagé pour rester cohérent avec le reste du fichier (pas d'import
+ * croisé main.js <-> editor.js ailleurs dans le projet). Préserve la
+ * position du curseur au lieu de la renvoyer systématiquement en fin de
+ * champ. */
+function sanitizeInputInPlace(input) {
+  const { value, selectionStart } = input;
+  const sanitized = sanitizePlayerText(value);
+  if (sanitized === value) return;
+  const before = value.slice(0, selectionStart ?? value.length);
+  const removed = before.length - sanitizePlayerText(before).length;
+  input.value = sanitized;
+  const pos = Math.max(0, (selectionStart ?? sanitized.length) - removed);
+  input.setSelectionRange(pos, pos);
+}
 
 // Icônes du bouton Tester/Éditer (voir index.html: markup initial identique
 // à PLAY_ICON) — permutées via innerHTML plutôt que deux <svg> imbriqués,
@@ -549,8 +567,13 @@ export function initEditor({ levels, onPublished }) {
 
   // Le nom n'est plus obligatoire pour aucune action (voir plus haut) — on
   // laisse simplement le champ vide tel quel plutôt que de retomber sur un
-  // nom générique qui masquerait l'absence de nom réel.
+  // nom générique qui masquerait l'absence de nom réel. Retour utilisateur
+  // (round publication): "n'autoriser que les caractères alphabétiques +
+  // accents + espace" — ce nom finit pré-rempli dans le titre de
+  // publication (voir openPublishModal plus bas), donc filtré dès ici (voir
+  // sanitizeInputInPlace/storage.js: sanitizePlayerText).
   nameInput.addEventListener("input", () => {
+    sanitizeInputInPlace(nameInput);
     editLevel.name = nameInput.value;
   });
 
@@ -721,6 +744,9 @@ export function initEditor({ levels, onPublished }) {
   }
 
   publishTitleInput.addEventListener("input", () => {
+    // Retour utilisateur (round publication): même filtre que le pseudo
+    // (main.js) — voir sanitizeInputInPlace/storage.js: sanitizePlayerText.
+    sanitizeInputInPlace(publishTitleInput);
     if (publishTitleInput.value.trim()) publishTitleInput.classList.remove("input-error", "input-error--shake");
   });
 

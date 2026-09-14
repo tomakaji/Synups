@@ -35,18 +35,16 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
 
-        <!-- Round 20 (migration Capacitor/AdMob): App ID de TEST public
-             Google (voir src/game/ads.js: APP_ID.android) — actif tant que
-             l'app est en dev (retour utilisateur: "l'app n'est pas
-             terminée, on remet les ID de test"). Le vrai App ID
-             (ca-app-pub-4606745726023654~5350590056, voir ads.js:
-             REAL_APP_ID) est gardé de côté pour la publication : à reporter
-             ici ET dans ios/App/App/Info.plist en même temps, jamais l'un
-             sans l'autre. Sans ce meta-data (test ou réel), le SDK Google
-             Mobile Ads plante au démarrage. -->
+        <!-- Round publication (Android uniquement, retour utilisateur: "on
+             oublie tout ce qui est iOS") — vrai App ID AdMob (voir
+             src/game/ads.js: APP_ID.android/REAL_APP_ID), à garder en
+             synchro avec ce fichier si jamais l'ID change côté console
+             AdMob. ios/App/App/Info.plist est resté sur l'ID de test :
+             non pertinent tant qu'iOS n'est pas publié. Sans ce meta-data,
+             le SDK Google Mobile Ads plante au démarrage. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-4606745726023654~5350590056" />
 
         <!-- Google Play Games Services (voir strings.xml: games_app_id pour
              le détail du placeholder à remplacer, et playGamesServices.js

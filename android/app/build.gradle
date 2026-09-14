@@ -18,7 +18,18 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
+            // Retour utilisateur: "active la minification Android" — R8
+            // (minifyEnabled) réduit/obfusque le code Java/Kotlin ET les
+            // ressources inutilisées (shrinkResources, activable seulement
+            // avec minifyEnabled) avant publication. Sans effet sur le JS du
+            // jeu lui-même (chargé depuis android/app/src/main/assets/public,
+            // jamais touché par R8/ProGuard) — seule la coquille
+            // Capacitor/plugins natifs est concernée. Les plugins Capacitor
+            // utilisés (AdMob, Play Games...) embarquent leurs propres règles
+            // de conservation (consumer-rules.pro dans leur AAR), pas besoin
+            // d'ajouter quoi que ce soit à la main dans proguard-rules.pro.
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
