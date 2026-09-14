@@ -104,7 +104,7 @@ const REAL_REWARDED_AD_UNIT_ID = {
 };
 
 // Rewarded (vidéo récompensée) — seul format avec un ad unit RÉEL créé côté
-// AdMob pour l'instant (bloc "Remember - pub récompensée", 200 points),
+// AdMob pour l'instant (bloc "Remember - pub récompensée", 75 points),
 // désormais ACTIF (voir en-tête de fichier: TESTING_DEVICE_IDS protège
 // l'appareil du développeur pendant les tests, sans empêcher les vraies
 // pubs/le vrai revenu pour les autres joueurs).

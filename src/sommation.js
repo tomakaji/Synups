@@ -151,7 +151,7 @@ function genCost() {
 // vraie intégration publicitaire. Solde partagé avec le mode Infini: cette
 // valeur reste utile même après le passage au coût fixe de 1pt/génération
 // (round 8) puisqu'elle peut aussi être drainée depuis Infini.
-const AD_WATCH_REWARD = 200;
+const AD_WATCH_REWARD = 75;
 
 // ---------- Objectifs: 50 objectifs progressifs + 1 objectif final ----------
 // Round 19 (retour utilisateur): "les objectifs doivent être prévus en dur,
@@ -1111,7 +1111,7 @@ export function initSommation(pointsApi) {
     setAdStatus(null);
     if (adWatchBtn) {
       adWatchBtn.disabled = false;
-      adWatchBtn.textContent = "Regarder la pub (+200)";
+      adWatchBtn.textContent = "Regarder la pub (+75)";
     }
     adModalEl?.classList.remove("hidden");
   }
@@ -1983,7 +1983,7 @@ export function initSommation(pointsApi) {
         return;
       }
       adWatchBtn.disabled = false;
-      adWatchBtn.textContent = "Regarder la pub (+200)";
+      adWatchBtn.textContent = "Regarder la pub (+75)";
       setAdStatus(
         reason === "unavailable"
           ? "Pas de pub disponible pour l'instant — réessaie dans un instant."
