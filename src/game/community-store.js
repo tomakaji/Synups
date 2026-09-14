@@ -593,10 +593,15 @@ export async function syncAuthorToPublishedLevels(author) {
   if (snapshot.empty) return;
   const batch = writeBatch(db);
   snapshot.docs.forEach((d) => batch.update(d.ref, { author }));
-  await batch.commit().catch(() => {
-    // Best-effort: un échec réseau laisse simplement les grilles avec
-    // l'ancien auteur jusqu'au prochain changement de profil ou prochain
-    // appel explicite — jamais bloquant pour le joueur.
+  await batch.commit().catch((err) => {
+    // Best-effort: un échec réseau (ou de permission Firestore — voir
+    // firestore.rules: isOwnerAuthorUpdate(), rappel qu'une modif de CE
+    // fichier ne suffit pas, il faut aussi la republier dans la console
+    // Firebase) laisse simplement les grilles avec l'ancien auteur jusqu'au
+    // prochain changement de profil ou prochain appel explicite — jamais
+    // bloquant pour le joueur, mais on logue pour pouvoir diagnostiquer
+    // depuis la console du navigateur/Capacitor plutôt qu'en silence total.
+    console.warn("[community] échec sync auteur sur grilles publiées:", err?.code ?? err);
   });
 }
 

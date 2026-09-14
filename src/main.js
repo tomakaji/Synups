@@ -502,6 +502,25 @@ function renderTitleStoryProgress() {
   const fraction = total > 0 ? storyProgress.size / total : 0;
   storyProgressFillEl.style.width = `${Math.round(fraction * 100)}%`;
   storyProgressTextEl.textContent = `${storyProgress.size} / ${total}`;
+  updateFeaturedModeCard();
+}
+
+/** Retour utilisateur: "le bouton Jouer doit prendre davantage le regard du
+ * joueur que les autres [...] une fois le mode Jouer terminé, on change
+ * cette mise en avant pour montrer plutot le mode Arcade" — Jouer (Histoire)
+ * est LE mode principal tant que la campagne n'est pas finie ; une fois les
+ * `levels.length` niveaux tous réussis (même critère que la barre de
+ * progression ci-dessus), le regard du joueur n'a plus de raison d'être
+ * attiré là (il n'y a plus rien à y débloquer) donc on bascule la mise en
+ * avant sur Arcade (mode "à volonté", le plus proche substitut). */
+function isStoryComplete() {
+  return levels.length > 0 && storyProgress.size >= levels.length;
+}
+
+function updateFeaturedModeCard() {
+  const storyDone = isStoryComplete();
+  menuStoryBtn.classList.toggle("menu-card--featured", !storyDone);
+  menuInfiniteBtn.classList.toggle("menu-card--featured", storyDone);
 }
 
 // ---------- Points (gagnés en Infini, dépensés dans Remember) ----------
@@ -4286,6 +4305,8 @@ renderDailyChallengeButton();
  * par le menu titre (voir showView: name === "title") — jamais figée sur un
  * état périmé, même principe que renderDailyChallengeButton/
  * renderTitleProfileBanner ci-dessus. */
+const menuStoryBtn = document.getElementById("menu-story");
+const menuInfiniteBtn = document.getElementById("menu-infinite");
 const menuRememberBtn = document.getElementById("menu-remember");
 const menuRememberDoneBadgeEl = document.getElementById("menu-remember-done-badge");
 const menuMeditateBtn = document.getElementById("menu-meditate");
@@ -4301,8 +4322,8 @@ function renderModeMenuButtons() {
   menuMeditateDoneBadgeEl?.classList.toggle("hidden", !meditateDone);
 }
 
-document.getElementById("menu-story").onclick = enterStoryDirect;
-document.getElementById("menu-infinite").onclick = enterInfiniteDirect;
+menuStoryBtn.onclick = enterStoryDirect;
+menuInfiniteBtn.onclick = enterInfiniteDirect;
 document.getElementById("menu-community").onclick = () => pushView("community");
 menuRememberBtn.onclick = enterRememberDirect;
 // Garde-fou (voir renderModeMenuButtons): #menu-meditate est désactivé une

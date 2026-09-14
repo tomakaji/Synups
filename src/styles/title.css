@@ -353,3 +353,27 @@
   color: #ffd76e;
 }
 
+/* Retour utilisateur: "le bouton Jouer doit prendre davantage le regard du
+   joueur que les autres [...] une fois le mode Jouer terminé, on change
+   cette mise en avant pour montrer plutot le mode Arcade" — classe
+   dynamique (voir main.js: updateFeaturedModeCard) posée sur #menu-story
+   PUIS sur #menu-infinite selon la progression Histoire, jamais les deux à
+   la fois. Teinte orange volontairement inédite dans le menu pour ne pas
+   empiéter sur les codes couleur déjà pris (cyan = Étoiles/accent/
+   Remember, jaune = Énergie/Meditate, vert = succès/"Terminé", rouge =
+   erreur) : "un peu différente" pour attirer l'œil, "pas trop" pour rester
+   dans la même famille de cartes teintées que Remember/Meditate ci-dessus
+   plutôt qu'un traitement radicalement différent. */
+.menu-card--featured {
+  border-color: rgba(255, 158, 87, 0.4);
+  background: linear-gradient(135deg, rgba(255, 158, 87, 0.12), var(--panel) 75%);
+}
+
+.menu-card--featured:hover {
+  border-color: #ff9e57;
+}
+
+.menu-card--featured .menu-card-icon {
+  color: #ff9e57;
+}
+
