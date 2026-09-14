@@ -142,18 +142,12 @@ const BANNER_AD_UNIT_ID = {
 };
 
 // Appareil(s) du développeur à déclarer comme "testing device" AdMob (voir
-// en-tête de fichier) — laisser VIDE tant que tu n'as pas encore récupéré
-// l'ID. Pour l'obtenir : lance l'app une fois sur ton téléphone (build
-// natif, pas le navigateur), puis regarde le logcat Android au moment où
-// une pub réelle essaie de se charger — Google affiche une ligne du genre
-// "Use new RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList(
-// "33BE2250B43518CCDA7DE426D04EE231"))" avec l'ID EXACT de ton appareil.
-// Ajoute-le ici avant de rejouer sur ce même téléphone pour ne jamais
-// risquer de trafic invalide sur tes propres vraies pubs (voir en-tête de
-// fichier). Aucun risque à laisser vide en attendant : sans ID déclaré,
-// AdMob.initialize() ci-dessous n'a simplement personne à mettre en mode
-// test.
-const TESTING_DEVICE_IDS = [];
+// en-tête de fichier) — récupéré dans le logcat Android (voir ce même
+// commentaire, historique de la conversation) au premier lancement natif.
+// Un seul appareil déclaré pour l'instant (celui du développeur) ; en
+// ajouter un autre ici (simple virgule) le jour où quelqu'un d'autre doit
+// tester avec de vraies pubs sans risquer du trafic invalide.
+const TESTING_DEVICE_IDS = ["6BB3EF5DE4700E07B0C747FF4FAD2EB8"];
 
 let initPromise = null;
 let rewardedReady = false;
