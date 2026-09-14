@@ -13,3 +13,4 @@ ios/App/Pods
 *serviceAccount*.json
 *service-account*.json
 firebase-adminsdk-*.json
+.firebase
