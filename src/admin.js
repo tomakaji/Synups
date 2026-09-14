@@ -111,3 +111,60 @@ export function mountAdminButton(mount, label, title, onClick) {
   onAdminModeChange(sync);
   sync();
 }
+
+/**
+ * Crée un "potard" (input range) de test/réglage — retour utilisateur: "un
+ * potard pour que je teste en direct d'autres réglages" (voir music.js:
+ * setBaseVarietyGain/setBaseVarietyRange/setBaseVarietyPeriod, premier
+ * usage de cette fonction). Même visibilité conditionnelle que
+ * `mountAdminButton` ci-dessus (classes `.admin-only-btn`/`--visible`,
+ * voir mode-infinite.css — réutilisées ici pour un <label>, pas un
+ * <button>, ces deux classes ne font que masquer/afficher, indépendamment
+ * du type d'élément).
+ *
+ * `opts`: { min, max, step, value, format? } — `format` (optionnel) reçoit
+ * la valeur numérique courante et retourne le texte affiché à côté du
+ * potard (ex: `(v) => v.toFixed(0) + " Hz"`); par défaut, la valeur brute.
+ * `onInput` reçoit la valeur numérique à chaque déplacement du potard.
+ * Retourne l'élément <input> (pour pouvoir le resynchroniser depuis
+ * l'appelant, ex: un bouton "Réinitialiser" qui remet aussi le potard à sa
+ * position par défaut).
+ */
+export function mountAdminSlider(mount, label, opts, onInput) {
+  const host = typeof mount === "string" ? document.querySelector(mount) : mount;
+  if (!host) return null;
+  const { min, max, step = 1, value, format } = opts;
+  const wrap = document.createElement("label");
+  wrap.className = "som-debug-slider admin-only-btn";
+
+  const text = document.createElement("span");
+  text.className = "som-debug-slider-label";
+  text.textContent = label;
+
+  const input = document.createElement("input");
+  input.type = "range";
+  input.min = String(min);
+  input.max = String(max);
+  input.step = String(step);
+  input.value = String(value);
+
+  const readout = document.createElement("span");
+  readout.className = "som-debug-slider-value";
+  const renderReadout = (v) => (readout.textContent = format ? format(v) : String(v));
+  renderReadout(value);
+
+  input.oninput = () => {
+    const v = Number(input.value);
+    renderReadout(v);
+    onInput(v);
+  };
+
+  wrap.appendChild(text);
+  wrap.appendChild(input);
+  wrap.appendChild(readout);
+  host.appendChild(wrap);
+  const sync = () => wrap.classList.toggle("admin-only-btn--visible", enabled);
+  onAdminModeChange(sync);
+  sync();
+  return input;
+}
