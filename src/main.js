@@ -134,16 +134,22 @@ import {
   onLevelsChanged,
   syncAuthorToPublishedLevels,
 } from "./game/community-store.js";
-import { t, applyI18n } from "./game/i18n.js";
+import { t, applyI18n, setLocale, detectSystemLocale } from "./game/i18n.js";
 
 // i18n (retour utilisateur: "il faut extraire tous les textes dans un
-// endroit et les utiliser via des clés") — TOUT PREMIER appel du fichier,
-// avant même le reste de l'init: <script type="module"> est différé par le
-// navigateur (comme `defer`), donc le HTML de index.html est déjà entièrement
-// parsé ici — pas besoin d'attendre un DOMContentLoaded. Écrase le texte
-// français déjà présent dans index.html (data-i18n/data-i18n-attr) par
-// celui de fr.js: à partir d'ici, fr.js est la SEULE source de vérité pour
-// tout texte statique — voir game/i18n.js pour le détail du mécanisme.
+// endroit et les utiliser via des clés" puis, une fois les 11 langues
+// traduites: "intégrer les traductions dans les autres langues avec i18n")
+// — TOUT PREMIER appel du fichier, avant même le reste de l'init:
+// <script type="module"> est différé par le navigateur (comme `defer`),
+// donc le HTML de index.html est déjà entièrement parsé ici — pas besoin
+// d'attendre un DOMContentLoaded. setLocale(detectSystemLocale()) choisit la
+// langue selon celle du système/navigateur (aucune UI de sélection de
+// langue dans l'app — voir game/i18n.js) AVANT applyI18n(), qui écrase le
+// texte français déjà présent dans index.html (data-i18n/data-i18n-attr)
+// par celui de la langue active: à partir d'ici, locales/<code>.js est la
+// SEULE source de vérité pour tout texte statique — voir game/i18n.js pour
+// le détail du mécanisme.
+setLocale(detectSystemLocale());
 applyI18n();
 
 // ---------- Écran de démarrage (calque de fondu) ----------

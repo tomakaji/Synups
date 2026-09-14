@@ -1,14 +1,17 @@
 // i18n — retour utilisateur: "il faut extraire tous les textes dans un
 // endroit et les utiliser via des clés [...] pour l'instant on ne fait pas
 // les traductions dans les autres langues (on reste en français
-// uniquement), je te demanderai plus tard pour tout traduire".
+// uniquement), je te demanderai plus tard pour tout traduire" — puis,
+// plus tard: "j'ai changé le wording dans locales/fr.js [...] tu peux
+// intégrer les traductions dans les autres langues avec i18n" (11 langues
+// au total, ciblant les principaux marchés Google Play — voir locales/).
 //
-// Architecture volontairement minimale (pas de librairie externe) puisqu'une
-// SEULE langue est active pour l'instant — mais déjà prête à en accueillir
-// d'autres plus tard SANS retoucher l'appelant (main.js/sommation.js/
-// editor.js/community-store.js n'appellent jamais fr.js directement, jamais
-// une chaîne en dur: tout passe par t()/applyI18n() ci-dessous, exactement
-// comme storage.js est le seul endroit à connaître localStorage).
+// Architecture volontairement minimale (pas de librairie externe) — chaque
+// langue est un dictionnaire plat dans locales/<code>.js, listé ci-dessous
+// dans LOCALES. main.js/sommation.js/editor.js/community-store.js n'appellent
+// jamais un fichier de langue directement, jamais une chaîne en dur: tout
+// passe par t()/applyI18n() ci-dessous, exactement comme storage.js est le
+// seul endroit à connaître localStorage).
 //
 // Trois façons d'utiliser une clé, selon d'où vient le texte:
 //   1. Texte STATIQUE dans index.html: attribut `data-i18n="clé"` sur
@@ -33,27 +36,47 @@
 // (Ctrl+F sur une clé) qu'une arborescence, largement suffisant pour la
 // taille de cette app.
 import { fr } from "./locales/fr.js";
+import { en } from "./locales/en.js";
+import { es } from "./locales/es.js";
+import { pt } from "./locales/pt.js";
+import { de } from "./locales/de.js";
+import { it } from "./locales/it.js";
+import { ja } from "./locales/ja.js";
+import { ko } from "./locales/ko.js";
+import { ru } from "./locales/ru.js";
+import { zh } from "./locales/zh.js";
+import { ar } from "./locales/ar.js";
+import { tr } from "./locales/tr.js";
 
-// Une seule langue active pour l'instant (voir en-tête de fichier) — LOCALES
-// existe déjà comme un vrai dictionnaire {code: dict} plutôt qu'un simple
-// alias vers `fr`, pour que l'ajout d'une 2e langue plus tard n'exige de
-// toucher QUE locales/ + cette liste, jamais i18n.js lui-même ni les
-// appelants.
-const LOCALES = { fr };
+// LOCALES est un vrai dictionnaire {code: dict} (pas un simple alias vers
+// `fr`), pour que l'ajout d'une future langue n'exige de toucher QUE
+// locales/ + cette liste, jamais i18n.js lui-même ni les appelants. fr reste
+// la langue par défaut (celle dans laquelle le jeu a été écrit et celle du
+// public historique) — voir DEFAULT_LOCALE.
+const LOCALES = { fr, en, es, pt, de, it, ja, ko, ru, zh, ar, tr };
 const DEFAULT_LOCALE = "fr";
 let currentLocale = DEFAULT_LOCALE;
 
-/** À appeler plus tard quand d'autres langues existeront (voir
- * commentaire de tête) — pas de UI de sélection de langue pour l'instant,
- * donc jamais appelée aujourd'hui, mais l'API existe déjà pour ne pas avoir
- * à retoucher i18n.js ce jour-là. Persistance/détection de la langue du
- * système: hors scope tant qu'une seule langue est disponible. */
+/** Change la langue active — no-op silencieux si `code` n'a pas de
+ * dictionnaire dans LOCALES (comportement "best-effort" cohérent avec t()
+ * ci-dessous: jamais bloquant). */
 export function setLocale(code) {
   if (LOCALES[code]) currentLocale = code;
 }
 
 export function getLocale() {
   return currentLocale;
+}
+
+/** Détecte la langue du système/navigateur (`navigator.language`, ex.
+ * "en-US" -> "en") et retourne son code si on a un dictionnaire pour elle,
+ * sinon DEFAULT_LOCALE. Pas de UI de sélection de langue dans l'app: c'est
+ * le seul mécanisme d'activation des traductions (voir main.js, appelé une
+ * fois au démarrage juste avant applyI18n()). */
+export function detectSystemLocale() {
+  if (typeof navigator === "undefined" || !navigator.language) return DEFAULT_LOCALE;
+  const code = navigator.language.split("-")[0].toLowerCase();
+  return LOCALES[code] ? code : DEFAULT_LOCALE;
 }
 
 const INTERPOLATE_RE = /\{\{\s*(\w+)\s*\}\}/g;
