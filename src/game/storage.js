@@ -288,6 +288,13 @@ const DEFAULT_SETTINGS = {
   // du jeu (colors.js/grid.js restent inchangés), purement un calque
   // d'affichage optionnel.
   colorblindEnabled: false,
+  // Langue choisie EXPLICITEMENT par le joueur dans Options (voir main.js:
+  // sélecteur de langue, game/i18n.js) — `null` tant qu'il n'a jamais touché
+  // au sélecteur, auquel cas la langue active reste dynamiquement détectée à
+  // chaque démarrage (detectSystemLocale). Un code non-null prime TOUJOURS
+  // sur la détection, y compris si le joueur change la langue système
+  // ensuite (son choix explicite ne doit jamais être écrasé silencieusement).
+  locale: null,
 };
 
 export function loadSettings() {

@@ -23,6 +23,7 @@ export const it = {
   "btn-infinite-generate": "Genera",
   "view-options.title": "Opzioni",
   "misc.son": "Audio",
+  "misc.langue": "Lingua",
   "options-playgames-section.label": "Account Google Play",
   "btn-playgames-signin": "Accedi",
   "btn-playgames-save": "Salva",

@@ -24,6 +24,7 @@ export const ko = {
   "btn-infinite-generate": "생성하기",
   "view-options.title": "설정",
   "misc.son": "소리",
+  "misc.langue": "언어",
   "options-playgames-section.label": "Google Play 계정",
   "btn-playgames-signin": "로그인",
   "btn-playgames-save": "저장하기",

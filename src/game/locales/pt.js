@@ -20,6 +20,7 @@ export const pt = {
   "btn-infinite-generate": "Gerar",
   "view-options.title": "Opções",
   "misc.son": "Som",
+  "misc.langue": "Idioma",
   "options-playgames-section.label": "Conta Google Play",
   "btn-playgames-signin": "Entrar",
   "btn-playgames-save": "Salvar",

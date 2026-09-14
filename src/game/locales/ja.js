@@ -23,6 +23,7 @@ export const ja = {
   "btn-infinite-generate": "生成する",
   "view-options.title": "オプション",
   "misc.son": "サウンド",
+  "misc.langue": "言語",
   "options-playgames-section.label": "Google Play アカウント",
   "btn-playgames-signin": "ログイン",
   "btn-playgames-save": "保存",

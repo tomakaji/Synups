@@ -23,6 +23,7 @@ export const ar = {
   "btn-infinite-generate": "توليد",
   "view-options.title": "الإعدادات",
   "misc.son": "الصوت",
+  "misc.langue": "اللغة",
   "options-playgames-section.label": "حساب Google Play",
   "btn-playgames-signin": "تسجيل الدخول",
   "btn-playgames-save": "حفظ",

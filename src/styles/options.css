@@ -38,6 +38,30 @@
 }
 
 
+/* Sélecteur de langue (retour utilisateur: "on ajoute dans options la
+   possibilité de changer la langue") — même gabarit visuel que .options-btn
+   (voir badges.css) puisque c'est le même niveau hiérarchique dans une
+   .options-section (span.options-label + contrôle), mais un <select> natif
+   n'accepte pas flex-direction:column/gap comme .options-btn: on reprend
+   juste l'habillage (fond/bordure/rayon/police) à l'identique. */
+.options-select {
+  background: var(--panel);
+  border: 1px solid #2a3040;
+  color: var(--text);
+  padding: 14px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  width: 100%;
+  transition: border-color 0.2s;
+}
+
+.options-select:hover,
+.options-select:focus {
+  border-color: var(--accent);
+}
+
 /* Retour utilisateur: lien vers la politique de confidentialité (Firebase
    Hosting) — même gabarit visuel que .options-btn (voir index.html:
    #btn-privacy-policy), mais c'est un <a>, pas un <button> : on retire le

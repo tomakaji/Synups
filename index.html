@@ -456,6 +456,23 @@
             </div>
           </div>
 
+          <!-- Sélecteur de langue (retour utilisateur: "init en dur sur
+               l'anglais (fallback), init dynamique par la détection [...]
+               puis on ajoute dans options la possibilité de changer la
+               langue") — voir game/i18n.js: DEFAULT_LOCALE="en" n'est que le
+               filet de secours ultime, la langue effectivement active au
+               premier lancement vient de detectSystemLocale() (langue du
+               système/navigateur), et CE sélecteur permet ensuite de la
+               changer manuellement à tout moment (persisté dans
+               settings.locale, voir storage.js — prime alors sur la
+               détection). Les <option> sont peuplées dynamiquement en JS
+               (voir main.js: renderLanguageOption) depuis
+               i18n.js:getSupportedLocales(), jamais dupliquées ici en dur. -->
+          <div class="options-section">
+            <span data-i18n="misc.langue" class="options-label">Langue</span>
+            <select id="options-language-select" class="options-select"></select>
+          </div>
+
           <!-- Google Play Games Services (retour utilisateur: "pour la
                sauvegarde de la progression [...] utiliser [...] GooglePlay à
                travers l'auth qu'ils fournissent") — voir

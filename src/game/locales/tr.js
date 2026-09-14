@@ -21,6 +21,7 @@ export const tr = {
   "btn-infinite-generate": "Oluştur",
   "view-options.title": "Ayarlar",
   "misc.son": "Ses",
+  "misc.langue": "Dil",
   "options-playgames-section.label": "Google Play Hesabı",
   "btn-playgames-signin": "Giriş yap",
   "btn-playgames-save": "Kaydet",

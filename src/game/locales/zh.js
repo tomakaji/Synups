@@ -21,6 +21,7 @@ export const zh = {
   "btn-infinite-generate": "生成",
   "view-options.title": "设置",
   "misc.son": "音效",
+  "misc.langue": "语言",
   "options-playgames-section.label": "Google Play 账号",
   "btn-playgames-signin": "登录",
   "btn-playgames-save": "保存",

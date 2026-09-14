@@ -21,6 +21,7 @@ export const ru = {
   "btn-infinite-generate": "Сгенерировать",
   "view-options.title": "Настройки",
   "misc.son": "Звук",
+  "misc.langue": "Язык",
   "options-playgames-section.label": "Аккаунт Google Play",
   "btn-playgames-signin": "Войти",
   "btn-playgames-save": "Сохранить",

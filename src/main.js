@@ -134,22 +134,35 @@ import {
   onLevelsChanged,
   syncAuthorToPublishedLevels,
 } from "./game/community-store.js";
-import { t, applyI18n, setLocale, detectSystemLocale } from "./game/i18n.js";
+import { t, applyI18n, setLocale, getLocale, detectSystemLocale, isLocaleSupported, getSupportedLocales } from "./game/i18n.js";
 
 // i18n (retour utilisateur: "il faut extraire tous les textes dans un
 // endroit et les utiliser via des clés" puis, une fois les 11 langues
-// traduites: "intégrer les traductions dans les autres langues avec i18n")
-// — TOUT PREMIER appel du fichier, avant même le reste de l'init:
+// traduites: "intégrer les traductions dans les autres langues avec i18n"
+// puis enfin: "init en dur sur l'anglais (fallback), init dynamique par la
+// détection [...] puis on ajoute dans options la possibilité de changer la
+// langue") — TOUT PREMIER appel du fichier, avant même le reste de l'init:
 // <script type="module"> est différé par le navigateur (comme `defer`),
 // donc le HTML de index.html est déjà entièrement parsé ici — pas besoin
-// d'attendre un DOMContentLoaded. setLocale(detectSystemLocale()) choisit la
-// langue selon celle du système/navigateur (aucune UI de sélection de
-// langue dans l'app — voir game/i18n.js) AVANT applyI18n(), qui écrase le
-// texte français déjà présent dans index.html (data-i18n/data-i18n-attr)
-// par celui de la langue active: à partir d'ici, locales/<code>.js est la
-// SEULE source de vérité pour tout texte statique — voir game/i18n.js pour
-// le détail du mécanisme.
-setLocale(detectSystemLocale());
+// d'attendre un DOMContentLoaded.
+//
+// Résolution de la langue initiale: si le joueur a DÉJÀ choisi une langue
+// explicitement dans Options (settings.locale, voir plus bas dans ce
+// fichier: le <select> #options-language-select), ce choix prime toujours.
+// Sinon, on retombe sur la détection dynamique (detectSystemLocale, langue
+// du système/navigateur) — qui elle-même ne retombe sur l'anglais "en dur"
+// (DEFAULT_LOCALE, voir game/i18n.js) que si la langue système n'a aucune
+// traduction. loadSettings() est appelée ICI en plus de son usage habituel
+// plus bas (déclaration de `settings`) car cette résolution doit se faire
+// avant tout le reste de l'init, alors que `settings` n'existe pas encore à
+// ce stade du fichier — les deux lectures portent sur la même clé
+// localStorage, donc jamais désynchronisées.
+const savedLocale = loadSettings().locale;
+setLocale(savedLocale && isLocaleSupported(savedLocale) ? savedLocale : detectSystemLocale());
+// applyI18n() écrase le texte français déjà présent dans index.html
+// (data-i18n/data-i18n-attr) par celui de la langue active: à partir d'ici,
+// locales/<code>.js est la SEULE source de vérité pour tout texte statique
+// — voir game/i18n.js pour le détail du mécanisme.
 applyI18n();
 
 // ---------- Écran de démarrage (calque de fondu) ----------
@@ -1397,6 +1410,55 @@ if (import.meta.env.DEV) {
     renderPixelArtOption();
   });
 }
+
+// ---------- Langue ----------
+// Retour utilisateur: "init en dur sur l'anglais (fallback), init dynamique
+// par la détection [...] puis on ajoute dans options la possibilité de
+// changer la langue" — la résolution de la langue AU DÉMARRAGE est faite
+// tout en haut de ce fichier (voir savedLocale/setLocale juste après les
+// imports) ; ce <select> ne fait que permettre au joueur de la changer
+// ENSUITE, à tout moment, et persiste son choix explicite (settings.locale)
+// qui prime alors sur la détection à chaque futur démarrage.
+const languageSelect = document.getElementById("options-language-select");
+
+/** Peuple le <select> une seule fois (les langues disponibles ne changent
+ * jamais en cours de session) à partir de getSupportedLocales() — jamais de
+ * liste dupliquée en dur dans index.html, même raisonnement que le reste de
+ * cette section: LOCALES/LOCALE_NAMES (game/i18n.js) restent la SEULE source
+ * de vérité sur les langues supportées. */
+function populateLanguageSelect() {
+  languageSelect.innerHTML = "";
+  for (const { code, name } of getSupportedLocales()) {
+    const opt = document.createElement("option");
+    opt.value = code;
+    opt.textContent = name;
+    languageSelect.appendChild(opt);
+  }
+}
+populateLanguageSelect();
+
+/** Ré-exécutée à chaque affichage d'Options (voir showView), même principe
+ * que renderColorblindOption/renderPlayGamesSection ci-dessous: reflète la
+ * langue RÉELLEMENT active (pas seulement settings.locale, qui peut être
+ * `null` si le joueur n'a jamais rien choisi et que la langue vient de la
+ * détection système). */
+function renderLanguageOption() {
+  languageSelect.value = getLocale();
+}
+renderLanguageOption();
+
+languageSelect.onchange = () => {
+  const code = languageSelect.value;
+  setLocale(code);
+  settings.locale = code;
+  saveSettings(settings);
+  trackEvent("language_changed", { locale: code });
+  // Ré-applique tous les data-i18n/data-i18n-attr du document ENTIER (pas
+  // seulement l'écran Options affiché) — même mécanisme qu'au démarrage
+  // (voir tout en haut de ce fichier), pour que les autres écrans affichent
+  // déjà le bon texte dès qu'on y navigue, sans re-render dédié par écran.
+  applyI18n();
+};
 
 // ---------- Mode daltonien ----------
 // Toujours disponible (pas de déblocage, contrairement à PixelArt
@@ -3476,6 +3538,7 @@ function showView(name, opts) {
   if (name === "options") {
     renderPixelArtOption();
     renderPlayGamesSection();
+    renderLanguageOption();
   }
   // Rafraîchit la carte "Remember" du menu titre (points vs "Terminé") à
   // chaque retour — le déverrouillage de PixelArt peut survenir entre deux
