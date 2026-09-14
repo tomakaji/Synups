@@ -100,7 +100,7 @@ function currentLayerUrls() {
 }
 
 // Couches "mécanique" au sens de resetLayers/setLayerActive — n'inclut ni
-// "base" (toujours à 1, jamais dans `unlocked`) ni "echec" (gérée à part,
+// "base" (toujours à BASE_NORMAL_GAIN hors muffle, jamais dans `unlocked`) ni "echec" (gérée à part,
 // voir enterFailure/exitFailure). Les "layer2" sont des couches
 // SUPPLÉMENTAIRES qui s'ajoutent par-dessus la couche 1 correspondante à
 // partir d'un certain compte (voir MECHANIC_THRESHOLDS) — jamais un
@@ -166,6 +166,29 @@ const LAYER_ACTIVE_GAIN = {
   pyra: 0.8,
 };
 
+// Retour utilisateur: "la piste de base est un peu oppressante, parce qu'elle
+// ne varie que trop peu, qu'une seule fois, et pas longtemps [...] plus
+// variée [...] et un peu plus discrète". base.wav est une boucle de 24s figée
+// (voir `LAYER_URLS_SMOOTH`) sans script de synthèse ni stems dans ce repo
+// (voir git log — seul le wav final a jamais été commité) : on ne peut donc
+// pas ré-composer son contenu ici. Les deux leviers ci-dessous agissent
+// plutôt sur le MIX, avec ce qui existe déjà (Web Audio) :
+// - BASE_NORMAL_GAIN < 1 : la base est légèrement reculée dans le mix pour
+//   paraître plus "discrète" derrière les couches mécaniques, qui restent
+//   elles à leur gain plein/dédié (voir LAYER_ACTIVE_GAIN).
+// - `baseVarietyFilter`/LFO (voir `ensureOutputChain`) : un filtre passe-bas
+//   DÉDIÉ à la piste base, dont la coupure oscille lentement entre
+//   BASE_VARIETY_MIN_HZ et BASE_VARIETY_MAX_HZ sur une période de
+//   BASE_VARIETY_PERIOD_S secondes — le timbre de la boucle "respire"
+//   doucement en continu au lieu de rester figé identique à chaque tour,
+//   sans toucher au fichier audio lui-même. Période volontairement longue
+//   (~2 minutes) pour que ce soit une variation de fond perceptible sur la
+//   durée, pas un effet de wobble/tremolo repérable en boucle courte.
+const BASE_NORMAL_GAIN = 0.8;
+const BASE_VARIETY_MIN_HZ = 1200;
+const BASE_VARIETY_MAX_HZ = 9000;
+const BASE_VARIETY_PERIOD_S = 130;
+
 const FADE_MS = 350; // montée/descente de gain par calque — évite tout clic
 
 // Fondu utilisé spécifiquement pour l'apparition/disparition d'une couche
@@ -229,6 +252,9 @@ const BACKGROUND_MUFFLE_CUTOFF_HZ = 700;
 // existe déjà, voir son `init()`).
 let ctx = null;
 let duckFilter = null;
+let baseVarietyFilter = null;
+let baseVarietyLfo = null;
+let baseVarietyLfoGain = null;
 let speakerSafeHighpass = null;
 let compressor = null;
 let limiter = null;
@@ -270,6 +296,12 @@ function ensureOutputChain() {
   // reconstruit entièrement plutôt que de laisser `duckFilter`/etc.
   // orphelins sur un contexte fermé.
   if (outputChainBuilt && Howler.ctx === ctx) return;
+  // Le contexte a changé (ou 1er appel) — on repart d'une chaîne fraîche;
+  // les refs de la variété base ci-dessous seraient orphelines sur l'ancien
+  // contexte fermé, `ensureBaseVarietyFilter()` plus bas les reconstruira.
+  baseVarietyFilter = null;
+  baseVarietyLfo = null;
+  baseVarietyLfoGain = null;
   // Force la création de Howler.ctx/Howler.masterGain si ce n'est pas déjà
   // fait — `Howler.volume()` (API publique documentée) appelle en interne
   // `setupAudioContext()` quand `self.ctx` est encore `null`, exactement
@@ -297,6 +329,29 @@ function ensureOutputChain() {
   // erreur de jeu ne peut survenir qu'après ce tout premier clic.
   duckFilter.frequency.value = backgroundMuffled ? BACKGROUND_MUFFLE_CUTOFF_HZ : NORMAL_CUTOFF_HZ;
   duckFilter.connect(Howler.masterGain);
+
+  // Filtre DÉDIÉ à la piste base (voir commentaire de BASE_NORMAL_GAIN plus
+  // haut) — en amont de `duckFilter` (donc les deux se cumulent pendant un
+  // étouffement d'échec/arrière-plan: cohérent, ça filtre juste un peu plus
+  // fort dans ces cas-là, jamais moins). Un oscillateur sub-audio (LFO,
+  // technique Web Audio standard: osc -> gain de mise à l'échelle -> AudioParam
+  // cible) fait osciller sa coupure en continu entre BASE_VARIETY_MIN_HZ et
+  // BASE_VARIETY_MAX_HZ — aucun impact sur le gain (Howler garde l'exclusivité
+  // du volume via `fadeLayer`, pas de conflit entre les deux mécanismes).
+  baseVarietyFilter = ctx.createBiquadFilter();
+  baseVarietyFilter.type = "lowpass";
+  baseVarietyFilter.Q.value = 0.6;
+  baseVarietyFilter.frequency.value = (BASE_VARIETY_MIN_HZ + BASE_VARIETY_MAX_HZ) / 2;
+  baseVarietyFilter.connect(duckFilter);
+
+  baseVarietyLfo = ctx.createOscillator();
+  baseVarietyLfo.type = "sine";
+  baseVarietyLfo.frequency.value = 1 / BASE_VARIETY_PERIOD_S;
+  baseVarietyLfoGain = ctx.createGain();
+  baseVarietyLfoGain.gain.value = (BASE_VARIETY_MAX_HZ - BASE_VARIETY_MIN_HZ) / 2;
+  baseVarietyLfo.connect(baseVarietyLfoGain);
+  baseVarietyLfoGain.connect(baseVarietyFilter.frequency);
+  baseVarietyLfo.start();
 
   // Retour utilisateur: "je me demande si c'est pas dû aussi aux enceintes
   // du téléphone [...] des sonorités peut-être délicates pour ce type
@@ -437,11 +492,15 @@ export function setMusicAmbiance(key) {
 // soit décodé (vérifié directement dans howler.js: Sound.prototype.create,
 // appelé depuis Howl.init) — donc déjà disponible juste après construction,
 // pas besoin d'attendre l'événement 'load'.
-function rerouteThroughDuckFilter(howl) {
+function rerouteThroughDuckFilter(howl, key) {
   const sound = howl._sounds && howl._sounds[0];
   if (sound && sound._node) {
     sound._node.disconnect();
-    sound._node.connect(duckFilter);
+    // "base" passe par son propre filtre de variété (voir
+    // `ensureOutputChain`/`baseVarietyFilter`) avant de rejoindre duckFilter
+    // comme les autres couches — c'est ce filtre qui, en plus, fait
+    // légèrement "respirer" son timbre au fil du temps.
+    sound._node.connect(key === "base" ? baseVarietyFilter : duckFilter);
   }
 }
 
@@ -462,14 +521,14 @@ function ensureBuilt() {
       // Même raisonnement que le cutoff initial de duckFilter ci-dessus
       // (voir ensureOutputChain): la base démarre directement au gain
       // muffled si on est déjà hors gameplay actif au tout premier clic.
-      volume: key === "base" ? (backgroundMuffled ? BACKGROUND_MUFFLE_GAIN : 1) : 0,
+      volume: key === "base" ? (backgroundMuffled ? BACKGROUND_MUFFLE_GAIN : BASE_NORMAL_GAIN) : 0,
       html5: false, // Web Audio (pas <audio> HTML5) — nécessaire pour le routage manuel ci-dessous
       preload: true,
     });
     // échec.wav se branche directement sur masterGain (jamais étouffée, voir
     // duckFilter ci-dessus) — base + toutes les couches mécaniques passent
     // par le passe-bas partagé, neutre hors état d'échec.
-    if (key !== "echec") rerouteThroughDuckFilter(howl);
+    if (key !== "echec") rerouteThroughDuckFilter(howl, key);
     howls[key] = howl;
   }
 }
@@ -665,11 +724,11 @@ export async function refreshMusicTheme() {
     const howl = new Howl({
       src: [urls[key]],
       loop: true,
-      volume: currentVolumes[key] ?? (key === "base" ? 1 : 0),
+      volume: currentVolumes[key] ?? (key === "base" ? BASE_NORMAL_GAIN : 0),
       html5: false,
       preload: true,
     });
-    if (key !== "echec") rerouteThroughDuckFilter(howl);
+    if (key !== "echec") rerouteThroughDuckFilter(howl, key);
     howls[key] = howl;
   }
   if (wasStarted) {
@@ -689,7 +748,7 @@ export function resetLayers() {
   unlocked = new Set(ambianceLayers);
   failureCount = 0;
   if (!howls) return;
-  fadeLayer("base", 1, FADE_MS); // garde-fou: au cas où un niveau se termine en pleine erreur
+  fadeLayer("base", BASE_NORMAL_GAIN, FADE_MS); // garde-fou: au cas où un niveau se termine en pleine erreur
   for (const key of MECHANIC_LAYERS) {
     fadeLayer(key, ambianceLayers.has(key) ? (LAYER_ACTIVE_GAIN[key] ?? 1) : 0, FADE_MS);
   }
@@ -770,7 +829,7 @@ export function exitFailure() {
     for (const key of unlocked) fadeLayer(key, BACKGROUND_MUFFLE_GAIN, FADE_MS);
   } else {
     rampParam(duckFilter.frequency, NORMAL_CUTOFF_HZ, FADE_MS / 1000);
-    fadeLayer("base", 1, FADE_MS);
+    fadeLayer("base", BASE_NORMAL_GAIN, FADE_MS);
     for (const key of unlocked) fadeLayer(key, LAYER_ACTIVE_GAIN[key] ?? 1, FADE_MS);
   }
 }
@@ -801,6 +860,6 @@ export function exitBackgroundMuffle() {
   backgroundMuffled = false;
   if (failureCount > 0 || !howls) return;
   rampParam(duckFilter.frequency, NORMAL_CUTOFF_HZ, FADE_MS / 1000);
-  fadeLayer("base", 1, FADE_MS);
+  fadeLayer("base", BASE_NORMAL_GAIN, FADE_MS);
   for (const key of unlocked) fadeLayer(key, LAYER_ACTIVE_GAIN[key] ?? 1, FADE_MS);
 }
