@@ -181,84 +181,14 @@ const LAYER_ACTIVE_GAIN = {
 //   BASE_VARIETY_MIN_HZ et BASE_VARIETY_MAX_HZ sur une période de
 //   BASE_VARIETY_PERIOD_S secondes — le timbre de la boucle "respire"
 //   doucement en continu au lieu de rester figé identique à chaque tour,
-//   sans toucher au fichier audio lui-même. Période volontairement longue
-//   (~2 minutes) pour que ce soit une variation de fond perceptible sur la
-//   durée, pas un effet de wobble/tremolo repérable en boucle courte.
-// `let` (pas `const`) + defaults séparés: retour utilisateur — "un potard
-// pour tester en direct d'autres réglages sur ce filtre" — voir
-// setBaseVarietyGain/setBaseVarietyRange/setBaseVarietyPeriod plus bas,
-// câblées à des <input type="range"> admin-only (voir main.js/admin.js),
-// pour ajuster ces 4 valeurs PENDANT que la musique joue, sans reload.
-// Les DEFAULT_* restent de vraies constantes: c'est la valeur d'expédition
-// ET celle vers laquelle le bouton "Réinitialiser" du panneau admin revient.
-const DEFAULT_BASE_NORMAL_GAIN = 0.8;
-const DEFAULT_BASE_VARIETY_MIN_HZ = 1200;
-const DEFAULT_BASE_VARIETY_MAX_HZ = 9000;
-const DEFAULT_BASE_VARIETY_PERIOD_S = 130;
-export const BASE_VARIETY_DEFAULTS = {
-  gain: DEFAULT_BASE_NORMAL_GAIN,
-  minHz: DEFAULT_BASE_VARIETY_MIN_HZ,
-  maxHz: DEFAULT_BASE_VARIETY_MAX_HZ,
-  periodS: DEFAULT_BASE_VARIETY_PERIOD_S,
-};
-
-let BASE_NORMAL_GAIN = DEFAULT_BASE_NORMAL_GAIN;
-let BASE_VARIETY_MIN_HZ = DEFAULT_BASE_VARIETY_MIN_HZ;
-let BASE_VARIETY_MAX_HZ = DEFAULT_BASE_VARIETY_MAX_HZ;
-let BASE_VARIETY_PERIOD_S = DEFAULT_BASE_VARIETY_PERIOD_S;
-
-/** Valeurs courantes des 4 réglages ci-dessus — sert à initialiser les
- * potards admin à la valeur EFFECTIVEMENT active (pas juste au défaut),
- * y compris après un refresh de thème ou un changement déjà fait dans la
- * session. */
-export function getBaseVarietySettings() {
-  return {
-    gain: BASE_NORMAL_GAIN,
-    minHz: BASE_VARIETY_MIN_HZ,
-    maxHz: BASE_VARIETY_MAX_HZ,
-    periodS: BASE_VARIETY_PERIOD_S,
-  };
-}
-
-/** Change le gain "normal" de la base en direct (potard admin) — si la
- * base n'est PAS actuellement à son gain normal (écran hors-jeu qui
- * l'étouffe déjà, voir enterBackgroundMuffle, ou erreur en cours, voir
- * enterFailure), la nouvelle valeur est quand même mémorisée pour la
- * prochaine fois que le mix revient à la normale (exitFailure/
- * exitBackgroundMuffle lisent BASE_NORMAL_GAIN à ce moment-là) — on ne
- * force pas un aller-retour audible net/étouffé juste pour appliquer le
- * potard tout de suite. */
-export function setBaseVarietyGain(value) {
-  BASE_NORMAL_GAIN = Math.max(0, Math.min(1, value));
-  if (!howls || backgroundMuffled || failureCount > 0) return;
-  fadeLayer("base", BASE_NORMAL_GAIN, 150);
-}
-
-/** Change l'étendue de fréquence du filtre de variété en direct (potard
- * admin) — `baseVarietyFilter.frequency` est le centre (voir
- * ensureOutputChain: c'est la valeur INTRINSÈQUE de l'AudioParam, celle à
- * laquelle le signal de l'oscillateur s'AJOUTE), `baseVarietyLfoGain.gain`
- * est l'amplitude de part et d'autre de ce centre — donc: centre =
- * (min+max)/2, amplitude = (max-min)/2. Aucun rebuild nécessaire, aucun clic
- * audible attendu (un BiquadFilter dont la fréquence bouge ne "claque"
- * pas comme un gain qui sauterait de façon discontinue). */
-export function setBaseVarietyRange(minHz, maxHz) {
-  const min = Math.max(20, Math.min(minHz, maxHz));
-  const max = Math.max(min + 1, maxHz);
-  BASE_VARIETY_MIN_HZ = min;
-  BASE_VARIETY_MAX_HZ = max;
-  if (!baseVarietyFilter || !baseVarietyLfoGain) return; // musique jamais démarrée: rien à mettre à jour tout de suite
-  baseVarietyFilter.frequency.value = (min + max) / 2;
-  baseVarietyLfoGain.gain.value = (max - min) / 2;
-}
-
-/** Change la période (secondes) du "battement" du filtre en direct (potard
- * admin) — fréquence LFO = 1/période, voir ensureOutputChain. */
-export function setBaseVarietyPeriod(periodS) {
-  BASE_VARIETY_PERIOD_S = Math.max(1, periodS);
-  if (!baseVarietyLfo) return;
-  baseVarietyLfo.frequency.value = 1 / BASE_VARIETY_PERIOD_S;
-}
+//   sans toucher au fichier audio lui-même.
+// Ces 4 valeurs ont été réglées à l'oreille par l'utilisateur via des
+// potards admin temporaires (voir git log — implémentés puis retirés une
+// fois le bon réglage trouvé, plus besoin de les retester en direct).
+const BASE_NORMAL_GAIN = 0.7;
+const BASE_VARIETY_MIN_HZ = 90;
+const BASE_VARIETY_MAX_HZ = 230;
+const BASE_VARIETY_PERIOD_S = 10;
 
 const FADE_MS = 350; // montée/descente de gain par calque — évite tout clic
 

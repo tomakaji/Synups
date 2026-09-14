@@ -68,11 +68,6 @@ import {
   refreshMusicTheme,
   enterBackgroundMuffle,
   exitBackgroundMuffle,
-  getBaseVarietySettings,
-  setBaseVarietyGain,
-  setBaseVarietyRange,
-  setBaseVarietyPeriod,
-  BASE_VARIETY_DEFAULTS,
 } from "./game/music.js";
 import {
   createBoardRenderer,
@@ -99,7 +94,7 @@ import {
 } from "./sommation.js";
 import { FEATURES } from "./game/generator.js";
 import { requestLevel, ensureLevelBuffer, takeBufferedLevel, hasBufferedLevel } from "./game/infiniteClient.js";
-import { initAdminToggle, isAdminModeOn, onAdminModeChange, mountAdminButton, mountAdminSlider } from "./admin.js";
+import { initAdminToggle, isAdminModeOn, onAdminModeChange, mountAdminButton } from "./admin.js";
 import {
   loadPoints,
   savePoints,
@@ -1394,64 +1389,6 @@ if (import.meta.env.DEV) {
   mountAdminButton("#options-pixelart-section", "Débloquer (débug)", null, () => {
     debugUnlockPixelArt();
     renderPixelArtOption();
-  });
-}
-
-// Potards admin (musique) [dev uniquement] — retour utilisateur: "un potard
-// pour que je teste en direct d'autres réglages sur ce filtre" (le filtre de
-// variété de la piste base, voir music.js: setBaseVarietyGain/
-// setBaseVarietyRange/setBaseVarietyPeriod). Montés dans la même section
-// Options que le bouton PixelArt ci-dessus (déjà le point de montage
-// "outils admin" établi ici) plutôt que dans un nouveau bloc dédié —
-// n'importe quel écran ferait l'affaire puisque la base joue en permanence,
-// celui-ci existe déjà. Initialisés à la valeur EFFECTIVEMENT active
-// (getBaseVarietySettings), pas juste au défaut — utile si la musique a
-// déjà démarré et que la session a déjà tourné le potard une fois.
-if (import.meta.env.DEV) {
-  const current = getBaseVarietySettings();
-  const hzFormat = (v) => `${Math.round(v)} Hz`;
-
-  const gainSlider = mountAdminSlider(
-    "#options-pixelart-section",
-    "Base: gain",
-    { min: 0, max: 1, step: 0.01, value: current.gain, format: (v) => v.toFixed(2) },
-    (v) => setBaseVarietyGain(v),
-  );
-  const minHzSlider = mountAdminSlider(
-    "#options-pixelart-section",
-    "Base: filtre min",
-    { min: 20, max: 20000, step: 10, value: current.minHz, format: hzFormat },
-    (v) => setBaseVarietyRange(v, Number(maxHzSlider?.value ?? current.maxHz)),
-  );
-  const maxHzSlider = mountAdminSlider(
-    "#options-pixelart-section",
-    "Base: filtre max",
-    { min: 20, max: 20000, step: 10, value: current.maxHz, format: hzFormat },
-    (v) => setBaseVarietyRange(Number(minHzSlider?.value ?? current.minHz), v),
-  );
-  const periodSlider = mountAdminSlider(
-    "#options-pixelart-section",
-    "Base: période",
-    { min: 5, max: 300, step: 5, value: current.periodS, format: (v) => `${v}s` },
-    (v) => setBaseVarietyPeriod(v),
-  );
-
-  mountAdminButton("#options-pixelart-section", "Réinitialiser filtre base", null, () => {
-    setBaseVarietyGain(BASE_VARIETY_DEFAULTS.gain);
-    setBaseVarietyRange(BASE_VARIETY_DEFAULTS.minHz, BASE_VARIETY_DEFAULTS.maxHz);
-    setBaseVarietyPeriod(BASE_VARIETY_DEFAULTS.periodS);
-    if (gainSlider) gainSlider.value = String(BASE_VARIETY_DEFAULTS.gain);
-    if (minHzSlider) minHzSlider.value = String(BASE_VARIETY_DEFAULTS.minHz);
-    if (maxHzSlider) maxHzSlider.value = String(BASE_VARIETY_DEFAULTS.maxHz);
-    if (periodSlider) periodSlider.value = String(BASE_VARIETY_DEFAULTS.periodS);
-    // Les <span> d'affichage ne se remettent pas à jour tout seuls: chaque
-    // potard n'a son readout raffraîchi que par SON PROPRE `oninput` (voir
-    // mountAdminSlider) — reprogrammer sa valeur en JS ci-dessus ne déclenche
-    // pas cet évènement. Un `input` synthétique force ce même chemin plutôt
-    // que de dupliquer ici la logique d'affichage.
-    for (const s of [gainSlider, minHzSlider, maxHzSlider, periodSlider]) {
-      s?.dispatchEvent(new Event("input"));
-    }
   });
 }
 

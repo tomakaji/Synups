@@ -159,39 +159,6 @@
   display: inline-block;
 }
 
-/* Potards admin (voir admin.js: mountAdminSlider, ex. réglages du filtre de
-   variété de la piste base dans music.js) — même mécanique de visibilité
-   que .som-debug-btn/.admin-only-btn ci-dessus, mais en <label> flex plutôt
-   qu'en bouton. La règle à 2 classes ci-dessous prime sur la règle à 1
-   classe .admin-only-btn--visible (display: inline-block) plus haut, donc
-   ce display: flex s'applique bien une fois le potard rendu visible. */
-.som-debug-slider {
-  align-items: center;
-  gap: 6px;
-  font-size: 0.66rem;
-  color: var(--text-dim);
-  background: var(--panel);
-  border: 1px dashed #3a3550;
-  border-radius: 999px;
-  padding: 3px 10px;
-  white-space: nowrap;
-}
-
-.som-debug-slider.admin-only-btn--visible {
-  display: flex;
-}
-
-.som-debug-slider input[type="range"] {
-  width: 90px;
-  accent-color: var(--accent);
-}
-
-.som-debug-slider-value {
-  min-width: 3.2em;
-  text-align: right;
-  color: var(--accent);
-}
-
 /* rgba(255, 224, 138, x) = #ffe08a (le doré du gain ci-dessus) en rgb — même
    principe que .som-pulse-merge (sommation-fx.css): un anneau qui s'étend
    puis s'efface, largement plus visible qu'un simple changement de `color`
